@@ -161,7 +161,7 @@ static int memstreq_nnl(const char* mem, const char* str)
 	return *mem == '\0' && *str == '\0';
 }
 
-typedef std::unordered_map< std::string, std::string > IncludeMap;
+typedef std::unordered_map<std::string, std::string> IncludeMap;
 
 static int LoadIncludeFileTest(const char* file, const char* requester, char** outbuf, void* userdata)
 {

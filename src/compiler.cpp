@@ -241,6 +241,8 @@ std::string TokenTypeToString(SLTokenType tt)
 	case STT_KW_If:           str = "if"; break;
 	case STT_KW_Else:         str = "else"; break;
 	case STT_KW_While:        str = "while"; break;
+	case STT_KW_Do:           str = "do"; break;
+	case STT_KW_For:          str = "for"; break;
 	case STT_KW_In:           str = "in"; break;
 	case STT_KW_Out:          str = "out"; break;
 	case STT_KW_InOut:        str = "inout"; break;
@@ -531,7 +533,7 @@ void VarDecl::Dump(OutStream& out, int level) const
 
 	if (Expr* v = GetInitExpr())
 	{
-		out << " =\n";
+		out << " = ";
 		v->Dump(out, level + 1);
 	}
 	else out << "\n";
@@ -743,7 +745,7 @@ void IfElseStmt::Dump(OutStream& out, int level) const
 	LVL(out, level); out << "if\n";
 	LVL(out, level); out << "{\n"; level++;
 	LVL(out, level); out << "cond = ";
-	GetCond()->Dump(out, level);
+	GetCond()->Dump(out, level + 1);
 	LVL(out, level); out << "true:\n";
 	GetTrueBr()->Dump(out, level + 1);
 	LVL(out, level); out << "false:\n";
@@ -762,7 +764,7 @@ void WhileStmt::Dump(OutStream& out, int level) const
 	LVL(out, level); out << "while\n";
 	LVL(out, level); out << "{\n"; level++;
 	LVL(out, level); out << "cond = ";
-	GetCond()->Dump(out, level);
+	GetCond()->Dump(out, level + 1);
 	LVL(out, level); out << "body:\n";
 	GetBody()->Dump(out, level + 1);
 	level--; LVL(out, level); out << "}\n";
@@ -773,7 +775,22 @@ void DoWhileStmt::Dump(OutStream& out, int level) const
 	LVL(out, level); out << "do-while\n";
 	LVL(out, level); out << "{\n"; level++;
 	LVL(out, level); out << "cond = ";
-	GetCond()->Dump(out, level);
+	GetCond()->Dump(out, level + 1);
+	LVL(out, level); out << "body:\n";
+	GetBody()->Dump(out, level + 1);
+	level--; LVL(out, level); out << "}\n";
+}
+
+void ForStmt::Dump(OutStream& out, int level) const
+{
+	LVL(out, level); out << "for\n";
+	LVL(out, level); out << "{\n"; level++;
+	LVL(out, level); out << "init:\n";
+	GetInit()->Dump(out, level + 1);
+	LVL(out, level); out << "cond = ";
+	GetCond()->Dump(out, level + 1);
+	LVL(out, level); out << "incr:\n";
+	LVL(out, level + 1); GetIncr()->Dump(out, level + 1);
 	LVL(out, level); out << "body:\n";
 	GetBody()->Dump(out, level + 1);
 	level--; LVL(out, level); out << "}\n";
@@ -1052,7 +1069,7 @@ struct UsedFuncMarker : ASTVisitor<UsedFuncMarker>
 	}
 
 	ASTFunction* func;
-	std::vector< ASTFunction* > functionsToProcess;
+	std::vector<ASTFunction*> functionsToProcess;
 };
 
 void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
@@ -1337,7 +1354,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 {
 	if (auto* sve = dynamic_cast<const SubValExpr*>(node))
 	{
-		std::vector< const SubValExpr* > revTrail { sve };
+		std::vector<const SubValExpr*> revTrail { sve };
 		Expr* exprIt = sve->GetSource();
 		while (auto* ssve = dynamic_cast<const SubValExpr*>(exprIt))
 		{
@@ -1460,6 +1477,14 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 	{
 		bool rb = ProcessStmt(dowhilestmt->GetBody());
 		ProcessReadExpr(dowhilestmt->GetCond());
+		return rb;
+	}
+	else if (auto* forstmt = dynamic_cast<const ForStmt*>(node))
+	{
+		ProcessStmt(forstmt->GetInit()); // cannot return
+		ProcessReadExpr(forstmt->GetCond());
+		bool rb = ProcessStmt(forstmt->GetBody());
+		ProcessReadExpr(forstmt->GetIncr());
 		return rb;
 	}
 	else if (auto* exprstmt = dynamic_cast<const ExprStmt*>(node))
@@ -1595,7 +1620,7 @@ struct StructLevel
 };
 static void AppendShaderIOVar(AST& ast, ASTFunction* F, ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
 {
-	std::vector< StructLevel > mmbIndices;
+	std::vector<StructLevel> mmbIndices;
 	mmbIndices.push_back({ topStc, 0, outILE });
 	while (mmbIndices.empty() == false)
 	{
@@ -1799,8 +1824,8 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage)
 }
 
 
-// pre-condition loop conditions are tough to fold out so it is avoided
-// the loop gets transformed into an infinite loop with 'if(!cond)break;' at the beginning
+// loop expressions are tough to fold out so it is avoided
+// pre-condition loop gets transformed into an infinite loop with 'if(!cond)break;' at the beginning
 static bool IsExprInPreCondLoop(Expr* expr)
 {
 	ASTNode* n = expr;
@@ -1809,6 +1834,11 @@ static bool IsExprInPreCondLoop(Expr* expr)
 	if (auto* whilestmt = dynamic_cast<WhileStmt*>(n->parent))
 	{
 		if (whilestmt->GetCond() == n)
+			return true;
+	}
+	else if (auto* forstmt = dynamic_cast<ForStmt*>(n->parent))
+	{
+		if (forstmt->GetCond() == n)
 			return true;
 	}
 	return false;
@@ -1833,6 +1863,11 @@ static Stmt* GetStmtOfForcedExpr(Expr* expr)
 	{
 		if (dowhilestmt->GetCond() == n)
 			return dowhilestmt;
+	}
+	else if (auto* forstmt = dynamic_cast<ForStmt*>(n->parent))
+	{
+		if (forstmt->GetCond() == n)
+			return forstmt;
 	}
 	return nullptr;
 }

@@ -198,7 +198,7 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 
 void RemoveUnusedFunctions::RunOnAST(AST& ast)
 {
-	std::unordered_map< std::string, ASTFuncMap > funcmap;
+	std::unordered_map<std::string, ASTFuncMap> funcmap;
 	for (auto& fgdef : ast.functions)
 	{
 		ASTFuncMap mfuncmap;

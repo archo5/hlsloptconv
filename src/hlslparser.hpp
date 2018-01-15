@@ -37,7 +37,7 @@ struct Parser
 	void PreprocessTokens(PreprocMacroMap macros, uint32_t source);
 
 	SLToken RequestIntBoolToken(bool v);
-	int EvaluateConstantIntExpr(const std::vector< SLToken >& tokenArr, size_t startPos, size_t endPos);
+	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
 
 	ASTType* GetType(const std::string& name);
 	ASTType* ParseType(bool isFuncRet = false);
@@ -46,7 +46,7 @@ struct Parser
 	void ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, ASTType** equalArgs, bool err);
 	void FindFunction(FCallExpr* fcall, const Location& loc);
-	void FindBestSplit(const std::vector< SLToken >& tokenArr, bool allowFunctions,
+	void FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);
 	ASTType* Promote(ASTType* a, ASTType* b);
@@ -55,20 +55,21 @@ struct Parser
 	void ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos);
 	void ParseInitList(ASTNode* out, int numItems, bool ctor);
 	Stmt* ParseStatement();
+	Stmt* ParseExprDeclStatement();
 	int32_t ParseRegister(char ch, bool comp, int32_t limit);
 	void ParseDecl();
 
 	const SLToken& T() const { return tokens[curToken]; }
 	SLTokenType TT() const { return tokens[curToken].type; }
 
-	void FWD(std::vector< SLToken >& arr, size_t& i)
+	void FWD(std::vector<SLToken>& arr, size_t& i)
 	{
 		if (++i >= arr.size())
 			EmitFatalError("unexpected end of file", false);
 	}
 	void FWD() { FWD(tokens, curToken); }
 
-	void PPFWD(std::vector< SLToken >& arr, size_t& i)
+	void PPFWD(std::vector<SLToken>& arr, size_t& i)
 	{
 		FWD(arr, i);
 		if (arr[i - 1].logicalLine != arr[i].logicalLine)
@@ -144,9 +145,9 @@ struct Parser
 	void* loadIncludeFileUD;
 
 
-	std::vector< std::string > filenames;
-	std::vector< char > tokenData;
-	std::vector< SLToken > tokens;
+	std::vector<std::string> filenames;
+	std::vector<char> tokenData;
+	std::vector<SLToken> tokens;
 	size_t curToken = 0;
 	bool isWriteCtx = false; // if current expression is part of a write
 

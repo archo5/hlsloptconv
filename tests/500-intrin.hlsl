@@ -65,7 +65,7 @@ float4 main( float4 p : POSITION ) : POSITION
 	float q = atan2( 0, true );
 	float a = atan2( true, 1 );
 	float b = atan2( 0.5, -0.5 );
-	float c = atan2( p, 0.5 );
+	float4 c = atan2( p, 0.5 );
 	return q + a + b + c
 		+ atan2( ModelViewMatrix, 1.5 )._11_12_13_14;
 }`

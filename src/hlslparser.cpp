@@ -10,7 +10,7 @@ static inline bool isStr(const char* begin, const char* end, const char* str, si
 {
 	return end - begin == sz && memcmp(begin, str, sz) == 0;
 }
-template< size_t N > static inline bool isStr(const char* begin, const char* end, const char(&str)[N])
+template<size_t N> static inline bool isStr(const char* begin, const char* end, const char(&str)[N])
 {
 	return isStr(begin, end, str, N - 1);
 }
@@ -371,6 +371,7 @@ void Parser::ParseTokens(const char* text, uint32_t source)
 			if(isStr(idStart, text, "else"    )){ specKwToken = STT_KW_Else;     goto addedSpecKw; }
 			if(isStr(idStart, text, "while"   )){ specKwToken = STT_KW_While;    goto addedSpecKw; }
 			if(isStr(idStart, text, "do"      )){ specKwToken = STT_KW_Do;       goto addedSpecKw; }
+			if(isStr(idStart, text, "for"     )){ specKwToken = STT_KW_For;      goto addedSpecKw; }
 			if(isStr(idStart, text, "in"      )){ specKwToken = STT_KW_In;       goto addedSpecKw; }
 			if(isStr(idStart, text, "out"     )){ specKwToken = STT_KW_Out;      goto addedSpecKw; }
 			if(isStr(idStart, text, "inout"   )){ specKwToken = STT_KW_InOut;    goto addedSpecKw; }
@@ -458,17 +459,17 @@ struct PPTokenRange
 
 void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 {
-	std::vector< SLToken > ppTokens, replacedTokens, tokensToReplace;
+	std::vector<SLToken> ppTokens, replacedTokens, tokensToReplace;
 	ppTokens.reserve(tokens.size());
 	int32_t lineOffset = 0;
 
 #define PPOFLAG_ENABLED 0x1
 #define PPOFLAG_HASELSE 0x2
 #define PPOFLAG_HASSUCC 0x4
-	std::vector< uint8_t > ppOutputEnabled;
+	std::vector<uint8_t> ppOutputEnabled;
 	ppOutputEnabled.reserve(32);
 
-	auto FindTokenReplaceRange = [this, &macros](std::vector< SLToken >& arr, size_t& i) -> PPTokenRange
+	auto FindTokenReplaceRange = [this, &macros](std::vector<SLToken>& arr, size_t& i) -> PPTokenRange
 	{
 		if (arr[i].type == STT_Ident)
 		{
@@ -485,7 +486,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 					FWD(arr, i);
 
 					// skip braces
-					std::vector< SLTokenType > braceStack;
+					std::vector<SLTokenType> braceStack;
 					braceStack.push_back(STT_RParen);
 					while (i < arr.size() && braceStack.empty() == false)
 					{
@@ -524,7 +525,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 		}
 		return { macros.end(), nullptr, nullptr };
 	};
-	auto ReplaceTokenRangeTo = [this](std::vector< SLToken >& out, PPTokenRange range)
+	auto ReplaceTokenRangeTo = [this](std::vector<SLToken>& out, PPTokenRange range)
 	{
 		PreprocMacro& M = range.it->second;
 		if (M.isFunc)
@@ -533,9 +534,9 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 			out.reserve(M.tokens.size());
 
 			// extract argument sub-ranges from range
-			std::vector< PPTokenRange > argRanges;
+			std::vector<PPTokenRange> argRanges;
 
-			std::vector< SLTokenType > braceStack;
+			std::vector<SLTokenType> braceStack;
 			SLToken* argTokens = range.begin;
 			for (size_t i = 2; argTokens[i].type != STT_RParen; )
 			{
@@ -868,7 +869,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 					else if (loadIncludeFilePFN(file.c_str(), diag.sourceFiles[source].c_str(), &buf, loadIncludeFileUD) && buf)
 					{
 						// parse, preprocess sub-file
-						std::vector< SLToken > tmpTokens;
+						std::vector<SLToken> tmpTokens;
 						size_t tmpCurToken = 0;
 
 						std::swap(tmpTokens, tokens);
@@ -963,7 +964,7 @@ SLToken Parser::RequestIntBoolToken(bool v)
 	return { STT_Int32Lit, Location::BAD(), 0U, v ? 4U : 0U };
 }
 
-int Parser::EvaluateConstantIntExpr(const std::vector< SLToken >& tokenArr, size_t startPos, size_t endPos)
+int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos)
 {
 	size_t bestSplit;
 	int bestScore;
@@ -1430,7 +1431,7 @@ static ASTType* TexSampleIntrin(Parser* parser, FCallExpr* fcall,
 }
 
 typedef ASTType* (*IntrinsicValidatorFP)(Parser*, FCallExpr*);
-std::unordered_map< std::string, IntrinsicValidatorFP > g_BuiltinIntrinsics
+std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 {
 	{ "abs", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, "abs", true); }},
@@ -1692,7 +1693,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 				else
 				{
 					ASTType* voidTy = ast.GetVoidType();
-					std::vector< ASTType* > equalArgs;
+					std::vector<ASTType*> equalArgs;
 					equalArgs.resize(fcall->GetArgCount(), voidTy);
 
 					for (auto& fdef : it->second)
@@ -1765,12 +1766,12 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 	EmitError("failed to find function", loc);
 }
 
-void Parser::FindBestSplit(const std::vector< SLToken >& tokenArr, bool allowFunctions,
+void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
 	size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore)
 {
 	bestSplit = SIZE_MAX;
 	bestScore = 0;
-	std::vector< SLTokenType > braceStack;
+	std::vector<SLTokenType> braceStack;
 
 	size_t startPos = curPos;
 	while (curPos < endPos
@@ -2472,6 +2473,47 @@ Stmt* Parser::ParseStatement()
 
 		return dwst;
 	}
+	else if (tt == STT_KW_For)
+	{
+		auto* forst = new ForStmt;
+		ast.unassignedNodes.AppendChild(forst);
+		FWD();
+		EXPECT(STT_LParen);
+		FWD();
+
+		forst->AppendChild(ParseExprDeclStatement()); // INIT
+		EXPECT(STT_Semicolon);
+		FWD();
+		forst->AppendChild(ParseExpr(STT_Semicolon)); // COND
+		FWD();
+		forst->AppendChild(ParseExpr(STT_RParen)); // INCR
+		FWD();
+		forst->AppendChild(ParseStatement()); // BODY
+
+		auto* crt = forst->GetCond()->GetReturnType();
+		if (crt->kind != ASTType::Bool)
+		{
+			if (crt->IsNumericOrVM1() == false)
+			{
+				EmitError("while - expected scalar condition value, got " + crt->GetName());
+			}
+			CastExprTo(forst->GetCond(), ast.GetBoolType());
+		}
+
+		return forst;
+	}
+	else return ParseExprDeclStatement();
+}
+
+Stmt* Parser::ParseExprDeclStatement()
+{
+	auto tt = TT();
+	if (tt == STT_Semicolon)
+	{
+		auto* bs = new BlockStmt;
+		ast.unassignedNodes.AppendChild(bs);
+		return bs;
+	}
 	else if (tt == STT_Ident && ast.IsTypeName(TokenStringData()))
 	{
 		auto* varDecl = new VarDeclStmt;
@@ -2531,6 +2573,16 @@ Stmt* Parser::ParseStatement()
 				else
 				{
 					vd->SetInitExpr(ParseExpr());
+					if (CanCast(vd->GetInitExpr()->GetReturnType(), curType, false))
+					{
+						CastExprTo(vd->GetInitExpr(), curType);
+					}
+					else
+					{
+						EmitError("cannot cast initialization expression from '"
+							+ vd->GetInitExpr()->GetReturnType()->GetName() + "' to '"
+							+ curType->GetName() + "'");
+					}
 				}
 			}
 
@@ -2645,7 +2697,7 @@ void Parser::ParseDecl()
 		EXPECT(STT_LBrace);
 		FWD();
 
-		std::vector< AccessPointDecl > members;
+		std::vector<AccessPointDecl> members;
 		while (TT() != STT_RBrace)
 		{
 			AccessPointDecl member;

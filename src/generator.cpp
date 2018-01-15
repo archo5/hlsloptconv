@@ -123,7 +123,70 @@ void SLGenerator::EmitVarDecl(const VarDecl* vd)
 
 void SLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
+	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	{
+		out << "(";
+		EmitExpr(binop->GetLft());
+		const char* opstr = "[TODO 2op]";
+		switch (binop->opType)
+		{
+		case STT_OP_Eq: opstr = "=="; break;
+		case STT_OP_NEq: opstr = "!="; break;
+		case STT_OP_Less: opstr = "<"; break;
+		case STT_OP_LEq: opstr = "<="; break;
+		case STT_OP_Greater: opstr = ">"; break;
+		case STT_OP_GEq: opstr = ">="; break;
+
+		case STT_OP_AddEq: opstr = "+="; break;
+		case STT_OP_SubEq: opstr = "-="; break;
+		case STT_OP_MulEq: opstr = "*="; break;
+		case STT_OP_DivEq: opstr = "/="; break;
+		case STT_OP_ModEq: opstr = "%="; break;
+
+		case STT_OP_AndEq: opstr = "&="; break;
+		case STT_OP_OrEq: opstr = "|="; break;
+		case STT_OP_XorEq: opstr = "^="; break;
+		case STT_OP_LshEq: opstr = "<<="; break;
+		case STT_OP_RshEq: opstr = ">>="; break;
+
+		case STT_OP_Assign: opstr = "="; break;
+
+		case STT_OP_Add: opstr = "+"; break;
+		case STT_OP_Sub: opstr = "-"; break;
+		case STT_OP_Mul: opstr = "*"; break;
+		case STT_OP_Div: opstr = "/"; break;
+		case STT_OP_Mod: opstr = "%"; break;
+
+		case STT_OP_And: opstr = "&"; break;
+		case STT_OP_Or: opstr = "|"; break;
+		case STT_OP_Xor: opstr = "^"; break;
+		case STT_OP_Lsh: opstr = "<<"; break;
+		case STT_OP_Rsh: opstr = ">>"; break;
+
+		case STT_OP_LogicalAnd: opstr = "&&"; break;
+		case STT_OP_LogicalOr: opstr = "||"; break;
+		}
+		out << " " << opstr << " ";
+		EmitExpr(binop->GetRgt());
+		out << ")";
+		return;
+	}
+	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	{
+		out << "(";
+		const char* opstr = "[TODO 1op]";
+		switch (unop->opType)
+		{
+		case STT_OP_Sub: opstr = "-"; break;
+		case STT_OP_Not: opstr = "!"; break;
+		case STT_OP_Inv: opstr = "~"; break;
+		}
+		out << opstr;
+		EmitExpr(unop->GetSource());
+		out << ")";
+		return;
+	}
+	else if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
 	{
 		out << (bexpr->value ? "true" : "false");
 		return;
@@ -202,6 +265,18 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 		out << "\n"; LVL(level); out << "while(";
 		EmitExpr(dowhilestmt->GetCond());
 		out << ");";
+		return;
+	}
+	else if (auto* forstmt = dynamic_cast<const ForStmt*>(node))
+	{
+		out << "\n"; LVL(level); out << "for(";
+		EmitStmt(forstmt->GetInit(), level + 1);
+		EmitExpr(forstmt->GetCond());
+		out << "; ";
+		EmitExpr(forstmt->GetIncr());
+		out << ")";
+		EmitStmt(forstmt->GetBody(), level
+			+ !dynamic_cast<const BlockStmt*>(forstmt->GetBody()));
 		return;
 	}
 	else if (auto* exprstmt = dynamic_cast<const ExprStmt*>(node))
@@ -292,51 +367,7 @@ void HLSLGenerator::EmitTypeRef(const ASTType* type)
 
 void HLSLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
-	{
-		out << "(";
-		EmitExpr(binop->GetLft());
-		const char* opstr = "[TODO 2op]";
-		switch (binop->opType)
-		{
-		case STT_OP_Assign: opstr = "="; break;
-		case STT_OP_Add: opstr = "+"; break;
-		case STT_OP_Sub: opstr = "-"; break;
-		case STT_OP_Mul: opstr = "*"; break;
-		case STT_OP_Div: opstr = "/"; break;
-		case STT_OP_Mod: opstr = "%"; break;
-
-		case STT_OP_Eq: opstr = "=="; break;
-		case STT_OP_NEq: opstr = "!="; break;
-		case STT_OP_Less: opstr = "<"; break;
-		case STT_OP_LEq: opstr = "<="; break;
-		case STT_OP_Greater: opstr = ">"; break;
-		case STT_OP_GEq: opstr = ">="; break;
-
-		case STT_OP_LogicalAnd: opstr = "&&"; break;
-		case STT_OP_LogicalOr: opstr = "||"; break;
-		}
-		out << " " << opstr << " ";
-		EmitExpr(binop->GetRgt());
-		out << ")";
-		return;
-	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
-	{
-		out << "(";
-		const char* opstr = "[TODO 1op]";
-		switch (unop->opType)
-		{
-		case STT_OP_Sub: opstr = "-"; break;
-		case STT_OP_Not: opstr = "!"; break;
-		case STT_OP_Inv: opstr = "~"; break;
-		}
-		out << opstr;
-		EmitExpr(unop->GetSource());
-		out << ")";
-		return;
-	}
-	else if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
+	if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
 	{
 		out << "((";
 		EmitTypeRef(castexpr->GetReturnType());
@@ -515,56 +546,31 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 {
 	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
 	{
-		const char* func = "";
-		const char* opstr = "[TODO 2op]";
+		const char* func = "[TODO glsl op func]";
 		switch (binop->opType)
 		{
-		case STT_OP_Assign: opstr = "="; break;
-		case STT_OP_Add:    opstr = "+"; break;
-		case STT_OP_Sub:    opstr = "-"; break;
 		case STT_OP_Mul:
 			if (binop->GetReturnType()->kind == ASTType::Matrix)
 			{
 				func = "matrixCompMult";
-				opstr = ",";
+				goto emitBinOp;
 			}
-			else
-				opstr = "*";
 			break;
-		case STT_OP_Div: opstr = "/"; break;
-		case STT_OP_Mod: func = "mod"; opstr = ","; break;
-
-		case STT_OP_Eq: opstr = "=="; break;
-		case STT_OP_NEq: opstr = "!="; break;
-		case STT_OP_Less: opstr = "<"; break;
-		case STT_OP_LEq: opstr = "<="; break;
-		case STT_OP_Greater: opstr = ">"; break;
-		case STT_OP_GEq: opstr = ">="; break;
-
-		case STT_OP_LogicalAnd: opstr = "&&"; break;
-		case STT_OP_LogicalOr: opstr = "||"; break;
+		case STT_OP_Mod:
+			func = "mod";
+			goto emitBinOp;
+		default:
+			break;
+		emitBinOp:
+			out << "(";
+			EmitExpr(binop->GetLft());
+			out << ", ";
+			EmitExpr(binop->GetRgt());
+			out << ")";
+			return;
 		}
-		out << "(";
-		EmitExpr(binop->GetLft());
-		out << " " << opstr << " ";
-		EmitExpr(binop->GetRgt());
-		out << ")";
-		return;
-	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
-	{
-		out << "(";
-		const char* opstr = "[TODO 1op]";
-		switch (unop->opType)
-		{
-		case STT_OP_Sub: opstr = "-"; break;
-		case STT_OP_Not: opstr = "!"; break;
-		case STT_OP_Inv: opstr = "~"; break;
-		}
-		out << opstr;
-		EmitExpr(unop->GetSource());
-		out << ")";
-		return;
+		// if not one of exceptions, use default output
+		// TODO implement hlsl2glsl general pass
 	}
 	else if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
 	{

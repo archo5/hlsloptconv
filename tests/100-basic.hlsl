@@ -61,6 +61,10 @@ float4 main() : POSITION { return ( 1.0 + 2.0 ) * 3.0 / ( 4.0 - 2.5 ) % 1.0; }
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `extra semicolon parsing`
+source `float4 main() : POSITION { ;; return 0; ;;;; }`
+compile_hlsl ``
+
 // `nothing returned 1`
 source `float4 main() : POSITION {}`
 compile_fail ``

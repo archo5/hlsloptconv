@@ -42,6 +42,7 @@ enum SLTokenType
 	STT_KW_Else,
 	STT_KW_While,
 	STT_KW_Do,
+	STT_KW_For,
 	STT_KW_In,
 	STT_KW_Out,
 	STT_KW_InOut,
@@ -69,8 +70,8 @@ enum SLTokenType
 	STT_OP_LshEq,  /* <<=  */
 	STT_OP_RshEq,  /* >>=  */
 	STT_OP_Assign, /* =    */
-	STT_OP_LogicalAnd,  /* &&   */
-	STT_OP_LogicalOr,   /* ||   */
+	STT_OP_LogicalAnd, /* && */
+	STT_OP_LogicalOr,  /* || */
 	STT_OP_Add,    /* +    */
 	STT_OP_Sub,    /* -    */
 	STT_OP_Mul,    /* *    */
@@ -81,7 +82,7 @@ enum SLTokenType
 	STT_OP_Xor,    /* ^    */
 	STT_OP_Lsh,    /* <<   */
 	STT_OP_Rsh,    /* >>   */
-	STT_OP_Member,   /* .    */
+	STT_OP_Member, /* .    */
 	STT_OP_Not,    /* !    */
 	STT_OP_Inv,    /* ~    */
 	STT_OP_Inc,    /* ++   */
@@ -190,7 +191,7 @@ struct ASTStructType : ASTType
 	void Dump(OutStream& out) const;
 
 	std::string name;
-	std::vector< AccessPointDecl > members;
+	std::vector<AccessPointDecl> members;
 	ASTStructType* prevStructType = nullptr;
 	ASTStructType* nextStructType = nullptr;
 };
@@ -501,6 +502,17 @@ struct DoWhileStmt : Stmt
 	void Dump(OutStream& out, int level) const override;
 };
 
+struct ForStmt : Stmt
+{
+	IMPLEMENT_CLONE(ForStmt);
+	Stmt* GetInit() const { return childCount >= 1 ? firstChild->ToStmt() : nullptr; }
+	Expr* GetCond() const { return childCount >= 2 ? firstChild->next->ToExpr() : nullptr; }
+	Expr* GetIncr() const { return childCount >= 3 ? firstChild->next->next->ToExpr() : nullptr; }
+	Stmt* GetBody() const { return childCount >= 4 ? firstChild->next->next->next->ToStmt() : nullptr; }
+
+	void Dump(OutStream& out, int level) const override;
+};
+
 struct VarDeclStmt : Stmt
 {
 	// all children must be VarDecl
@@ -529,7 +541,7 @@ struct ASTFunction : ASTNode
 	std::string mangledName;
 	ReturnStmt* firstRetStmt = nullptr;
 	ReturnStmt* lastRetStmt = nullptr;
-	std::vector< VarDecl* > tmpVars;
+	std::vector<VarDecl*> tmpVars;
 	bool used = false;
 	bool isEntryPoint = false;
 };

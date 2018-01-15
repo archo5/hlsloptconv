@@ -45,6 +45,20 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `basic 'for'`
+source `
+float4 main( float2 tc : TEXCOORD ) : POSITION
+{
+	float4 outval = 0;
+	for( int i = 0; i < 10; i = i + 1 )
+	{
+		outval += tc.xyxy * i;
+	}
+	return outval;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+
 // `basic 'break' and 'continue'`
 source `
 float4 main( float2 tc : TEXCOORD ) : POSITION

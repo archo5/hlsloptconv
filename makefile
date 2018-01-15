@@ -12,5 +12,8 @@ sltest.exe: $(OBJS) obj/test.obj
 hlslparser.exe: $(OBJS) obj/main.obj
 	link /nologo /out:$@ $^ /DEBUG
 
-obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp
+obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
 	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
+
+obj:
+	mkdir obj
