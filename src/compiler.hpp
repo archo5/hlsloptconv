@@ -144,6 +144,7 @@ struct ASTType
 	unsigned GetElementCount() const;
 	unsigned GetAccessPointCount() const;
 	SubTypeCount CountSubTypes() const;
+	Kind GetNVM1Kind() const;
 	void GetMangling(std::string& out) const;
 	virtual void Dump(OutStream& out) const;
 	std::string GetName() const;

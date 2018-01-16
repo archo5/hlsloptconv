@@ -1048,7 +1048,7 @@ ASTType* Parser::ParseType(bool isFuncRet)
 		return it->second;
 
 	EmitError("unknown type: " + name);
-	return nullptr;
+	return ast.GetVoidType();
 }
 
 ASTType* Parser::FindMemberType(ASTType* t, const std::string& name, uint32_t& memberID, int& swizzleComp)
@@ -1228,6 +1228,7 @@ void Parser::ParseArgList(ASTNode* out)
 		}
 
 		vd->SetType(ParseType());
+		assert(vd->GetType());
 
 		EXPECT(STT_Ident);
 		vd->name = TokenStringData();
@@ -1249,6 +1250,15 @@ void Parser::ParseArgList(ASTNode* out)
 	}
 }
 
+static bool EffectivelyEqual(ASTType* a, ASTType* b)
+{
+	if (a == b)
+		return true;
+	if (a->IsNumericOrVM1() && b->IsNumericOrVM1() && a->GetNVM1Kind() == b->GetNVM1Kind())
+		return true;
+	return false;
+}
+
 #define MAX_OVERLOAD 0x7fffffff
 int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, ASTType** equalArgs, bool err)
 {
@@ -1267,7 +1277,7 @@ int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, AST
 			continue;
 		ASTType* inty = fcarg->ToExpr()->GetReturnType();
 		ASTType* expty = fnarg->ToVarDecl()->GetType();
-		if (inty == expty)
+		if (EffectivelyEqual(inty, expty))
 			val += 1;
 		else if (CanCast(inty, expty, false))
 			val += 0xffff;
@@ -2251,8 +2261,8 @@ static bool HLSLIsTypeClass_Scalar(ASTType* t)
 static bool HLSLIsTypeClass_Vector(ASTType* t)
 {
 	return t->kind == ASTType::Vector
-		|| (t->kind == ASTType::Matrix && (t->sizeX == 1 || t->sizeY == 1))
-		|| t->IsNumericStructure();
+		;//|| (t->kind == ASTType::Matrix && (t->sizeX == 1 || t->sizeY == 1))
+		;//|| t->IsNumericStructure();
 }
 static bool HLSLIsTypeClass_Matrix(ASTType* t)
 {
@@ -2267,7 +2277,7 @@ bool Parser::CanCast(ASTType* from, ASTType* to, bool castExplicitly)
 		// scalar -> {scalar,vector,matrix}
 		if (to->IsNumericBased()) return true;
 		// scalar -> num.structure
-		if (to->IsNumericStructure()) return true;
+	//	if (to->IsNumericStructure()) return true;
 	}
 	if (HLSLIsTypeClass_Vector(from))
 	{

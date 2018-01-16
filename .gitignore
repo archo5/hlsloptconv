@@ -1,4 +1,5 @@
 *.vs
+*.sln
 *.obj
 *.ilk
 *.pdb

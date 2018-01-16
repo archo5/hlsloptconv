@@ -366,12 +366,20 @@ static void exec_test(const char* fname, const char* nameonly)
 				out += " 2>.tmp/shader." + type + ".err";
 				return out;
 			};
-			auto HasBuildErrors = [](const std::string& errstr)
+			auto HasSyntaxErrors = [](const std::string& errstr)
 			{
-				return errstr.find("failed") != std::string::npos
-					|| errstr.find("error") != std::string::npos
+				return errstr.find("error") != std::string::npos
 					|| errstr.find("ERROR") != std::string::npos
-					|| errstr.find("/?") != std::string::npos;
+					|| errstr.find("failed") != std::string::npos;
+			};
+			auto HasExecuteErrors = [](const std::string& errstr)
+			{
+				return errstr.find("/?") != std::string::npos
+					|| errstr.find("is not recognized") != std::string::npos;
+			};
+			auto HasBuildErrors = [&](const std::string& errstr)
+			{
+				return HasSyntaxErrors(errstr) || HasExecuteErrors(errstr);
 			};
 			auto HLSL = [&](const std::string& args)
 			{
@@ -398,6 +406,38 @@ static void exec_test(const char* fname, const char* nameonly)
 				{
 					printf("[%s] ERROR in '%s': compilation of recompiled shader failed, errors:\n%s\n",
 						testName, ident.c_str(), errRcmp.c_str());
+					hasErrors = true;
+				}
+			};
+			auto HLSLOrigFail = [&](const std::string& args)
+			{
+				mkdir(".tmp");
+				SetFileContents(".tmp/shader.orig.hlsl", lastSource);
+
+				double tm1 = GetTime();
+				system(HLSLShaderCmdLine(args, "orig").c_str());
+				double tm2 = GetTime();
+				if (tm2 - tm1 > longestFXCBuildTime)
+				{
+					longestFXCBuildTime = tm2 - tm1;
+					longestFXCBuildShader = testName + std::string("[orig]");
+				}
+				fprintf(fp, "-- hlsl --\ncompile time [orig]: %f seconds\n", tm2 - tm1);
+
+				std::string errOrig = GetFileContents(".tmp/shader.orig.err", true);
+
+				fprintf(fpe, "-- hlsl --\nORIGINAL:\n%s\n", errOrig.c_str());
+
+				if (HasExecuteErrors(errOrig))
+				{
+					printf("[%s] ERROR in '%s': compiler execution of BAD original shader failed:\n%s\n",
+						testName, ident.c_str(), errOrig.c_str());
+					hasErrors = true;
+				}
+				else if (HasSyntaxErrors(errOrig) == false)
+				{
+					printf("[%s] ERROR in '%s': compilation of BAD original shader was successful!\n",
+						testName, ident.c_str());
 					hasErrors = true;
 				}
 			};
@@ -538,6 +578,12 @@ static void exec_test(const char* fname, const char* nameonly)
 			{
 				Compile(decoded_value == "pixel" ? ShaderStage_Pixel : ShaderStage_Vertex, OSF_HLSL_SM3);
 				Result("false");
+			}
+			else if (ident == "compile_fail_with_hlsl")
+			{
+				Compile(decoded_value == "pixel" ? ShaderStage_Pixel : ShaderStage_Vertex, OSF_HLSL_SM3);
+				Result("false");
+				HLSLOrigFail(decoded_value);
 			}
 			else if (ident == "hlsl_before_after")
 			{

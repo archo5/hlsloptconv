@@ -73,6 +73,17 @@ ASTType::SubTypeCount ASTType::CountSubTypes() const
 	}
 }
 
+ASTType::Kind ASTType::GetNVM1Kind() const
+{
+	// only guaranteed to return correct values for Numeric/VM1 types
+	switch (kind)
+	{
+	case Vector:
+	case Matrix: return subType->kind;
+	default: return kind;
+	}
+}
+
 void ASTType::GetMangling(std::string& out) const
 {
 	char bfr[32];

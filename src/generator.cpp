@@ -439,7 +439,8 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 	}
 	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
 	{
-		if (ile->GetReturnType()->kind == ASTType::Array)
+		if (ile->GetReturnType()->kind == ASTType::Array ||
+			ile->GetReturnType()->kind == ASTType::Structure)
 		{
 			out << "{";
 			for (ASTNode* ch = ile->firstChild; ch; ch = ch->next)
