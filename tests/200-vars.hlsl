@@ -236,6 +236,20 @@ float4 main() : POSITION { return outval.xyxy; }`
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `multiple cbuffers`
+source `
+cbuffer mybuf
+{
+	float4 outval;
+}
+cbuffer mybuf2
+{
+	float4 ou2val;
+}
+float4 main() : POSITION { return outval + ou2val; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+
 // `samplers`
 source `
 sampler1D s1;

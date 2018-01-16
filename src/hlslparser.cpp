@@ -1275,8 +1275,8 @@ int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, AST
 		{
 			if (err)
 			{
-				EmitError("cannot cast argument " + std::to_string(i + 1) + " from " + inty->GetName()
-					+ " to " + expty->GetName());
+				EmitError("cannot implicitly cast argument " + std::to_string(i + 1)
+					+ " from '" + inty->GetName() + "' to '" + expty->GetName() + "'");
 			}
 			return MAX_OVERLOAD;
 		}
@@ -2244,12 +2244,53 @@ ASTType* Parser::FindCommonOpType(ASTType* rt0, ASTType* rt1, SLTokenType token)
 	return nullptr;
 }
 
-bool Parser::CanCast( ASTType* from, ASTType* to, bool castExplicitly )
+static bool HLSLIsTypeClass_Scalar(ASTType* t)
 {
-	if( from == to )
-		return true;
-	if( from->IsNumericOrVM1() && to->IsNumericBased() )
-		return true;
+	return t->IsNumericOrVM1();
+}
+static bool HLSLIsTypeClass_Vector(ASTType* t)
+{
+	return t->kind == ASTType::Vector
+		|| (t->kind == ASTType::Matrix && (t->sizeX == 1 || t->sizeY == 1))
+		|| t->IsNumericStructure();
+}
+static bool HLSLIsTypeClass_Matrix(ASTType* t)
+{
+	return t->kind == ASTType::Matrix;
+}
+bool Parser::CanCast(ASTType* from, ASTType* to, bool castExplicitly)
+{
+	if (from == to) return true; // shortcut for objects
+
+	if (HLSLIsTypeClass_Scalar(from))
+	{
+		// scalar -> {scalar,vector,matrix}
+		if (to->IsNumericBased()) return true;
+		// scalar -> num.structure
+		if (to->IsNumericStructure()) return true;
+	}
+	if (HLSLIsTypeClass_Vector(from))
+	{
+		// vector -> scalar
+		if (HLSLIsTypeClass_Scalar(to)) return true;
+		// vector -> {vector,num.structure}
+		if (HLSLIsTypeClass_Vector(to)) return from->GetAccessPointCount() >= to->GetAccessPointCount();
+		// vector -> matrix
+		if (HLSLIsTypeClass_Matrix(to)) return from->GetAccessPointCount() == to->GetAccessPointCount();
+	}
+	if (HLSLIsTypeClass_Matrix(from))
+	{
+		// matrix -> scalar
+		if (HLSLIsTypeClass_Scalar(to)) return true;
+		// matrix -> {vector,num.structure}
+		// > cannot [implicitly] convert from 'float4x4' to 'float4'
+		if (HLSLIsTypeClass_Vector(to)) return from->GetAccessPointCount() == to->GetAccessPointCount();
+		// matrix -> matrix
+		// > cannot implicitly convert from 'float4x1' to 'float4' (which is float1x4) -- TODO
+		if (HLSLIsTypeClass_Matrix(to)) return from->GetAccessPointCount() >= to->GetAccessPointCount();
+	}
+	// TODO structure
+
 	return false;
 }
 
@@ -2353,12 +2394,7 @@ Stmt* Parser::ParseStatement()
 		ast.unassignedNodes.AppendChild(ret);
 		FWD();
 		ret->SetExpr(ParseExpr());
-		if (CanCast(ret->GetExpr()->GetReturnType(), funcInfo.func->GetReturnType(), false) == false)
-		{
-			EmitError("cannot implicitly cast from " + ret->GetExpr()->GetReturnType()->GetName()
-				+ " to " + funcInfo.func->GetReturnType()->GetName());
-		}
-		CastExprTo(ret->GetExpr(), funcInfo.func->GetReturnType());
+		TryCastExprTo(ret->GetExpr(), funcInfo.func->GetReturnType(), "return expression");
 		ret->AddToFunction(funcInfo.func);
 		return ret;
 	}
@@ -2573,16 +2609,7 @@ Stmt* Parser::ParseExprDeclStatement()
 				else
 				{
 					vd->SetInitExpr(ParseExpr());
-					if (CanCast(vd->GetInitExpr()->GetReturnType(), curType, false))
-					{
-						CastExprTo(vd->GetInitExpr(), curType);
-					}
-					else
-					{
-						EmitError("cannot cast initialization expression from '"
-							+ vd->GetInitExpr()->GetReturnType()->GetName() + "' to '"
-							+ curType->GetName() + "'");
-					}
+					TryCastExprTo(vd->GetInitExpr(), curType, "initialization expression");
 				}
 			}
 
@@ -2611,6 +2638,23 @@ Stmt* Parser::ParseExprDeclStatement()
 		EXPECT(STT_Semicolon);
 
 		return out;
+	}
+}
+
+bool Parser::TryCastExprTo(Expr* expr, ASTType* tty, const char* what)
+{
+	bool ret = CanCast(expr->GetReturnType(), tty, false);
+	CastExprTo(expr, tty);
+	if (ret)
+	{
+		return true;
+	}
+	else
+	{
+		EmitError("cannot cast " + std::string(what) + " from '"
+			+ expr->GetReturnType()->GetName() + "' to '"
+			+ tty->GetName() + "'");
+		return false;
 	}
 }
 

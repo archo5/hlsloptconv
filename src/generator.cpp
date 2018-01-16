@@ -11,7 +11,8 @@ struct SLGenerator
 	virtual void EmitVarDecl(const VarDecl* vd);
 	virtual void EmitExpr(const Expr* node);
 	virtual void EmitStmt(const Stmt* node, int level);
-	void Generate();
+	void GenerateStructs();
+	void GenerateFunctions();
 
 	void LVL(int level)
 	{
@@ -329,6 +330,46 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 	out << "[TODO " << typeid(*node).name() << "]";
 }
 
+void SLGenerator::GenerateStructs()
+{
+	// structs
+	for (const ASTStructType* stc = ast.firstStructType; stc; stc = stc->nextStructType)
+	{
+		out << "struct " << stc->name << "\n{";
+		for (const auto& m : stc->members)
+		{
+			out << "\n";
+			LVL(1);
+			EmitAccessPointDecl(m);
+			out << ";";
+		}
+		out << "\n};\n";
+	}
+}
+
+void SLGenerator::GenerateFunctions()
+{
+	for (const ASTNode* fnn = ast.functionList.firstChild; fnn; fnn = fnn->next)
+	{
+		const ASTFunction* F = fnn->ToFunction();
+
+		EmitTypeRef(F->GetReturnType());
+		out << " " << F->mangledName << "(";
+		for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
+		{
+			EmitVarDecl(arg->ToVarDecl());
+			if (arg->next)
+				out << ",";
+		}
+		out << ")";
+
+		if (supportsSemantics && F->returnSemantic.empty() == false)
+			out << ":" << F->returnSemantic;
+		EmitStmt(F->GetCode(), 0);
+		out << "\n";
+	}
+}
+
 
 //////////////
 //// HLSL ////
@@ -378,7 +419,14 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 	}
 	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
 	{
-		EmitExpr(fce->GetFunc());
+		if (fce->resolvedFunc)
+		{
+			out << fce->resolvedFunc->mangledName;
+		}
+		else
+		{
+			EmitExpr(fce->GetFunc());
+		}
 		out << "(";
 		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
 		{
@@ -433,19 +481,8 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 
 void HLSLGenerator::Generate()
 {
-	// structs
-	for (const ASTStructType* stc = ast.firstStructType; stc; stc = stc->nextStructType)
-	{
-		out << "struct " << stc->name << "\n{";
-		for (const auto& m : stc->members)
-		{
-			out << "\n";
-			LVL(1);
-			EmitAccessPointDecl(m);
-			out << ";";
-		}
-		out << "\n};\n";
-	}
+	SLGenerator::GenerateStructs();
+
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 	{
 		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
@@ -470,26 +507,8 @@ void HLSLGenerator::Generate()
 			out << ";\n";
 		}
 	}
-	for (const auto& fgdef : ast.functions)
-	{
-		for (const auto& fdef : fgdef.second)
-		{
-			ASTFunction* F = fdef.second;
-			EmitTypeRef(F->GetReturnType());
-			out << " " << F->name << "(";
-			for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
-			{
-				EmitVarDecl(arg->ToVarDecl());
-				if (arg->next)
-					out << ",";
-			}
-			out << ")";
-			if (F->returnSemantic.empty() == false)
-				out << ":" << F->returnSemantic;
-			EmitStmt(F->GetCode(), 0);
-			out << "\n";
-		}
-	}
+
+	SLGenerator::GenerateFunctions();
 }
 
 
@@ -504,7 +523,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Void: out << "void"; break;
 	case ASTType::Bool: out << "bool"; break;
 	case ASTType::Int32: out << "int"; break;
-	case ASTType::Float16: out << "half"; break;
+	case ASTType::Float16: out << "mediump float"; break;
 	case ASTType::Float32: out << "float"; break;
 	case ASTType::Sampler1D: out << "sampler1D"; break;
 	case ASTType::Sampler2D: out << "sampler2D"; break;
@@ -598,7 +617,14 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			}
 		}
 
-		EmitExpr(fce->GetFunc());
+		if (fce->resolvedFunc)
+		{
+			out << fce->resolvedFunc->mangledName;
+		}
+		else
+		{
+			EmitExpr(fce->GetFunc());
+		}
 		out << "(";
 		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
 		{
@@ -660,19 +686,8 @@ void GLSLGenerator::Generate()
 {
 	out << "#version 140\n";
 
-	// structs
-	for (const ASTStructType* stc = ast.firstStructType; stc; stc = stc->nextStructType)
-	{
-		out << "struct " << stc->name << "\n{";
-		for (const auto& m : stc->members)
-		{
-			out << "\n";
-			LVL(1);
-			EmitAccessPointDecl(m);
-			out << ";";
-		}
-		out << "\n};\n";
-	}
+	SLGenerator::GenerateStructs();
+
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 	{
 		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
@@ -697,26 +712,8 @@ void GLSLGenerator::Generate()
 			out << ";\n";
 		}
 	}
-	for (const auto& fgdef : ast.functions)
-	{
-		for (const auto& fdef : fgdef.second)
-		{
-			ASTFunction* F = fdef.second;
 
-			EmitTypeRef(F->GetReturnType());
-			out << " " << F->name << "(";
-			for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
-			{
-				EmitVarDecl(arg->ToVarDecl());
-				if (arg->next)
-					out << ",";
-			}
-			out << ")";
-
-			EmitStmt(F->GetCode(), 0);
-			out << "\n";
-		}
-	}
+	SLGenerator::GenerateFunctions();
 }
 
 

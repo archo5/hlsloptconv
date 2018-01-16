@@ -206,6 +206,8 @@ void RemoveUnusedFunctions::RunOnAST(AST& ast)
 		{
 			if (fdef.second->used)
 				mfuncmap[fdef.first] = std::move(fdef.second);
+			else
+				delete fdef.second;
 		}
 		if (mfuncmap.empty() == false)
 			funcmap[fgdef.first] = std::move(mfuncmap);

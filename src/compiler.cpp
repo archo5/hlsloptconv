@@ -51,12 +51,35 @@ unsigned ASTType::GetAccessPointCount() const
 	}
 }
 
+ASTType::SubTypeCount ASTType::CountSubTypes() const
+{
+	switch (kind)
+	{
+	case Bool:
+	case Int32:
+	case Float16:
+	case Float32:
+	case Vector:
+	case Matrix: return { 1, 0 };
+	case Array: return subType->CountSubTypes();
+	case Structure:
+	{
+		SubTypeCount cnt = { 0, 0 };
+		for (const auto& m : static_cast<const ASTStructType*>(this)->members)
+			cnt += m.type->CountSubTypes();
+		return cnt;
+	}
+	default: return { 0, 1 };
+	}
+}
+
 void ASTType::GetMangling(std::string& out) const
 {
 	char bfr[32];
 	switch (kind)
 	{
 	case Void:    out += "v"; break;
+	case Bool:    out += "b"; break;
 	case Int32:   out += "i"; break;
 	case Float16: out += "p"; break;
 	case Float32: out += "f"; break;
@@ -82,6 +105,11 @@ void ASTType::GetMangling(std::string& out) const
 		out += bfr;
 		out += static_cast<const ASTStructType*>(this)->name;
 		break;
+	case Function:    out += "<FN?>"; break;
+	case Sampler1D:   out += "s1"; break;
+	case Sampler2D:   out += "s2"; break;
+	case Sampler3D:   out += "s3"; break;
+	case SamplerCUBE: out += "sc"; break;
 	default: out += "<ERROR>"; break;
 	}
 }

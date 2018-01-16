@@ -56,6 +56,7 @@ struct Parser
 	void ParseInitList(ASTNode* out, int numItems, bool ctor);
 	Stmt* ParseStatement();
 	Stmt* ParseExprDeclStatement();
+	bool TryCastExprTo(Expr* expr, ASTType* tty, const char* what);
 	int32_t ParseRegister(char ch, bool comp, int32_t limit);
 	void ParseDecl();
 

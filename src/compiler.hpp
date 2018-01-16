@@ -122,6 +122,20 @@ struct ASTType
 		SamplerCUBE,
 	};
 
+	struct SubTypeCount
+	{
+		bool IsNumeric() const { return numeric && !other; }
+		SubTypeCount& operator += (const SubTypeCount& o)
+		{
+			numeric += o.numeric;
+			other += o.other;
+			return *this;
+		}
+
+		int numeric = 0;
+		int other = 0;
+	};
+
 	ASTType() {} // for array init
 	ASTType(Kind k) : kind(k) {}
 	ASTType(ASTType* sub, uint8_t x) : kind(Vector) { subType = sub; sizeX = x; }
@@ -129,6 +143,7 @@ struct ASTType
 
 	unsigned GetElementCount() const;
 	unsigned GetAccessPointCount() const;
+	SubTypeCount CountSubTypes() const;
 	void GetMangling(std::string& out) const;
 	virtual void Dump(OutStream& out) const;
 	std::string GetName() const;
@@ -160,6 +175,7 @@ struct ASTType
 			&& sizeX == o->sizeX
 			&& (kind == Vector || sizeY == o->sizeY);
 	}
+	bool IsNumericStructure() const { return kind == Structure && CountSubTypes().IsNumeric(); }
 	bool IsIndexable() const { return kind == Vector || kind == Matrix || kind == Array; }
 
 	ASTNode* firstUse = nullptr;
@@ -217,6 +233,7 @@ struct ASTNode
 	struct Stmt* ToStmt();
 	struct VarDecl* ToVarDecl();
 	ASTFunction* ToFunction();
+	FINLINE const ASTFunction* ToFunction() const { return const_cast<ASTNode*>(this)->ToFunction(); }
 	void ChangeAssocType(ASTType* t);
 
 	FINLINE void InsertBeforeMe(ASTNode* ch) { parent->InsertBefore(ch, this); }
