@@ -39,6 +39,11 @@ source `float4 main( float2 p : POSITION ) : POSITION { return float4( 3, p, 4 )
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `numeric type ctors (vm1)`
+source `float4 main( float2 p : POSITION ) : POSITION { return float1( 3 ); }`
+compile_hlsl_before_after ``
+compile_glsl ``
+
 // `array type`
 source `float4 main() : POSITION { float4 arr[2]; arr[0] = 0; arr[1] = 1; return arr[0] + arr[1]; }`
 compile_hlsl_before_after ``
@@ -51,6 +56,11 @@ compile_glsl ``
 
 // `scalar swizzle 1`
 source `void main( out float4 OUT : POSITION ){ OUT = 1.0.xxxx; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+
+// `scalar swizzle 2`
+source `void main( out float4 OUT : POSITION ){ OUT = 1.0.x; }`
 compile_hlsl_before_after ``
 compile_glsl ``
 

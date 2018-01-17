@@ -653,7 +653,8 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 	{
 		if (mbe->GetSource()->GetReturnType()->IsNumeric())
 		{
-			EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->memberName.size()));
+			if (mbe->swizzleComp > 1) // 1-component swizzles could otherwise generate vec1-like types
+				EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->memberName.size()));
 			out << "(";
 			EmitExpr(mbe->GetSource());
 			out << ")";
