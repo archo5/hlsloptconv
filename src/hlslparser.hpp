@@ -43,6 +43,7 @@ struct Parser
 	ASTType* ParseType(bool isFuncRet = false);
 	ASTType* FindMemberType(ASTType* t, const std::string& name, uint32_t& memberID, int& swizzleComp);
 	VoidExpr* CreateVoidExpr(); // for errors
+	void ParseSemantic(std::string& name, int& index);
 	void ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, ASTType** equalArgs, bool err);
 	void FindFunction(FCallExpr* fcall, const Location& loc);

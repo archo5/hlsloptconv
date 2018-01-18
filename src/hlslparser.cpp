@@ -1198,6 +1198,36 @@ VoidExpr* Parser::CreateVoidExpr()
 	return e;
 }
 
+void Parser::ParseSemantic(std::string& name, int& index)
+{
+	if (TT() == STT_Colon)
+	{
+		FWD();
+		EXPECT(STT_Ident);
+		name = TokenStringData();
+		if (name.back() >= '0' && name.back() <= '9')
+		{
+			// TODO filter by prefix?
+			int num = 0;
+			int mult = 1;
+			for (size_t i = name.size(); i > 0; )
+			{
+				i--;
+				char c = name[i];
+				if (c < '0' || c > '9')
+				{
+					name.resize(i + 1);
+					break;
+				}
+				num += mult * (c - '0');
+				mult *= 10;
+			}
+			index = num;
+		}
+		FWD();
+	}
+}
+
 void Parser::ParseArgList(ASTNode* out)
 {
 	if (TT() == STT_RParen)
@@ -1234,13 +1264,7 @@ void Parser::ParseArgList(ASTNode* out)
 		vd->name = TokenStringData();
 		FWD();
 
-		if (TT() == STT_Colon)
-		{
-			FWD();
-			EXPECT(STT_Ident);
-			vd->semantic = TokenStringData();
-			FWD();
-		}
+		ParseSemantic(vd->semanticName, vd->semanticIndex);
 
 		if (TT() == STT_RParen)
 			break;
@@ -2200,12 +2224,12 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 		return no;
 	if (a->kind == ASTType::Vector || b->kind == ASTType::Vector)
 	{
-		int size = a->IsNumericOrVM1() == false ? a->sizeX : b->sizeX;
+		int size = a->IsNumeric() == false ? a->sizeX : b->sizeX;
 		return ast.GetVectorType(no, size);
 	}
 	if (a->kind == ASTType::Matrix || b->kind == ASTType::Matrix)
 	{
-		ASTType* mt = a->IsNumericOrVM1() == false ? a : b;
+		ASTType* mt = a->IsNumeric() == false ? a : b;
 		switch (no->kind)
 		{
 		case ASTType::Bool: return ast.GetBoolMtxType(a->sizeX, a->sizeY);
@@ -2225,9 +2249,9 @@ ASTType* Parser::FindCommonOpType(ASTType* rt0, ASTType* rt1, SLTokenType token)
 		// all operators work with equal number types
 		return rt0;
 	}
-//	std::cerr << "PROMOTE " << rt0->name << "," << rt1->name << ": ";
-//	Promote( rt0, rt1 )->Dump( std::cerr );
-//	std::cerr << "\n";
+//	FILEStream(stderr) << "PROMOTE " << rt0->GetName() << "," << rt1->GetName() << ": ";
+//	Promote( rt0, rt1 )->Dump( FILEStream(stderr) );
+//	FILEStream(stderr) << "\n";
 	if ((rt0->IsNumericOrVM1() && rt1->IsNumericBased()) ||
 		(rt0->IsNumericBased() && rt1->IsNumericOrVM1()) ||
 		(rt0->kind == ASTType::Vector && rt1->kind == ASTType::Vector) ||
@@ -2763,13 +2787,7 @@ void Parser::ParseDecl()
 			member.name = TokenStringData();
 			FWD();
 
-			if (TT() == STT_Colon)
-			{
-				FWD();
-				EXPECT(STT_Ident);
-				member.semantic = TokenStringData();
-				FWD();
-			}
+			ParseSemantic(member.semanticName, member.semanticIndex);
 
 			EXPECT(STT_Semicolon);
 			FWD();
@@ -2868,7 +2886,7 @@ void Parser::ParseDecl()
 			}
 		}
 
-		ASTType* type = ParseType(true);
+		ASTType* commonType = ParseType(true);
 
 		EXPECT(STT_Ident);
 		std::string name = TokenStringData();
@@ -2878,7 +2896,7 @@ void Parser::ParseDecl()
 		{
 			auto* func = new ASTFunction;
 			ast.functionList.AppendChild(func);
-			func->SetReturnType(type);
+			func->SetReturnType(commonType);
 			func->name = name;
 
 			FWD();
@@ -2901,13 +2919,7 @@ void Parser::ParseDecl()
 			}
 			func->mangledName = mangledName;
 
-			if (TT() == STT_Colon)
-			{
-				FWD();
-				EXPECT(STT_Ident);
-				func->returnSemantic = TokenStringData();
-				FWD();
-			}
+			ParseSemantic(func->returnSemanticName, func->returnSemanticIndex);
 
 			EXPECT(STT_LBrace);
 
@@ -2926,10 +2938,11 @@ void Parser::ParseDecl()
 		}
 		else
 		{
+			ASTType* type = commonType;
 			if (type->IsVoid())
 				EmitError("void type can only be used as function return value");
 
-			if (TT() == STT_LBracket)
+			while (TT() == STT_LBracket)
 			{
 				FWD();
 				EXPECT(STT_Int32Lit);

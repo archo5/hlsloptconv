@@ -7,6 +7,7 @@ struct SLGenerator
 {
 	SLGenerator(const AST& a, OutStream& o, OutputShaderFormat osf) : ast(a), out(o), shaderFormat(osf) {}
 	virtual void EmitTypeRef(const ASTType* type) = 0;
+	virtual void EmitAccessPointTypeAndName(ASTType* type, const std::string& name);
 	virtual void EmitAccessPointDecl(const AccessPointDecl& apd);
 	virtual void EmitVarDecl(const VarDecl* vd);
 	virtual void EmitExpr(const Expr* node);
@@ -26,6 +27,8 @@ struct SLGenerator
 	bool supportsSemantics = true;
 	bool supportsStatic = true;
 	bool supportsPacking = true;
+	bool supportsDoubles = true;
+	int varDeclNameID = 0;
 };
 
 
@@ -36,6 +39,7 @@ struct HLSLGenerator : SLGenerator
 		supportsSemantics = true;
 		supportsStatic = true;
 		supportsPacking = true;
+		supportsDoubles = true;
 	}
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
@@ -50,6 +54,7 @@ struct GLSLGenerator : SLGenerator
 		supportsSemantics = false;
 		supportsStatic = false;
 		supportsPacking = false;
+		supportsDoubles = false;
 	}
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
@@ -57,21 +62,30 @@ struct GLSLGenerator : SLGenerator
 };
 
 
-void SLGenerator::EmitAccessPointDecl(const AccessPointDecl& apd)
+void SLGenerator::EmitAccessPointTypeAndName(ASTType* type, const std::string& name)
 {
-	if (apd.type->kind == ASTType::Array)
+	if (type->kind == ASTType::Array)
 	{
-		EmitTypeRef(apd.type->subType);
-		out << " " << apd.name << "[" << apd.type->elementCount << "]";
+		EmitAccessPointTypeAndName(type->subType, name);
+		out << "[" << type->elementCount << "]";
 	}
 	else
 	{
-		EmitTypeRef(apd.type);
-		out << " " << apd.name;
+		EmitTypeRef(type);
+		out << " " << name;
 	}
+}
 
-	if (supportsSemantics && apd.semantic.empty() == false)
-		out << " : " << apd.semantic;
+void SLGenerator::EmitAccessPointDecl(const AccessPointDecl& apd)
+{
+	EmitAccessPointTypeAndName(apd.type, apd.name);
+
+	if (supportsSemantics && apd.semanticName.empty() == false)
+	{
+		out << " : " << apd.semanticName;
+		if (apd.semanticIndex >= 0)
+			out << apd.semanticIndex;
+	}
 }
 
 void SLGenerator::EmitVarDecl(const VarDecl* vd)
@@ -203,8 +217,9 @@ void SLGenerator::EmitExpr(const Expr* node)
 		sprintf(bfr, "%.6g", f32expr->value);
 		out << bfr;
 		if (strstr(bfr, ".") == nullptr)
-			out << '.';
-		out << 'f';
+			out << ".0";
+		if (supportsDoubles)
+			out << "f";
 		return;
 	}
 	else if (auto* ide = dynamic_cast<const IndexExpr*>(node))
@@ -363,8 +378,12 @@ void SLGenerator::GenerateFunctions()
 		}
 		out << ")";
 
-		if (supportsSemantics && F->returnSemantic.empty() == false)
-			out << ":" << F->returnSemantic;
+		if (supportsSemantics && F->returnSemanticName.empty() == false)
+		{
+			out << ":" << F->returnSemanticName;
+			if (F->returnSemanticIndex >= 0)
+				out << F->returnSemanticIndex;
+		}
 		EmitStmt(F->GetCode(), 0);
 		out << "\n";
 	}
@@ -505,6 +524,8 @@ void HLSLGenerator::Generate()
 		else
 		{
 			EmitVarDecl(g->ToVarDecl());
+			if (g->ToVarDecl()->flags & VarDecl::ATTR_Hidden)
+				continue;
 			out << ";\n";
 		}
 	}
@@ -669,13 +690,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
 	{
 		if (dre->decl)
-		{
-			if ((dre->decl->flags & VarDecl::ATTR_Out) &&
-				dre->decl->semantic.compare(0, 8, "POSITION") == 0)
-				out << "gl_Position";
-			else
-				out << dre->decl->name;//semantic;
-		}
+			out << dre->decl->name;
 		else
 			out << dre->name;
 		return;
@@ -707,8 +722,7 @@ void GLSLGenerator::Generate()
 		else
 		{
 			auto* gv = g->ToVarDecl();
-			if ((gv->flags & VarDecl::ATTR_Out) &&
-				gv->semantic.compare(0, 8, "POSITION") == 0)
+			if (gv->flags & VarDecl::ATTR_Hidden)
 				continue;
 			EmitVarDecl(gv);
 			out << ";\n";

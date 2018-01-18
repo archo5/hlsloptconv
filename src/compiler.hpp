@@ -162,6 +162,7 @@ struct ASTType
 	bool IsNumeric() const { return kind == Bool || IsNumber(); }
 	bool IsNumericBased() const { return kind == Bool || IsNumber() || kind == Vector || kind == Matrix; }
 	bool IsVM1() const { return (kind == Vector && sizeX == 1) || (kind == Matrix && sizeX * sizeY == 1); }
+	int GetM1Dim() const { return kind == Matrix ? ( sizeX == 1 ? sizeY : ( sizeY == 1 ? sizeX : 0 ) ) : 0; }
 	bool IsNumericOrVM1() const { return kind == Bool || IsNumber() || IsVM1(); }
 	bool IsNumVector() const { return kind == Vector && subType->IsNumber(); }
 	bool IsNumMatrix() const { return kind == Matrix && subType->IsNumber(); }
@@ -198,7 +199,8 @@ struct AccessPointDecl
 
 	std::string name;
 	ASTType* type = nullptr;
-	std::string semantic;
+	std::string semanticName;
+	int semanticIndex = -1;
 };
 
 struct ASTStructType : ASTType
@@ -286,6 +288,7 @@ struct VarDecl : ASTNode, AccessPointDecl
 		ATTR_Uniform = 0x0004,
 		ATTR_Const   = 0x0008,
 		ATTR_Static  = 0x0010,
+		ATTR_Hidden  = 0x0020, // does not get printed (for built-in in/out variables)
 	};
 
 	FINLINE VarDecl() {}
@@ -554,7 +557,8 @@ struct ASTFunction : ASTNode
 	void Dump(OutStream& out, int level = 0) const;
 
 	ASTType* returnType = nullptr;
-	std::string returnSemantic;
+	std::string returnSemanticName;
+	int returnSemanticIndex = -1;
 	std::string name;
 	std::string mangledName;
 	ReturnStmt* firstRetStmt = nullptr;

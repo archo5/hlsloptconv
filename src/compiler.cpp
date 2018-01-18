@@ -192,9 +192,11 @@ void AccessPointDecl::Dump(OutStream& out) const
 {
 	type->Dump(out);
 	out << " " << name;
-	if (semantic.empty() == false)
+	if (semanticName.empty() == false)
 	{
-		out << " : " << semantic;
+		out << " : " << semanticName;
+		if (semanticIndex >= 0)
+			out << "[" << semanticIndex << "]";
 	}
 }
 
@@ -587,6 +589,7 @@ void CBufferDecl::Dump(OutStream& out, int level) const
 	LVL(out, level); out << "{\n"; level++;
 	for (ASTNode* arg = firstChild; arg; arg = arg->next)
 	{
+		LVL(out, level);
 		arg->Dump(out, level);
 	}
 	level--; LVL(out, level); out << "}\n";
@@ -631,7 +634,7 @@ void FCallExpr::Dump(OutStream& out, int level) const
 		out << " builtin";
 	out << "\n";
 	LVL(out, level); out << "{\n"; level++;
-	LVL(out, level); out << "func =\n";
+	LVL(out, level); out << "func = ";
 	GetFunc()->Dump(out, level + 1);
 	int i = 0;
 	for (ASTNode* arg = GetFirstArg(); arg; arg = arg->next)
@@ -867,8 +870,12 @@ void ASTFunction::Dump(OutStream& out, int level) const
 		arg->Dump(out, level + 1);
 	}
 	out << ")";
-	if (returnSemantic.empty() == false)
-		out << ":" << returnSemantic;
+	if (returnSemanticName.empty() == false)
+	{
+		out << ":" << returnSemanticName;
+		if (returnSemanticIndex >= 0)
+			out << "[" << returnSemanticIndex << "]";
+	}
 	out << " // mangledName=" << mangledName << "\n";
 	GetCode()->Dump(out, level);
 	out << "\n";
@@ -1651,13 +1658,45 @@ void VariableAccessValidator::ValidateCheckVariableError(const std::string& varn
 
 
 
+static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage)
+{
+	if (vd->flags & VarDecl::ATTR_Out)
+	{
+		if (stage == ShaderStage_Vertex)
+		{
+			if (vd->semanticName == "POSITION")
+			{
+				vd->name = "gl_Position";
+				vd->flags |= VarDecl::ATTR_Hidden;
+				return;
+			}
+		}
+		if (stage == ShaderStage_Pixel)
+		{
+			if (vd->semanticName == "COLOR")
+			{
+				char bfr[32];
+				sprintf(bfr, "_PSCOLOR%d", vd->semanticIndex >= 0 ? vd->semanticIndex : 0);
+				vd->name = bfr;
+				return;
+			}
+		}
+	}
+
+	if (vd->name.empty())
+	{
+		vd->name = vd->semanticName;
+	}
+}
+
 struct StructLevel
 {
 	ASTStructType* strTy;
 	uint32_t mmbID;
 	ASTNode* levILE;
 };
-static void AppendShaderIOVar(AST& ast, ASTFunction* F, ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
+static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, ShaderStage stage,
+	ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
 {
 	std::vector<StructLevel> mmbIndices;
 	mmbIndices.push_back({ topStc, 0, outILE });
@@ -1680,11 +1719,17 @@ static void AppendShaderIOVar(AST& ast, ASTFunction* F, ASTNode* outILE, ASTNode
 
 
 		VarDecl* vd = ast.CreateGlobalVar();
-
-		vd->name = (outILE ? "i" : "o") + mmb.semantic;
+		vd->name = inSRC->ToVarDecl()->name;
+		for (auto& mmbidx : mmbIndices)
+		{
+			vd->name += "_";
+			vd->name += mmbidx.strTy->members[mmbidx.mmbID].name;
+		}
 		vd->SetType(mmb.type);
 		vd->flags = outILE ? VarDecl::ATTR_In : VarDecl::ATTR_Out;
-		vd->semantic = mmb.semantic;
+		vd->semanticName = mmb.semanticName;
+		vd->semanticIndex = mmb.semanticIndex;
+		GLSLRenameInOut(vd, stage);
 
 		if (outILE)
 		{
@@ -1751,20 +1796,8 @@ static void AppendShaderIOVar(AST& ast, ASTFunction* F, ASTNode* outILE, ASTNode
 	}
 }
 
-static void UnpackEntryPoint(AST& ast, ShaderStage stage)
+static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage)
 {
-	const char* inpfx = "";
-	const char* outpfx = "";
-	switch (stage)
-	{
-	case ShaderStage_Vertex:
-		inpfx = "i2v";
-		outpfx = "v2p";
-		break;
-	case ShaderStage_Pixel:
-		inpfx = "v2p";
-		outpfx = "p2b";
-	}
 	for (const auto& fgdef : ast.functions)
 	{
 		for (const auto& fdef : fgdef.second)
@@ -1776,10 +1809,11 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage)
 				if (F->GetReturnType()->IsVoid() == false)
 				{
 					VarDecl* vd = ast.CreateGlobalVar();
-					vd->name = outpfx + F->returnSemantic;
-					vd->semantic = F->returnSemantic;
+					vd->semanticName = F->returnSemanticName;
+					vd->semanticIndex = F->returnSemanticIndex;
 					vd->SetType(F->GetReturnType());
 					vd->flags |= VarDecl::ATTR_Out;
+					GLSLRenameInOut(vd, stage);
 
 					F->SetReturnType(ast.GetVoidType());
 
@@ -1822,11 +1856,7 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage)
 					if (argvd->GetType()->kind != ASTType::Structure)
 					{
 						argvd->Unlink();
-						argvd->name = argvd->semantic;
-						if (argvd->flags & VarDecl::ATTR_Out)
-							argvd->name = outpfx + argvd->name;
-						if (argvd->flags & VarDecl::ATTR_In)
-							argvd->name = inpfx + argvd->name;
+						GLSLRenameInOut(argvd, stage);
 						ast.globalVars.AppendChild(argvd);
 					}
 					else
@@ -1847,10 +1877,10 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage)
 							ile->SetReturnType(argvd->GetType());
 							argvd->SetInitExpr(ile);
 
-							AppendShaderIOVar(ast, F, ile, nullptr, argvd->GetType()->ToStructType());
+							GLSLAppendShaderIOVar(ast, F, stage, ile, argvd, argvd->GetType()->ToStructType());
 						}
 						else
-							AppendShaderIOVar(ast, F, nullptr, argvd, argvd->GetType()->ToStructType());
+							GLSLAppendShaderIOVar(ast, F, stage, nullptr, argvd, argvd->GetType()->ToStructType());
 
 						vds->PrependChild(argvd);
 					}
@@ -2000,7 +2030,7 @@ static Expr* FoldOut(Expr* expr)
 	auto* vd = new VarDecl;
 	auto* dre = new DeclRefExpr;
 
-	vd->name = "TODO_rename";
+	vd->name = "";
 	vd->SetType(expr->GetReturnType());
 	dre->decl = vd;
 	dre->SetReturnType(expr->GetReturnType());
@@ -2183,6 +2213,7 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 						}
 						else if (auto* fcall = dynamic_cast<FCallExpr*>(writeCtx)) // 'out' argument
 						{
+							// TODO
 						}
 					}
 					else
@@ -2229,15 +2260,52 @@ static void UnpackMatrixSwizzle(AST& ast)
 }
 
 
+struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
+{
+	GLSLConversionPass(AST& a) : ast(a){}
+	void PostVisit(ASTNode* node)
+	{
+		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
+		{
+			if (fcall->isBuiltinFunc)
+			{
+				if (auto* dre = dynamic_cast<DeclRefExpr*>(fcall->GetFunc()))
+				{
+					if (dre->name == "tex2D")
+					{
+						dre->name = "texture";
+					}
+				}
+			}
+		}
+	}
+	AST& ast;
+};
+
+static void GLSLConvert(AST& ast)
+{
+	GLSLConversionPass(ast).VisitAST(ast);
+}
+
+
 static void ReplaceVM1Type(AST& ast, ASTType* type)
 {
-	// cast all return types in code
+	// cast all return/declaration types in code
 	ASTType* scalarType = ast.CastToScalar(type);
 	while (type->firstUse)
 		type->firstUse->ChangeAssocType(scalarType);
 }
 
-static void RemoveVM1Types(AST& ast)
+static void ReplaceM1DType(AST& ast, ASTType* type, bool useY)
+{
+	// cast all return/declaration types in code
+	ASTType* scalarType = ast.CastToScalar(type);
+	ASTType* vectorType = ast.GetVectorType(scalarType, useY ? type->sizeY : type->sizeX);
+	while (type->firstUse)
+		type->firstUse->ChangeAssocType(vectorType);
+}
+
+static void RemoveVM1AndM1DTypes(AST& ast)
 {
 	ReplaceVM1Type(ast, ast.GetBoolVecType(1));
 	ReplaceVM1Type(ast, ast.GetInt32VecType(1));
@@ -2248,14 +2316,70 @@ static void RemoveVM1Types(AST& ast)
 	ReplaceVM1Type(ast, ast.GetFloat16MtxType(1, 1));
 	ReplaceVM1Type(ast, ast.GetFloat32MtxType(1, 1));
 
+	for (int i = 2; i <= 4; ++i)
+	{
+		ReplaceM1DType(ast, ast.GetBoolMtxType(i, 1), false);
+		ReplaceM1DType(ast, ast.GetInt32MtxType(i, 1), false);
+		ReplaceM1DType(ast, ast.GetFloat16MtxType(i, 1), false);
+		ReplaceM1DType(ast, ast.GetFloat32MtxType(i, 1), false);
+
+		ReplaceM1DType(ast, ast.GetBoolMtxType(1, i), true);
+		ReplaceM1DType(ast, ast.GetInt32MtxType(1, i), true);
+		ReplaceM1DType(ast, ast.GetFloat16MtxType(1, i), true);
+		ReplaceM1DType(ast, ast.GetFloat32MtxType(1, i), true);
+	}
+
 	for (ASTStructType* stc = ast.firstStructType; stc; stc = stc->nextStructType)
 	{
 		for (auto& mmb : stc->members)
+		{
 			if (mmb.type->IsVM1())
 				mmb.type = ast.CastToScalar(mmb.type);
+			else if (int dim = mmb.type->GetM1Dim())
+				mmb.type = ast.CastToVector(ast.CastToScalar(mmb.type), dim);
+		}
 	}
 }
 
+
+struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
+{
+	InitListExprRepacker(AST& a) : ast(a){}
+	void PostVisit(ASTNode* node)
+	{
+		if (auto* ile = dynamic_cast<const InitListExpr*>(node))
+		{
+			if (ile->GetReturnType()->kind == ASTType::Structure)
+			{
+				int numAPs = ile->GetReturnType()->GetAccessPointCount();
+				auto* strTy = ile->GetReturnType()->ToStructType();
+			}
+		}
+	}
+	AST& ast;
+};
+
+static void RepackInitListExprs(AST& ast)
+{
+}
+
+
+struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
+{
+	void PreVisit(ASTNode* node)
+	{
+		if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+		{
+			if (dre->decl && dre->decl->name.empty())
+			{
+				char bfr[16];
+				sprintf(bfr, "_tmp%d", id++);
+				dre->decl->name = bfr;
+			}
+		}
+	}
+	int id = 0;
+};
 
 
 bool Compiler::CompileFile(const char* name, const char* code)
@@ -2285,19 +2409,19 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		// output-specific transformations (emulation/feature mapping)
 		if (outputFmt == OSF_GLSL_140)
 		{
-			UnpackEntryPoint(p.ast, stage);
+			GLSLUnpackEntryPoint(p.ast, stage);
 			UnpackMatrixSwizzle(p.ast);
-			RemoveVM1Types(p.ast);
+			RemoveVM1AndM1DTypes(p.ast);
+			RepackInitListExprs(p.ast);
+			GLSLConvert(p.ast);
 		}
 
 		// optimizations
-		ConstantPropagation cp;
-		cp.RunOnAST(p.ast);
+		ConstantPropagation().RunOnAST(p.ast);
+		MarkUnusedVariables().RunOnAST(p.ast);
+		RemoveUnusedVariables().RunOnAST(p.ast);
 
-		MarkUnusedVariables muv;
-		muv.RunOnAST(p.ast);
-		RemoveUnusedVariables ruv;
-		ruv.RunOnAST(p.ast);
+		AssignVarDeclNames().VisitAST(p.ast);
 
 		if (ASTDumpStream)
 		{
