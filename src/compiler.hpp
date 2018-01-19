@@ -138,8 +138,8 @@ struct ASTType
 
 	ASTType() {} // for array init
 	ASTType(Kind k) : kind(k) {}
-	ASTType(ASTType* sub, uint8_t x) : kind(Vector) { subType = sub; sizeX = x; }
-	ASTType(ASTType* sub, uint8_t x, uint8_t y) : kind(Matrix) { subType = sub; sizeX = x; sizeY = y; }
+	ASTType(ASTType* sub, uint8_t x) : kind(Vector), subType(sub), sizeX(x) {}
+	ASTType(ASTType* sub, uint8_t x, uint8_t y) : kind(Matrix), subType(sub), sizeX(x), sizeY(y) {}
 
 	unsigned GetElementCount() const;
 	unsigned GetAccessPointCount() const;
@@ -187,10 +187,10 @@ struct ASTType
 
 	Kind kind = Void;
 	// vector/matrix/array types
-	ASTType* subType;
-	uint8_t sizeX; // vector width / matrix columns
-	uint8_t sizeY; // matrix rows
-	uint32_t elementCount; // array size
+	ASTType* subType = nullptr;
+	uint8_t sizeX = 1; // vector width / matrix columns
+	uint8_t sizeY = 1; // matrix rows
+	uint32_t elementCount = 1; // array size
 };
 
 struct AccessPointDecl

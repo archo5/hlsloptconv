@@ -603,7 +603,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		default:
 			break;
 		emitBinOp:
-			out << "(";
+			out << func << "(";
 			EmitExpr(binop->GetLft());
 			out << ", ";
 			EmitExpr(binop->GetRgt());

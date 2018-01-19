@@ -2031,7 +2031,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			EmitError("type '" + idx->GetSource()->GetReturnType()->GetName()
 				+ "' is not indexable, expected array, vector or string");
 		}
-		else
+		else if (TryCastExprTo(idx->GetIndex(), ast.GetInt32Type(), "index"))
 		{
 			idx->SetReturnType(idx->GetSource()->GetReturnType()->subType);
 
@@ -2224,12 +2224,12 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 		return no;
 	if (a->kind == ASTType::Vector || b->kind == ASTType::Vector)
 	{
-		int size = a->IsNumeric() == false ? a->sizeX : b->sizeX;
+		int size = a->IsNumericOrVM1() == false ? a->sizeX : b->sizeX;
 		return ast.GetVectorType(no, size);
 	}
 	if (a->kind == ASTType::Matrix || b->kind == ASTType::Matrix)
 	{
-		ASTType* mt = a->IsNumeric() == false ? a : b;
+		ASTType* mt = a->IsNumericOrVM1() == false ? a : b;
 		switch (no->kind)
 		{
 		case ASTType::Bool: return ast.GetBoolMtxType(a->sizeX, a->sizeY);

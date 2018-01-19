@@ -2019,7 +2019,7 @@ static void FoldInLoopCond(Expr* expr)
 	}
 }
 
-static Expr* FoldOut(Expr* expr)
+static DeclRefExpr* FoldOut(Expr* expr)
 {
 	FoldInLoopCond(expr);
 
@@ -2260,9 +2260,89 @@ static void UnpackMatrixSwizzle(AST& ast)
 }
 
 
+static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
+{
+	ASTType* t = src->GetReturnType();
+	assert(accessPointNum >= 0 && accessPointNum < t->GetAccessPointCount());
+	switch (t->kind)
+	{
+	case ASTType::Bool:
+	case ASTType::Int32:
+	case ASTType::Float16:
+	case ASTType::Float32:
+	case ASTType::Sampler1D:
+	case ASTType::Sampler2D:
+	case ASTType::Sampler3D:
+	case ASTType::SamplerCUBE:
+		return src;
+	case ASTType::Vector:
+		{
+			auto* idxexpr = new IndexExpr;
+			idxexpr->SetSource(src);
+			idxexpr->AppendChild(new Int32Expr(accessPointNum, ast.GetInt32Type()));
+			idxexpr->SetReturnType(t->subType);
+			return idxexpr;
+		}
+	case ASTType::Matrix:
+		{
+			auto* idxexprA = new IndexExpr;
+			auto* idxexprB = new IndexExpr;
+			idxexprA->SetSource(src);
+			idxexprA->AppendChild(new Int32Expr(accessPointNum / 4, ast.GetInt32Type()));
+			idxexprA->SetReturnType(ast.GetVectorType(t->subType, t->sizeX));
+			idxexprB->SetSource(idxexprA);
+			idxexprB->AppendChild(new Int32Expr(accessPointNum % 4, ast.GetInt32Type()));
+			idxexprB->SetReturnType(t->subType);
+			return idxexprB;
+		}
+	case ASTType::Structure:
+		{
+			auto* strTy = t->ToStructType();
+			int offset = 0;
+			for (size_t i = 0; i < strTy->members.size(); ++i)
+			{
+				int apc = strTy->members[i].type->GetAccessPointCount();
+				if (accessPointNum - offset < apc)
+				{
+					auto* mmbexpr = new MemberExpr;
+					mmbexpr->SetSource(src);
+					mmbexpr->SetReturnType(strTy->members[i].type);
+					mmbexpr->memberName = strTy->members[i].name;
+					mmbexpr->memberID = i;
+					return GetReferenceToElement(ast, mmbexpr, accessPointNum - offset);
+				}
+				offset += apc;
+			}
+		}
+	case ASTType::Array:
+		{
+			int subapc = t->subType->GetAccessPointCount();
+			int idx = accessPointNum / subapc;
+			auto* idxexpr = new IndexExpr;
+			idxexpr->SetSource(src);
+			idxexpr->AppendChild(new Int32Expr(idx, ast.GetInt32Type()));
+			idxexpr->SetReturnType(t->subType);
+			return GetReferenceToElement(ast, idxexpr, accessPointNum % subapc);
+		}
+	}
+}
+
+
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a) : ast(a){}
+	// TODO merge with hlslparser's version
+	static void CastExprTo(Expr* val, ASTType* to)
+	{
+		assert(to);
+		if (to != val->GetReturnType())
+		{
+			CastExpr* cast = new CastExpr;
+			cast->SetReturnType(to);
+			val->ReplaceWith(cast);
+			cast->SetSource(val);
+		}
+	}
 	void PostVisit(ASTNode* node)
 	{
 		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
@@ -2274,8 +2354,57 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					if (dre->name == "tex2D")
 					{
 						dre->name = "texture";
+						return;
+					}
+					if (dre->name == "lerp")
+					{
+						dre->name = "mix";
+						return;
+					}
+					if (dre->name == "clip")
+					{
+						// clip return type is 'void' so parent should be ExprStmt
+						assert(fcall->parent->ToStmt());
+
+						// convert to `if (<x> < 0) discard;` for each access point
+						Expr* arg = fcall->GetFirstArg()->ToExpr();
+
+						int numAPs = arg->GetReturnType()->GetAccessPointCount();
+						for (int i = 0; i < numAPs; ++i)
+						{
+							auto* ifstmt = new IfElseStmt;
+							auto* binop = new BinaryOpExpr;
+							auto* discard = new DiscardStmt;
+
+							ifstmt->AppendChild(binop);
+							ifstmt->AppendChild(discard);
+							binop->opType = STT_OP_Less;
+							binop->SetReturnType(ast.GetBoolType());
+							binop->AppendChild(GetReferenceToElement(ast, arg->DeepClone()->ToExpr(), i));
+							Expr* cnst = nullptr;
+							auto* srcTy = binop->GetLft()->GetReturnType();
+							switch (srcTy->kind)
+							{
+							case ASTType::Bool: CastExprTo(binop->GetLft(), ast.GetInt32Type()); // ...
+							case ASTType::Int32: cnst = new Int32Expr(0, srcTy); break;
+							case ASTType::Float16:
+							case ASTType::Float32: cnst = new Float32Expr(0, srcTy); break;
+							}
+							binop->AppendChild(cnst);
+						}
+
+						delete fcall; // leaves unused ExprStmt
+						return;
 					}
 				}
+			}
+		}
+		if (auto* exprStmt = dynamic_cast<ExprStmt*>(node))
+		{
+			if (!exprStmt->GetExpr())
+			{
+				delete exprStmt; // cleanup
+				return;
 			}
 		}
 	}
@@ -2342,17 +2471,111 @@ static void RemoveVM1AndM1DTypes(AST& ast)
 }
 
 
+struct ArrayOfArrayRemover : ASTWalker<ArrayOfArrayRemover>
+{
+	ArrayOfArrayRemover(AST& a) : ast(a){}
+	void PostVisit(ASTNode* node)
+	{
+		// tree: .. IndexExpr[2] { IndexExpr[1] { DeclRefExpr?, <index> }, <index> }
+		if (auto* idxe = dynamic_cast<IndexExpr*>(node))
+		{
+			if (auto* srcidxe = dynamic_cast<IndexExpr*>(idxe->GetSource()))
+			{
+				if (idxe->GetSource()->GetReturnType()->kind == ASTType::Array &&
+					srcidxe->GetSource()->GetReturnType()->kind == ASTType::Array)
+				{
+					// idxe { srcidxe { <source>, <idxin> }, <idxout> }
+					//  ->
+					// idxe { <source>, <idxin> * srcidxe.rettype.elementCount + <idxout> }
+					auto* mul = new BinaryOpExpr;
+					mul->AppendChild(srcidxe->GetIndex());
+					mul->AppendChild(new Int32Expr(srcidxe->GetReturnType()->elementCount, ast.GetInt32Type()));
+					mul->opType = STT_OP_Mul;
+					mul->SetReturnType(ast.GetInt32Type());
+					auto* add = new BinaryOpExpr;
+					add->AppendChild(mul);
+					add->AppendChild(idxe->GetIndex());
+					add->opType = STT_OP_Add;
+					add->SetReturnType(ast.GetInt32Type());
+					idxe->SetSource(srcidxe->GetSource());
+					assert(idxe->childCount == 1);
+					idxe->AppendChild(add);
+					delete srcidxe;
+				}
+			}
+		}
+	}
+	AST& ast;
+};
+
+static void RemoveArraysOfArrays(AST& ast)
+{
+	ArrayOfArrayRemover(ast).VisitAST(ast);
+
+	// replace all uses with flattened version
+	for (ASTType* arrTy = ast.firstArrayType; arrTy; arrTy = arrTy->nextArrayType)
+	{
+		if (arrTy->subType->kind == ASTType::Array)
+		{
+			int finalElemCount = arrTy->elementCount;
+			ASTType* finalSubType = arrTy->subType;
+			while (finalSubType->kind == ASTType::Array)
+			{
+				finalElemCount *= finalSubType->elementCount;
+				finalSubType = finalSubType->subType;
+			}
+			while (arrTy->firstUse)
+				arrTy->firstUse->ChangeAssocType(ast.GetArrayType(finalSubType, finalElemCount));
+		}
+	}
+}
+
+
 struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
 {
 	InitListExprRepacker(AST& a) : ast(a){}
 	void PostVisit(ASTNode* node)
 	{
-		if (auto* ile = dynamic_cast<const InitListExpr*>(node))
+		if (auto* ile = dynamic_cast<InitListExpr*>(node))
 		{
 			if (ile->GetReturnType()->kind == ASTType::Structure)
 			{
 				int numAPs = ile->GetReturnType()->GetAccessPointCount();
 				auto* strTy = ile->GetReturnType()->ToStructType();
+				int origInputs = ile->childCount;
+
+				DeclRefExpr* src = FoldOut(ile);
+				VarDecl* vd = src->decl;
+				ASTNode* insertPos = src->decl->parent;
+				assert(dynamic_cast<VarDeclStmt*>(insertPos));
+				insertPos = insertPos->next;
+
+				Expr* sourceNode = ile->firstChild->ToExpr();
+				int sourceOffset = 0;
+				for (int i = 0; i < numAPs; ++i)
+				{
+					for (;;)
+					{
+						int srcapc = sourceNode->GetReturnType()->GetAccessPointCount();
+						if (i - sourceOffset < srcapc)
+							break;
+						sourceOffset += srcapc;
+						sourceNode = sourceNode->next->ToExpr();
+					}
+					auto* exprStmt = new ExprStmt;
+					auto* binop = new BinaryOpExpr;
+					auto* dstdre = new DeclRefExpr;
+					dstdre->decl = vd;
+					dstdre->SetReturnType(vd->GetType());
+					binop->opType = STT_OP_Assign;
+					binop->AppendChild(GetReferenceToElement(ast, dstdre, i));
+					binop->AppendChild(GetReferenceToElement(ast, sourceNode->DeepClone()->ToExpr(), i - sourceOffset));
+					binop->SetReturnType(binop->GetLft()->GetReturnType());
+					exprStmt->AppendChild(binop);
+					insertPos->InsertBeforeMe(exprStmt);
+				}
+
+				delete ile; // now replaced with explicit component assignments
 			}
 		}
 	}
@@ -2361,6 +2584,7 @@ struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
 
 static void RepackInitListExprs(AST& ast)
 {
+	InitListExprRepacker(ast).VisitAST(ast);
 }
 
 
@@ -2409,10 +2633,11 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		// output-specific transformations (emulation/feature mapping)
 		if (outputFmt == OSF_GLSL_140)
 		{
-			GLSLUnpackEntryPoint(p.ast, stage);
 			UnpackMatrixSwizzle(p.ast);
 			RemoveVM1AndM1DTypes(p.ast);
 			RepackInitListExprs(p.ast);
+			RemoveArraysOfArrays(p.ast);
+			GLSLUnpackEntryPoint(p.ast, stage);
 			GLSLConvert(p.ast);
 		}
 

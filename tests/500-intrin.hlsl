@@ -91,6 +91,7 @@ float4 main( float3 p : POSITION ) : POSITION
 	return ( cross( 4, 5 ) + cross( true, false ) + cross( 0.5, 0.6 ) + cross( p, p ) ).xyzz;
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
 
 // `distance`
 source `
@@ -115,6 +116,7 @@ float4 main( float4 p : POSITION ) : POSITION
 	return normalize( 4 ) + normalize( true ) + normalize( 0.5 ) + normalize( p );
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
 
 // `tex2Dgrad`
 source `
