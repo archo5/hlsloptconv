@@ -2090,8 +2090,8 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 				{
 					// just change to double array index lookup
 					int idx = mmbexpr->memberID & 0xf;
-					int col = idx / 4;
-					int row = idx % 4;
+					int row = idx / 4;
+					int col = idx % 4;
 
 					IndexExpr* cellExpr = new IndexExpr;
 					IndexExpr* colExpr = new IndexExpr;
@@ -2175,8 +2175,8 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 								Expr* mySrc = i == 0 ? src : src->DeepClone()->ToExpr();
 
 								int idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
-								int col = idx / 4;
-								int row = idx % 4;
+								int row = idx / 4;
+								int col = idx % 4;
 
 								auto* exprStmt = new ExprStmt;
 								auto* elBinOp = new BinaryOpExpr;
@@ -2229,8 +2229,8 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 							Expr* mySrc = i == 0 ? src : src->DeepClone()->ToExpr();
 
 							int idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
-							int col = idx / 4;
-							int row = idx % 4;
+							int row = idx / 4;
+							int col = idx % 4;
 
 							IndexExpr* cellExpr = new IndexExpr;
 							IndexExpr* colExpr = new IndexExpr;
@@ -2343,6 +2343,30 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			cast->SetSource(val);
 		}
 	}
+	void MatrixUnpack1(FCallExpr* fcintrin)
+	{
+		auto* mtxTy = fcintrin->GetReturnType();
+		if (mtxTy->kind != ASTType::Matrix)
+			return;
+
+		FoldOutIfBest(fcintrin->GetFirstArg()->ToExpr());
+		int numCols = mtxTy->sizeX;
+		auto* ile = new InitListExpr;
+		auto* idxe = new IndexExpr;
+		idxe->SetReturnType(ast.GetVectorType(mtxTy->subType, mtxTy->sizeY));
+		idxe->SetSource(fcintrin->GetFirstArg()->ToExpr());
+		idxe->AppendChild(new Int32Expr(0, ast.GetInt32Type()));
+		ile->SetReturnType(mtxTy);
+		fcintrin->AppendChild(idxe);
+		fcintrin->ReplaceWith(ile);
+		ile->AppendChild(fcintrin);
+		for(int i = 1; i < numCols; ++i)
+		{
+			auto* fcx = dynamic_cast<FCallExpr*>(fcintrin->DeepClone());
+			dynamic_cast<Int32Expr*>(dynamic_cast<IndexExpr*>(fcx->GetFirstArg())->GetIndex())->value = i;
+			ile->AppendChild(fcx);
+		}
+	}
 	void PostVisit(ASTNode* node)
 	{
 		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
@@ -2351,6 +2375,11 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			{
 				if (auto* dre = dynamic_cast<DeclRefExpr*>(fcall->GetFunc()))
 				{
+					if (dre->name == "abs")
+					{
+						MatrixUnpack1(fcall);
+						return;
+					}
 					if (dre->name == "tex2D")
 					{
 						dre->name = "texture";

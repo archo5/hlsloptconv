@@ -135,9 +135,9 @@ compile_fail ``
 // `matrix RW swizzle x1`
 source `float4 main() : POSITION
 {
-	float4x4 o;
-	o._m22 = 0.0;
-	return o._33;
+	float4x3 o;
+	o._m21 = 0.0;
+	return o._32;
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
@@ -145,9 +145,9 @@ compile_glsl ``
 // `matrix RW swizzle x4`
 source `float4 main() : POSITION
 {
-	float4x4 o;
-	o._m00_m21_m12_m33 = 0.0;
-	return o._11_32_23_44;
+	float4x3 o;
+	o._m00_m21_m12_m32 = 0.0;
+	return o._11_32_23_43;
 }`
 compile_hlsl_before_after ``
 compile_glsl ``

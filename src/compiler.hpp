@@ -188,8 +188,8 @@ struct ASTType
 	Kind kind = Void;
 	// vector/matrix/array types
 	ASTType* subType = nullptr;
-	uint8_t sizeX = 1; // vector width / matrix columns
-	uint8_t sizeY = 1; // matrix rows
+	uint8_t sizeX = 1; // vector width / matrix rows
+	uint8_t sizeY = 1; // matrix columns
 	uint32_t elementCount = 1; // array size
 };
 
