@@ -3,66 +3,79 @@
 source `float4 main( float4 p : POSITION ) : POSITION { float a = 1; return a; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `two initialized variables`
 source `float4 main( float4 p : POSITION ) : POSITION { float a = 1; float b = 2; return a + b; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `two initialized variables in same decl`
 source `float4 main( float4 p : POSITION ) : POSITION { float a = 1, b = 2; return a + b; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `initializer list (basic)`
 source `float4 main() : POSITION { float4 x = { 1, 2, 3, 4 }; return x; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `initializer list (elements)`
 source `float4 main( float2 p : POSITION ) : POSITION { float4 x = { 3, p, 4 }; return x; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `initializer list (brace spam)`
 source `float4 main( float2 p : POSITION ) : POSITION { float4 x = { 3, {{p}}, {{{4},}}, }; return x; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `numeric type ctors (basic)`
 source `float4 main() : POSITION { return float4( 1, 2, 3, 4 ) + float( 5 ); }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `numeric type ctors (elements)`
 source `float4 main( float2 p : POSITION ) : POSITION { return float4( 3, p, 4 ); }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `numeric type ctors (vm1)`
 source `float4 main( float2 p : POSITION ) : POSITION { return float1( 3 ); }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `array type`
 source `float4 main() : POSITION { float4 arr[2]; arr[0] = 0; arr[1] = 1; return arr[0] + arr[1]; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `array with initializer`
 source `float4 main() : POSITION { float4 arr[2] = { float4(0,2,4,6), float4(1,2,3,4) }; return arr[0] + arr[1]; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `scalar swizzle 1`
 source `void main( out float4 OUT : POSITION ){ OUT = 1.0.xxxx; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `scalar swizzle 2`
 source `void main( out float4 OUT : POSITION ){ OUT = 1.0.x; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `bad scalar swizzle 1`
 source `void main( out float4 OUT : POSITION ){ OUT = 1.0.xxxy; }`
@@ -93,6 +106,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `piecewise variable init 2`
 source `float4 main() : POSITION
@@ -103,6 +117,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `piecewise variable init fail`
 source `float4 main() : POSITION
@@ -141,6 +156,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `matrix RW swizzle x4`
 source `float4 main() : POSITION
@@ -151,6 +167,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `struct I/O 1`
 source `
@@ -161,6 +178,7 @@ void main( out v2p OUT )
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `struct I/O 2`
 source `
@@ -173,6 +191,7 @@ void main( in a2v IN, out v2p OUT )
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `struct I/O 3a`
 source `
@@ -184,6 +203,7 @@ void main( in vdata IN, out vdata OUT )
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `struct I/O 3b`
 source `
@@ -196,6 +216,7 @@ void main( in vdataw IN, out vdataw OUT )
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `explicit uniform`
 source `
@@ -203,6 +224,7 @@ uniform float4 outval;
 float4 main() : POSITION { return outval; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `uniform array`
 source `
@@ -210,6 +232,7 @@ uniform float4 outval[4];
 float4 main() : POSITION { return outval[1]; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `explicit constant`
 source `
@@ -219,6 +242,7 @@ static const float4 outval3 = outval1 + outval2;
 float4 main() : POSITION { return outval1 + outval2 * outval3; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `bad explicit constant`
 source `
@@ -235,6 +259,7 @@ cbuffer mybuf
 float4 main() : POSITION { return outval; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `cbuffer w/ registers`
 source `
@@ -245,6 +270,7 @@ cbuffer mybuf : register(b3)
 float4 main() : POSITION { return outval.xyxy; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `multiple cbuffers`
 source `
@@ -259,6 +285,7 @@ cbuffer mybuf2
 float4 main() : POSITION { return outval + ou2val; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `samplers`
 source `
@@ -269,6 +296,7 @@ samplerCUBE sc;
 float4 main() : POSITION { return 0; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `samplers w/ registers`
 source `
@@ -279,3 +307,4 @@ samplerCUBE sc : register(s6);
 float4 main() : POSITION { return 0; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``

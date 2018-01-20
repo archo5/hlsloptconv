@@ -14,6 +14,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `basic 'while'`
 source `
@@ -26,6 +27,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `basic 'do-while'`
 source `
@@ -44,6 +46,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `basic 'for'`
 source `
@@ -58,6 +61,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `basic 'break' and 'continue'`
 source `
@@ -76,6 +80,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `basic 'discard'`
 source `
@@ -86,6 +91,7 @@ float4 main( float2 tc : TEXCOORD ) : COLOR
 }`
 compile_hlsl_before_after `/T ps_3_0`
 compile_glsl `-S frag`
+compile_glsl_es100 `-S frag`
 
 // `bad 'discard' (VS)`
 source `

@@ -5,6 +5,7 @@ float4 passthru( float x ){ return x; }
 float4 main() : POSITION { return passthru( 0.0 ); }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `fcall with out`
 source `
@@ -17,6 +18,7 @@ float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `bad fcall with out 1`
 source `
@@ -36,6 +38,7 @@ float4 main():POSITION { return a(0,0) + a(0.0,0) + a(0,0.0) + a(0.0,0.0); }
 `
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `scalar type promotion`
 source `
@@ -61,6 +64,7 @@ float4 main():POSITION {
 	a(fv+fv)*5*5*5*5*5*5*5*5*5; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `swizzled types`
 source `
@@ -80,6 +84,7 @@ float4 main(float4 p : POSITION):POSITION {
 	a(p.xxxx)*5*5*5*5*5*5*5; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `effectively equal types (for overload conflicts)`
 source `
@@ -122,6 +127,7 @@ float4 main():POSITION {
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `failed assignment casts`
 source `struct stc4el { float x; float2 yz; float w; }; float4 main():POSITION {
@@ -214,6 +220,7 @@ float4 main():POSITION {
 	; }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `failed vector type casts in calls`
 source `float v4(float4 a){ return 1; }

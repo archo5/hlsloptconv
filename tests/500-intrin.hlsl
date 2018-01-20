@@ -11,6 +11,7 @@ float4 main( float4 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `acos`
 source `

@@ -289,6 +289,7 @@ struct VarDecl : ASTNode, AccessPointDecl
 		ATTR_Const   = 0x0008,
 		ATTR_Static  = 0x0010,
 		ATTR_Hidden  = 0x0020, // does not get printed (for built-in in/out variables)
+		ATTR_StageIO = 0x0040, // whether the vardecl is stage i/o, not (just) function i/o
 	};
 
 	FINLINE VarDecl() {}
@@ -779,6 +780,7 @@ enum OutputShaderFormat
 {
 	OSF_HLSL_SM3,
 	OSF_GLSL_140,
+	OSF_GLSL_ES_100,
 };
 
 struct Compiler
@@ -824,4 +826,5 @@ struct RemoveUnusedVariables : ASTWalker<RemoveUnusedVariables>
 // generator.cpp
 void GenerateHLSL_SM3(const AST& ast, OutStream& out);
 void GenerateGLSL_140(const AST& ast, OutStream& out);
+void GenerateGLSL_ES_100(const AST& ast, OutStream& out);
 

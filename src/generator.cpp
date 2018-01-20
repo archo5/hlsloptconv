@@ -24,6 +24,7 @@ struct SLGenerator
 	const AST& ast;
 	OutStream& out;
 	OutputShaderFormat shaderFormat;
+	bool supportsStageInOut = true;
 	bool supportsSemantics = true;
 	bool supportsStatic = true;
 	bool supportsPacking = true;
@@ -59,6 +60,8 @@ struct GLSLGenerator : SLGenerator
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
 	void Generate();
+
+	int version = 140;
 };
 
 
@@ -90,12 +93,19 @@ void SLGenerator::EmitAccessPointDecl(const AccessPointDecl& apd)
 
 void SLGenerator::EmitVarDecl(const VarDecl* vd)
 {
-	if ((vd->flags & (VarDecl::ATTR_In | VarDecl::ATTR_Out)) == (VarDecl::ATTR_In | VarDecl::ATTR_Out))
-		out << "inout ";
-	else if (vd->flags & VarDecl::ATTR_In)
-		out << "in ";
-	else if (vd->flags & VarDecl::ATTR_Out)
-		out << "out ";
+	if (supportsStageInOut || !(vd->flags & VarDecl::ATTR_StageIO))
+	{
+		if ((vd->flags & (VarDecl::ATTR_In | VarDecl::ATTR_Out)) == (VarDecl::ATTR_In | VarDecl::ATTR_Out))
+			out << "inout ";
+		else if (vd->flags & VarDecl::ATTR_In)
+			out << "in ";
+		else if (vd->flags & VarDecl::ATTR_Out)
+			out << "out ";
+	}
+	else if (vd->flags & (VarDecl::ATTR_In | VarDecl::ATTR_Out))
+	{
+		out << "varying ";
+	}
 	if (supportsStatic)
 	{
 		if (vd->flags & VarDecl::ATTR_Static)
@@ -523,9 +533,9 @@ void HLSLGenerator::Generate()
 		}
 		else
 		{
-			EmitVarDecl(g->ToVarDecl());
 			if (g->ToVarDecl()->flags & VarDecl::ATTR_Hidden)
 				continue;
+			EmitVarDecl(g->ToVarDecl());
 			out << ";\n";
 		}
 	}
@@ -701,7 +711,11 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 
 void GLSLGenerator::Generate()
 {
-	out << "#version 140\n";
+	out << "#version " << version << "\n";
+	if (version == 100)
+	{
+		out << "precision highp float;\n";
+	}
 
 	SLGenerator::GenerateStructs();
 
@@ -709,15 +723,21 @@ void GLSLGenerator::Generate()
 	{
 		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
 		{
-			out << "layout(std140) uniform " << cbuf->name;
-			out << "\n{\n";
+			if (version >= 140)
+			{
+				out << "layout(std140) uniform " << cbuf->name;
+				out << "\n{\n";
+			}
 			for (ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
 			{
 				LVL(1);
 				EmitVarDecl(cbv->ToVarDecl());
 				out << ";\n";
 			}
-			out << "};\n";
+			if (version >= 140)
+			{
+				out << "};\n";
+			}
 		}
 		else
 		{
@@ -742,6 +762,15 @@ void GenerateHLSL_SM3(const AST& ast, OutStream& out)
 void GenerateGLSL_140(const AST& ast, OutStream& out)
 {
 	GLSLGenerator gen(ast, out);
+	gen.Generate();
+}
+
+void GenerateGLSL_ES_100(const AST& ast, OutStream& out)
+{
+	GLSLGenerator gen(ast, out);
+	gen.shaderFormat = OSF_GLSL_ES_100;
+	gen.version = 100;
+	gen.supportsStageInOut = false;
 	gen.Generate();
 }
 

@@ -226,7 +226,8 @@ static void exec_test(const char* fname, const char* nameonly)
 			const char* ident_start = data;
 			while (*data == '_' || *data == '/' ||
 				(*data >= 'a' && *data <= 'z') ||
-				(*data >= 'A' && *data <= 'Z')) data++;
+				(*data >= 'A' && *data <= 'Z') ||
+				(*data >= '0' && *data <= '9')) data++;
 			const char* ident_end = data;
 			if (ident_start == ident_end)
 			{
@@ -601,9 +602,15 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (Result("true"))
 					HLSLBeforeAfter(decoded_value);
 			}
-			else if (ident == "compile_glsl")
+			else if (ident == "compile_glsl" || ident == "compile_glsl_140")
 			{
 				Compile(GetShaderStage(decoded_value), OSF_GLSL_140);
+				if (Result("true"))
+					GLSL(decoded_value);
+			}
+			else if (ident == "compile_glsl_es100")
+			{
+				Compile(GetShaderStage(decoded_value), OSF_GLSL_ES_100);
 				if (Result("true"))
 					GLSL(decoded_value);
 			}

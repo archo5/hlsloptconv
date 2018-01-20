@@ -1140,10 +1140,21 @@ void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
 		diag.EmitFatalError("too many functions named '" + entryPoint + "', expected one entry point",
 			Location::BAD());
 	}
+	ASTFunction* EPF = fns->second.begin()->second;
 
 	// demangle entry point name since it's unique
-	fns->second.begin()->second->mangledName = entryPoint;
-	fns->second.begin()->second->isEntryPoint = true;
+	EPF->mangledName = entryPoint;
+	EPF->isEntryPoint = true;
+
+	// mark all non-uniform arguments as stage i/o
+	for (ASTNode* arg = EPF->GetFirstArg(); arg; arg = arg->next)
+	{
+		auto* vd = arg->ToVarDecl();
+		if (vd && !(vd->flags & VarDecl::ATTR_Uniform))
+		{
+			vd->flags |= VarDecl::ATTR_StageIO;
+		}
+	}
 
 	UsedFuncMarker ufm(fns->second.begin()->second);
 	ufm.Process();
@@ -1658,7 +1669,7 @@ void VariableAccessValidator::ValidateCheckVariableError(const std::string& varn
 
 
 
-static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage)
+static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
 	if (vd->flags & VarDecl::ATTR_Out)
 	{
@@ -1675,9 +1686,18 @@ static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage)
 		{
 			if (vd->semanticName == "COLOR")
 			{
-				char bfr[32];
-				sprintf(bfr, "_PSCOLOR%d", vd->semanticIndex >= 0 ? vd->semanticIndex : 0);
-				vd->name = bfr;
+				if (shaderFormat == OSF_GLSL_ES_100)
+				{
+					vd->name = "gl_FragColor";
+					vd->flags |= VarDecl::ATTR_Hidden;
+					return;
+				}
+				else
+				{
+					char bfr[32];
+					sprintf(bfr, "_PSCOLOR%d", vd->semanticIndex >= 0 ? vd->semanticIndex : 0);
+					vd->name = bfr;
+				}
 				return;
 			}
 		}
@@ -1695,7 +1715,8 @@ struct StructLevel
 	uint32_t mmbID;
 	ASTNode* levILE;
 };
-static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, ShaderStage stage,
+static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
+	ShaderStage stage, OutputShaderFormat shaderFormat,
 	ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
 {
 	std::vector<StructLevel> mmbIndices;
@@ -1726,10 +1747,10 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, ShaderStage stage,
 			vd->name += mmbidx.strTy->members[mmbidx.mmbID].name;
 		}
 		vd->SetType(mmb.type);
-		vd->flags = outILE ? VarDecl::ATTR_In : VarDecl::ATTR_Out;
+		vd->flags = (outILE ? VarDecl::ATTR_In : VarDecl::ATTR_Out) | VarDecl::ATTR_StageIO;
 		vd->semanticName = mmb.semanticName;
 		vd->semanticIndex = mmb.semanticIndex;
-		GLSLRenameInOut(vd, stage);
+		GLSLRenameInOut(vd, stage, shaderFormat);
 
 		if (outILE)
 		{
@@ -1796,7 +1817,7 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, ShaderStage stage,
 	}
 }
 
-static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage)
+static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
 	for (const auto& fgdef : ast.functions)
 	{
@@ -1812,8 +1833,8 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage)
 					vd->semanticName = F->returnSemanticName;
 					vd->semanticIndex = F->returnSemanticIndex;
 					vd->SetType(F->GetReturnType());
-					vd->flags |= VarDecl::ATTR_Out;
-					GLSLRenameInOut(vd, stage);
+					vd->flags |= VarDecl::ATTR_Out | VarDecl::ATTR_StageIO;
+					GLSLRenameInOut(vd, stage, shaderFormat);
 
 					F->SetReturnType(ast.GetVoidType());
 
@@ -1856,7 +1877,7 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage)
 					if (argvd->GetType()->kind != ASTType::Structure)
 					{
 						argvd->Unlink();
-						GLSLRenameInOut(argvd, stage);
+						GLSLRenameInOut(argvd, stage, shaderFormat);
 						ast.globalVars.AppendChild(argvd);
 					}
 					else
@@ -1877,10 +1898,10 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage)
 							ile->SetReturnType(argvd->GetType());
 							argvd->SetInitExpr(ile);
 
-							GLSLAppendShaderIOVar(ast, F, stage, ile, argvd, argvd->GetType()->ToStructType());
+							GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, ile, argvd, argvd->GetType()->ToStructType());
 						}
 						else
-							GLSLAppendShaderIOVar(ast, F, stage, nullptr, argvd, argvd->GetType()->ToStructType());
+							GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, nullptr, argvd, argvd->GetType()->ToStructType());
 
 						vds->PrependChild(argvd);
 					}
@@ -2328,21 +2349,22 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 }
 
 
+// TODO merge with hlslparser's version
+static void CastExprTo(Expr* val, ASTType* to)
+{
+	assert(to);
+	if (to != val->GetReturnType())
+	{
+		CastExpr* cast = new CastExpr;
+		cast->SetReturnType(to);
+		val->ReplaceWith(cast);
+		cast->SetSource(val);
+	}
+}
+
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a) : ast(a){}
-	// TODO merge with hlslparser's version
-	static void CastExprTo(Expr* val, ASTType* to)
-	{
-		assert(to);
-		if (to != val->GetReturnType())
-		{
-			CastExpr* cast = new CastExpr;
-			cast->SetReturnType(to);
-			val->ReplaceWith(cast);
-			cast->SetSource(val);
-		}
-	}
 	void MatrixUnpack1(FCallExpr* fcintrin)
 	{
 		auto* mtxTy = fcintrin->GetReturnType();
@@ -2567,17 +2589,24 @@ struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
 	{
 		if (auto* ile = dynamic_cast<InitListExpr*>(node))
 		{
-			if (ile->GetReturnType()->kind == ASTType::Structure)
+			if (ile->GetReturnType()->kind == ASTType::Structure ||
+				ile->GetReturnType()->kind == ASTType::Array)
 			{
 				int numAPs = ile->GetReturnType()->GetAccessPointCount();
-				auto* strTy = ile->GetReturnType()->ToStructType();
 				int origInputs = ile->childCount;
 
-				DeclRefExpr* src = FoldOut(ile);
-				VarDecl* vd = src->decl;
-				ASTNode* insertPos = src->decl->parent;
+				VarDecl* vd;
+				if (VarDecl* pvd = dynamic_cast<VarDecl*>(ile->parent))
+				{
+					vd = pvd;
+				}
+				else
+				{
+					DeclRefExpr* src = FoldOut(ile);
+					vd = src->decl;
+				}
+				ASTNode* insertPos = vd->parent;
 				assert(dynamic_cast<VarDeclStmt*>(insertPos));
-				insertPos = insertPos->next;
 
 				Expr* sourceNode = ile->firstChild->ToExpr();
 				int sourceOffset = 0;
@@ -2599,9 +2628,11 @@ struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
 					binop->opType = STT_OP_Assign;
 					binop->AppendChild(GetReferenceToElement(ast, dstdre, i));
 					binop->AppendChild(GetReferenceToElement(ast, sourceNode->DeepClone()->ToExpr(), i - sourceOffset));
+					CastExprTo(binop->GetRgt(), binop->GetLft()->GetReturnType());
 					binop->SetReturnType(binop->GetLft()->GetReturnType());
 					exprStmt->AppendChild(binop);
-					insertPos->InsertBeforeMe(exprStmt);
+					insertPos->InsertAfterMe(exprStmt);
+					insertPos = exprStmt;
 				}
 
 				delete ile; // now replaced with explicit component assignments
@@ -2660,14 +2691,17 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		vav.RunOnAST(p.ast);
 
 		// output-specific transformations (emulation/feature mapping)
-		if (outputFmt == OSF_GLSL_140)
+		switch (outputFmt)
 		{
+		case OSF_GLSL_140:
+		case OSF_GLSL_ES_100:
 			UnpackMatrixSwizzle(p.ast);
 			RemoveVM1AndM1DTypes(p.ast);
 			RepackInitListExprs(p.ast);
 			RemoveArraysOfArrays(p.ast);
-			GLSLUnpackEntryPoint(p.ast, stage);
+			GLSLUnpackEntryPoint(p.ast, stage, outputFmt);
 			GLSLConvert(p.ast);
+			break;
 		}
 
 		// optimizations
@@ -2693,6 +2727,9 @@ bool Compiler::CompileFile(const char* name, const char* code)
 				break;
 			case OSF_GLSL_140:
 				GenerateGLSL_140(p.ast, *codeOutputStream);
+				break;
+			case OSF_GLSL_ES_100:
+				GenerateGLSL_ES_100(p.ast, *codeOutputStream);
 				break;
 			}
 		}
