@@ -136,6 +136,12 @@ enum ShaderStage
 	ShaderStage_Pixel,
 };
 
+struct ShaderMacro
+{
+	const char* name;
+	const char* value;
+};
+
 
 // API
 // loads include file

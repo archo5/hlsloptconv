@@ -788,6 +788,7 @@ struct Compiler
 	bool CompileFile(const char* name, const char* code);
 
 	const char* entryPoint = "main";
+	ShaderMacro* defines = nullptr;
 	ShaderStage stage = ShaderStage_Vertex;
 	OutputShaderFormat outputFmt = OSF_HLSL_SM3;
 	LoadIncludeFilePFN loadIncludeFilePFN = nullptr;

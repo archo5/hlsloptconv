@@ -2345,6 +2345,8 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 			idxexpr->SetReturnType(t->subType);
 			return GetReferenceToElement(ast, idxexpr, accessPointNum % subapc);
 		}
+	default:
+		return nullptr;
 	}
 }
 
@@ -2672,6 +2674,38 @@ bool Compiler::CompileFile(const char* name, const char* code)
 	try
 	{
 		Parser p(diag, stage, loadIncludeFilePFN, loadIncludeFileUD);
+
+		std::string codeWithDefines;
+		if (defines)
+		{
+			ShaderMacro* d = defines;
+			codeWithDefines += "#line 1 \"<arguments>\"\n";
+			while (d->name)
+			{
+				codeWithDefines += "#define ";
+				size_t pos = codeWithDefines.size();
+				codeWithDefines += d->name;
+				if (const char* eqsp = strchr(d->name, '='))
+				{
+					codeWithDefines[pos + (eqsp - d->name)] = ' ';
+				}
+				if (d->value)
+				{
+					codeWithDefines += " ";
+					codeWithDefines += d->value;
+				}
+				codeWithDefines += "\n";
+				d++;
+			}
+			codeWithDefines += "#line 1 \"";
+			codeWithDefines += name;
+			codeWithDefines += "\"\n";
+			codeWithDefines += code;
+
+			code = codeWithDefines.c_str();
+		}
+	//	FILEStream(stderr) << code;
+
 		p.ParseCode(code);
 		p.ast.MarkUsed(diag, entryPoint);
 

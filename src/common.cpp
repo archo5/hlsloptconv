@@ -143,7 +143,11 @@ std::string GetFileContents(const char* filename, bool text)
 {
 	FILE* fp = fopen(filename, text ? "r" : "rb");
 	if (!fp)
-		throw errno;
+	{
+		fprintf(stderr, "failed to open %s file for reading (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
+	}
 
 	std::string contents;
 	fseek(fp, 0, SEEK_END);
@@ -155,7 +159,11 @@ std::string GetFileContents(const char* filename, bool text)
 		if (read > 0)
 			contents.resize(read);
 		else
-			throw errno;
+		{
+			fprintf(stderr, "failed to read from %s file (%s): %s\n",
+				text ? "text" : "binary", filename, strerror(errno));
+			exit(1);
+		}
 	}
 	fclose(fp);
 	return contents;
@@ -165,10 +173,18 @@ void SetFileContents(const char* filename, const std::string& contents, bool tex
 {
 	FILE* fp = fopen(filename, text ? "w" : "wb");
 	if (!fp)
-		throw errno;
+	{
+		fprintf(stderr, "failed to open %s file for writing (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
+	}
 
 	if (contents.empty() == false && fwrite(contents.data(), contents.size(), 1, fp) != 1)
-		throw errno;
+	{
+		fprintf(stderr, "failed to write to %s file (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
+	}
 	fclose(fp);
 }
 
