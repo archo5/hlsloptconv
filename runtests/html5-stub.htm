@@ -52,18 +52,94 @@
 	gl.enableVertexAttribArray(aPOS);
 
 	gl.clearColor(0.2, 0.3, 0.5, 1.0);
+	var then = Date.now();
+	var t = 0;
 	function draw()
 	{
+		function v3dot(a, b)
+		{
+			return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+		}
+		function v3cross(a, b)
+		{
+			return [
+				a[1] * b[2] - b[1] * a[2],
+				a[2] * b[0] - b[2] * a[0],
+				a[0] * b[1] - b[0] * a[1],
+			];
+		}
+		function v3scale(v, s)
+		{
+			return [v[0] * s, v[1] * s, v[2] * s];
+		}
+		function v3normalize(v)
+		{
+			var len = v3dot(v, v);
+			if (len == 0)
+				return v;
+			return v3scale(v, 1.0 / Math.sqrt(len));
+		}
+		function v3sub(a, b)
+		{
+			return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+		}
+		function lookAtMatrixFwd(eye, at, up)
+		{
+			var zaxis = v3normalize(v3sub(at, eye));
+			var xaxis = v3normalize(v3cross(up, zaxis));
+			var yaxis = v3cross(zaxis, xaxis);
+			return [
+				xaxis[0], xaxis[1], xaxis[2], -v3dot(xaxis, eye),
+				yaxis[0], yaxis[1], yaxis[2], -v3dot(yaxis, eye),
+				zaxis[0], zaxis[1], zaxis[2], -v3dot(zaxis, eye),
+				0, 0, 0, 1,
+			];
+		}
+		function lookAtMatrix(eye, at, up)
+		{
+			var zaxis = v3normalize(v3sub(at, eye));
+			var xaxis = v3normalize(v3cross(up, zaxis));
+			var yaxis = v3cross(zaxis, xaxis);
+			return [
+				xaxis[0], yaxis[0], -zaxis[0], eye[0],
+				xaxis[1], yaxis[1], -zaxis[1], eye[1],
+				xaxis[2], yaxis[2], -zaxis[2], eye[2],
+				0, 0, 0, 1,
+			];
+		}
+		function transpose(m)
+		{
+			return [
+				m[0], m[4], m[8], m[12],
+				m[1], m[5], m[9], m[13],
+				m[2], m[6], m[10], m[14],
+				m[3], m[7], m[11], m[15],
+			];
+		}
 		canvas.width = window.innerWidth;
 		canvas.height = window.innerHeight;
 
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.viewport(0, 0, canvas.width, canvas.height);
 
+		var now = Date.now();
+		var delta = (now - then) / 1000;
+		then = now;
+		if (delta > 1.0/30.0)
+			delta = 1.0/30.0;
+		t += delta;
+
 		var loc;
 		loc = gl.getUniformLocation(PROG, "iResolution");
 		if (loc !== null)
 			gl.uniform2f(loc, canvas.width, canvas.height);
+		loc = gl.getUniformLocation(PROG, "viewMatrix");
+		if (loc !== null)
+		{
+			var vm = lookAtMatrix([Math.sin(t) * 10, Math.cos(t) * 10, 4], [0,0,0], [0,0,1]);
+		//	vm = transpose(vm);
+			gl.uniformMatrix4fv(loc, false, new Float32Array(vm));
+		}
 
 		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 

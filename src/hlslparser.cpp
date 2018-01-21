@@ -1424,6 +1424,8 @@ static ASTType* VectorIntrin(Parser* parser, FCallExpr* fcall,
 	}
 
 	ASTType* rt0 = parser->ast.CastToVector(fcall->GetFirstArg()->ToExpr()->GetReturnType());
+	if (!rt0)
+		goto unmatched;
 	ASTType* reqty = rt0;
 	if (alsoInt)
 	{
@@ -1450,6 +1452,7 @@ static ASTType* VectorIntrin(Parser* parser, FCallExpr* fcall,
 
 	if (notMatch)
 	{
+unmatched:
 		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
 		return nullptr;
 	}
@@ -1624,8 +1627,10 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 	DEF_INTRIN_SSF(log),
 	DEF_INTRIN_SSF(log10),
 	DEF_INTRIN_SSF(log2),
-	/// max
-	/// min
+	{ "max", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, "max", true, 2); }},
+	{ "min", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, "min", true, 2); }},
 	/// modf
 	{ "mul", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{
@@ -1657,16 +1662,18 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 	{ "reflect", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return VectorIntrin(parser, fcall, "reflect", false, false, 2); } },
 	/// refract
-		DEF_INTRIN_SSF(round),
-		DEF_INTRIN_SSF(rsqrt),
+	DEF_INTRIN_SSF(round),
+	DEF_INTRIN_SSF(rsqrt),
+	{ "saturate", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, "saturate", false, 1); } },
 	{ "sign", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{
 		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "sign", true, 1);
 		return t ? parser->ast.CastToInt(t) : t;
 	} },
-		DEF_INTRIN_SSF(sin),
-		/// sincos
-		DEF_INTRIN_SSF(sinh),
+	DEF_INTRIN_SSF(sin),
+	/// sincos
+	DEF_INTRIN_SSF(sinh),
 	{ "smoothstep", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, "smoothstep", false, 2); } },
 		DEF_INTRIN_SSF(sqrt),
@@ -1895,15 +1902,15 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 #if 0
 	if (bestSplit != SIZE_MAX)
 	{
-		FILEStream out(stdout);
-		out << "\n";
+		FILEStream err(stderr);
+		err << "\n";
 		for (size_t i = start; i < curToken; ++i)
 		{
-			out << (i == bestSplit ? " >>>" : " ");
-			out << TokenToString(i);
-			if (i == bestSplit) out << "<<<";
+			err << (i == bestSplit ? " >>>" : " ");
+			err << TokenToString(i);
+			if (i == bestSplit) err << "<<<";
 		}
-		out << "\n";
+		err << "\n";
 	}
 #endif
 
@@ -2591,18 +2598,24 @@ Stmt* Parser::ParseStatement()
 		forst->AppendChild(ParseExprDeclStatement()); // INIT
 		EXPECT(STT_Semicolon);
 		FWD();
-		forst->AppendChild(ParseExpr(STT_Semicolon)); // COND
+		if (TT() != STT_Semicolon)
+			forst->AppendChild(ParseExpr(STT_Semicolon)); // COND
+		else
+			forst->AppendChild(CreateVoidExpr());
 		FWD();
-		forst->AppendChild(ParseExpr(STT_RParen)); // INCR
+		if (TT() != STT_RParen)
+			forst->AppendChild(ParseExpr(STT_RParen)); // INCR
+		else
+			forst->AppendChild(CreateVoidExpr());
 		FWD();
 		forst->AppendChild(ParseStatement()); // BODY
 
 		auto* crt = forst->GetCond()->GetReturnType();
-		if (crt->kind != ASTType::Bool)
+		if (crt->kind != ASTType::Bool && crt->kind != ASTType::Void)
 		{
 			if (crt->IsNumericOrVM1() == false)
 			{
-				EmitError("while - expected scalar condition value, got " + crt->GetName());
+				EmitError("for - expected scalar condition value, got " + crt->GetName());
 			}
 			CastExprTo(forst->GetCond(), ast.GetBoolType());
 		}
@@ -2617,7 +2630,7 @@ Stmt* Parser::ParseExprDeclStatement()
 	auto tt = TT();
 	if (tt == STT_Semicolon)
 	{
-		auto* bs = new BlockStmt;
+		auto* bs = new EmptyStmt;
 		ast.unassignedNodes.AppendChild(bs);
 		return bs;
 	}
@@ -3067,26 +3080,46 @@ void Parser::ParseDecl()
 }
 
 
+static bool TokenIsExprPreceding(SLTokenType tt)
+{
+	switch (tt)
+	{
+	case STT_Ident:
+	case STT_RParen:
+	case STT_RBrace:
+	case STT_StrLit:
+	case STT_BoolLit:
+	case STT_Int32Lit:
+	case STT_Float32Lit:
+		return true;
+	default:
+		return false;
+	}
+}
+
 int Parser::GetSplitScore(SLTokenType tt, size_t pos, size_t start, bool allowFunctions) const
 {
 	// http://en.cppreference.com/w/c/language/operator_precedence
 
 	if (TokenIsOpAssign(tt)) return 14 | SPLITSCORE_RTLASSOC;
 
-	if (tt == STT_OP_LogicalOr) return 12;
-	if (tt == STT_OP_LogicalAnd) return 11;
-	if (tt == STT_OP_Or) return 10;
-	if (tt == STT_OP_Xor) return 9;
-	if (tt == STT_OP_And) return 8;
+	if (start < pos && TokenIsExprPreceding(tokens[pos - 1].type))
+	{
+		if (tt == STT_OP_LogicalOr) return 12;
+		if (tt == STT_OP_LogicalAnd) return 11;
+		if (tt == STT_OP_Or) return 10;
+		if (tt == STT_OP_Xor) return 9;
+		if (tt == STT_OP_And) return 8;
 
-	if (tt == STT_OP_Eq || tt == STT_OP_NEq) return 7;
-	if (tt == STT_OP_Less || tt == STT_OP_LEq || tt == STT_OP_Greater || tt == STT_OP_GEq)
-		return 6;
+		if (tt == STT_OP_Eq || tt == STT_OP_NEq) return 7;
+		if (tt == STT_OP_Less || tt == STT_OP_LEq || tt == STT_OP_Greater || tt == STT_OP_GEq)
+			return 6;
 
-	if (tt == STT_OP_Lsh || tt == STT_OP_Rsh) return 5;
+		if (tt == STT_OP_Lsh || tt == STT_OP_Rsh) return 5;
 
-	if (tt == STT_OP_Add || tt == STT_OP_Sub) return 4;
-	if (tt == STT_OP_Mul || tt == STT_OP_Div || tt == STT_OP_Mod) return 3;
+		if (tt == STT_OP_Add || tt == STT_OP_Sub) return 4;
+		if (tt == STT_OP_Mul || tt == STT_OP_Div || tt == STT_OP_Mod) return 3;
+	}
 
 	// unary operators
 	if (pos == start)

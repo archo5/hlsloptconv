@@ -233,7 +233,9 @@ void SLGenerator::EmitExpr(const Expr* node)
 		char bfr[32];
 		sprintf(bfr, "%.6g", f32expr->value);
 		out << bfr;
-		if (strstr(bfr, ".") == nullptr)
+		if (strstr(bfr, ".") == nullptr &&
+			strstr(bfr, "e") == nullptr &&
+			strstr(bfr, "E") == nullptr)
 			out << ".0";
 		if (supportsDoubles)
 			out << "f";
@@ -245,6 +247,11 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << "[";
 		EmitExpr(ide->GetIndex());
 		out << "]";
+		return;
+	}
+	else if (dynamic_cast<const VoidExpr*>(node))
+	{
+		out << "/*--*/";
 		return;
 	}
 
@@ -355,6 +362,11 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 			EmitVarDecl(vd);
 			out << ";";
 		}
+		return;
+	}
+	else if (dynamic_cast<const EmptyStmt*>(node))
+	{
+		out << ";";
 		return;
 	}
 

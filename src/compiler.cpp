@@ -507,6 +507,11 @@ Expr::~Expr()
 }
 
 
+void EmptyStmt::Dump(OutStream& out, int) const
+{
+	out << "<empty statement>\n";
+}
+
 void VoidExpr::Dump(OutStream& out, int) const
 {
 	out << "VOID(parse error)\n";
@@ -1403,6 +1408,10 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		ValidateCheckVariableInitialized(dre->decl->APRangeFrom, dre->decl->APRangeTo, dre->decl->name);
 		return;
 	}
+	else if (dynamic_cast<const VoidExpr*>(node))
+	{
+		return;
+	}
 
 	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + typeid(*node).name(), Location::BAD());
 }
@@ -1597,6 +1606,10 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 				ProcessReadExpr(expr);
 			}
 		}
+		return false;
+	}
+	else if (dynamic_cast<const EmptyStmt*>(node))
+	{
 		return false;
 	}
 
@@ -2481,6 +2494,16 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					if (dre->name == "abs")
 					{
 						MatrixUnpack1(fcall);
+						return;
+					}
+					if (dre->name == "ddx") { dre->name = "dFdx"; return; }
+					if (dre->name == "ddy") { dre->name = "dFdy"; return; }
+					if (dre->name == "frac") { dre->name = "fract"; return; }
+					if (dre->name == "saturate")
+					{
+						dre->name = "clamp";
+						fcall->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
+						fcall->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
 						return;
 					}
 					if (dre->name == "tex2D")

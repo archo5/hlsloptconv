@@ -82,6 +82,22 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `empty 'for'`
+source `
+float4 main(float2 tc : TEXCOORD) : POSITION
+{
+	float2 tcc = tc;
+	for(;;)
+	{
+		tcc.x += 1;
+		break;
+	}
+	return tcc.xyxy;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `basic 'discard'`
 source `
 float4 main( float2 tc : TEXCOORD ) : COLOR

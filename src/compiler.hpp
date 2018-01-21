@@ -274,6 +274,12 @@ struct Expr : ASTNode
 	ASTType* returnType = nullptr;
 };
 
+struct EmptyStmt : Stmt
+{
+	IMPLEMENT_CLONE(EmptyStmt);
+	void Dump(OutStream& out, int) const;
+};
+
 struct VoidExpr : Expr
 {
 	IMPLEMENT_CLONE(VoidExpr);
