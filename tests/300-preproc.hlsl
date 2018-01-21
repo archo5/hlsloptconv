@@ -187,6 +187,30 @@ float4 main() : POSITION { return 0.0; }
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `preprocessor macro nesting (parent disabled)`
+source `
+#define A 0
+#define B 1
+#if A
+float4 main() : POSITION { return 0.0; }
+#  if B
+float4 main() : POSITION { return 0.0; }
+#  elif B
+float4 main() : POSITION { return 0.0; }
+#  else
+float4 main() : POSITION { return 0.0; }
+#  endif
+#  ifdef B
+float4 main() : POSITION { return 0.0; }
+#  else
+float4 main() : POSITION { return 0.0; }
+#  endif
+#else
+float4 main() : POSITION { return 0.0; }
+#endif`
+compile_hlsl_before_after ``
+compile_glsl ``
+
 // `preprocessor function-style macro`
 source `
 #define RET( a ) COMB( return, a )

@@ -224,6 +224,12 @@ void Parser::ParseCode(const char* text)
 {
 	ParseTokens(text, 0);
 	PreprocessTokens({}, 0);
+
+//	FILEStream err(stderr);
+//	for (size_t i = 0; i < tokens.size(); ++i)
+//		err << " " << TokenToString(i);
+//	err << "\n";
+
 	ast.InitBasicTypes();
 	while (curToken < tokens.size())
 		ParseDecl();
@@ -754,9 +760,16 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 			}
 			else if (cmd == "if")
 			{
-				bool cond = EvaluateCondition();
-
-				ppOutputEnabled.push_back(cond ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
+				{
+					// do not enable but prevent elif/else from being triggered
+					ppOutputEnabled.push_back(PPOFLAG_HASSUCC);
+				}
+				else
+				{
+					bool cond = EvaluateCondition();
+					ppOutputEnabled.push_back(cond ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				}
 			}
 			else if (cmd == "elif")
 			{
@@ -783,7 +796,16 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 				EXPECT(STT_Ident);
 				std::string name = TokenStringData();
 
-				ppOutputEnabled.push_back(macros.find(name) != macros.end() ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
+				{
+					// do not enable but prevent elif/else from being triggered
+					ppOutputEnabled.push_back(PPOFLAG_HASSUCC);
+				}
+				else
+				{
+					bool cond = macros.find(name) != macros.end();
+					ppOutputEnabled.push_back(cond ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				}
 			}
 			else if (cmd == "ifndef")
 			{
@@ -984,12 +1006,20 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 			case STT_OP_Inv: return ~sub;
 			}
 		}
-		if (endPos - startPos != 1 || tokenArr[startPos].type != STT_Int32Lit)
+		if (endPos - startPos == 1)
 		{
-			EmitError("unexpected token in #if expression: '" + TokenToString(tokenArr[startPos]) + "'");
-			return 0;
+			if (tokenArr[startPos].type == STT_Int32Lit)
+			{
+				return TokenInt32Data(tokenArr[startPos]);
+			}
+			if (tokenArr[startPos].type == STT_Ident)
+			{
+				// previously unreplaced identifier
+				return 0;
+			}
 		}
-		return TokenInt32Data(tokenArr[startPos]);
+		EmitError("unexpected token in #if expression: '" + TokenToString(tokenArr[startPos]) + "'");
+		return 0;
 	}
 	else
 	{
@@ -1784,9 +1814,12 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 					int i = 0;
 					for (ASTNode *arg = fcall->GetFirstArg(), *argdecl = fn->GetFirstArg();
 						arg && argdecl;
-						arg = arg->next, argdecl = argdecl->next)
+						argdecl = argdecl->next)
 					{
-						CastExprTo(arg->ToExpr(), argdecl->ToVarDecl()->GetType());
+
+						auto* curArg = arg;
+						arg = arg->next;
+						CastExprTo(curArg->ToExpr(), argdecl->ToVarDecl()->GetType());
 					}
 				}
 			}
@@ -2428,14 +2461,17 @@ Stmt* Parser::ParseStatement()
 		auto* ret = new ReturnStmt;
 		ast.unassignedNodes.AppendChild(ret);
 		FWD();
-		ret->SetExpr(ParseExpr());
-		TryCastExprTo(ret->GetExpr(), funcInfo.func->GetReturnType(), "return expression");
+		if (TT() != STT_Semicolon)
+		{
+			ret->SetExpr(ParseExpr());
+			TryCastExprTo(ret->GetExpr(), funcInfo.func->GetReturnType(), "return expression");
+		}
 		ret->AddToFunction(funcInfo.func);
 		return ret;
 	}
 	else if (tt == STT_KW_Discard)
 	{
-		if (stage != ShaderStage_Pixel)
+		if (ast.stage != ShaderStage_Pixel)
 		{
 			EmitError("'discard' is only supported for pixel shaders");
 		}
@@ -2894,8 +2930,10 @@ void Parser::ParseDecl()
 
 		if (TT() == STT_LParen)
 		{
+			BlockStmt tmpStmt;
 			auto* func = new ASTFunction;
 			ast.functionList.AppendChild(func);
+			func->AppendChild(&tmpStmt); // placeholder for body
 			func->SetReturnType(commonType);
 			func->name = name;
 
@@ -2908,8 +2946,7 @@ void Parser::ParseDecl()
 
 			VarDeclSaver vds(this);
 			std::string mangledName = "F" + std::to_string(name.size()) + name;
-			// function reference is not inserted yet so for now, first argument = first child
-			for (ASTNode* arg = func->firstChild; arg; arg = arg->next)
+			for (ASTNode* arg = func->GetFirstArg(); arg; arg = arg->next)
 			{
 				auto* vd = arg->ToVarDecl();
 				mangledName += "_";
@@ -2924,7 +2961,7 @@ void Parser::ParseDecl()
 			EXPECT(STT_LBrace);
 
 			funcInfo.func = func;
-			func->PrependChild(ParseStatement());
+			func->GetCode()->ReplaceWith(ParseStatement());
 			funcInfo.func = nullptr;
 
 			auto& funcsWithName = ast.functions[name];

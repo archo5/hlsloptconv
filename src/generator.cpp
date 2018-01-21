@@ -104,7 +104,14 @@ void SLGenerator::EmitVarDecl(const VarDecl* vd)
 	}
 	else if (vd->flags & (VarDecl::ATTR_In | VarDecl::ATTR_Out))
 	{
-		out << "varying ";
+		if (vd->flags & VarDecl::ATTR_In)
+		{
+			out << (ast.stage == ShaderStage_Vertex ? "attribute " : "varying ");
+		}
+		else if (vd->flags & VarDecl::ATTR_Out)
+		{
+			out << (ast.stage == ShaderStage_Vertex ? "varying " : "<UNRESOLVED-PS-OUTPUT> ");
+		}
 	}
 	if (supportsStatic)
 	{

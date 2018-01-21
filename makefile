@@ -2,14 +2,17 @@
 BASEOBJNAMES := hlslparser compiler optimizer common generator
 OBJS := $(patsubst %,obj/%.obj,$(BASEOBJNAMES))
 
-.PHONY: test
+.PHONY: tools test html5test
+tools: sltest.exe hlsloptconv.exe
 test: sltest.exe
 	sltest
+html5test: hlsloptconv.exe
+	py runtests/html5-compile.py
 
 sltest.exe: $(OBJS) obj/test.obj
 	link /nologo /out:$@ $^ /DEBUG
 
-hlslparser.exe: $(OBJS) obj/main.obj
+hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj

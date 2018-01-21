@@ -196,6 +196,7 @@ struct ASTType
 struct AccessPointDecl
 {
 	void Dump(OutStream& out) const;
+	int GetSemanticIndex() const { return semanticIndex >= 0 ? semanticIndex : 0; }
 
 	std::string name;
 	ASTType* type = nullptr;
@@ -556,6 +557,7 @@ struct ASTFunction : ASTNode
 	void SetReturnType(ASTType* t);
 
 	void Dump(OutStream& out, int level = 0) const;
+	int GetReturnSemanticIndex() const { return returnSemanticIndex >= 0 ? returnSemanticIndex : 0; }
 
 	ASTType* returnType = nullptr;
 	std::string returnSemanticName;
@@ -643,6 +645,7 @@ struct AST : TypeSystem
 	void MarkUsed(Diagnostic& diag, const std::string& entryPoint);
 	void Dump(OutStream& out) const;
 
+	ShaderStage stage;
 	BlockStmt functionList;
 	BlockStmt globalVars; // contains VarDecl/CBufferDecl nodes only
 	std::unordered_map<std::string, ASTFuncMap> functions;
@@ -767,6 +770,7 @@ struct VariableAccessValidator
 
 	void ValidateSetupFunc(const ASTFunction* fn);
 	void ValidateCheckOutputElementsWritten();
+	void AddMissingOutputAccessPoints(std::string& outerr, ASTType* type, int from, std::string pfx);
 	void ValidateCheckVariableInitialized(int from, int to, const std::string& varname);
 	void ValidateCheckVariableError(const std::string& varname);
 

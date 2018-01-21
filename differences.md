@@ -2,10 +2,11 @@
 
 #### Syntax elements
 
-|                       | HLSL 3.0 | GLSL 1.40 | GLSL ES 1.0 |
-| -----------: | -------- | --------- | ----------- |
-|  array init: | remapped init list | element ctor | not supported |
-| struct init: | remapped init list | member ctor | member ctor |
+|                     | HLSL 3.0 | GLSL 1.40 | GLSL ES 1.0 |
+| ------------------: | -------- | --------- | ----------- |
+|         array init: | remapped init list | element ctor | not supported |
+|        struct init: | remapped init list | member ctor | member ctor |
+| shader i/o linkage: | by semantic match | by variable name match | by variable name match |
 
 #### Matrices
 

@@ -1437,15 +1437,18 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 					{
 						--i;
 						auto* sve = revTrail[i];
-						int32_t index = -1;
-						bool isMmbSwizzle = false;
 						if (auto* mmb = dynamic_cast<const MemberExpr*>(sve))
 						{
+							sizeExpr = sve;
 							if (mmb->swizzleComp == 0)
-								index = mmb->memberID;
-							else
 							{
-								isMmbSwizzle = true;
+								// structure member
+								auto* strTy = mmb->GetSource()->GetReturnType()->ToStructType();
+								for (uint32_t i = 0; i < mmb->memberID; ++i)
+									rf += strTy->members[i].type->GetAccessPointCount();
+							}
+							else // scalar/vector/matrix swizzle
+							{
 								swizzle = mmb->memberID;
 								swzSize = mmb->GetReturnType()->GetElementCount();
 								isMatrixSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
@@ -1453,20 +1456,17 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 						}
 						else if (auto* idx = dynamic_cast<const IndexExpr*>(sve))
 						{
+							// array
 							if (auto* ci = dynamic_cast<const Int32Expr*>(idx->GetIndex()))
 							{
-								index = ci->value;
+								sizeExpr = sve;
+								rf += sve->GetReturnType()->GetAccessPointCount() * ci->value;
 							}
-						}
-						if (index >= 0)
-						{
-							sizeExpr = sve;
-							rf += sve->GetReturnType()->GetAccessPointCount() * index;
-						}
-						else if (!isMmbSwizzle)
-						{
-							// TODO location
-							diag.EmitError("cannot write to local array from a computed index", Location::BAD());
+							else
+							{
+								// TODO location
+								diag.EmitError("cannot write to local array from a computed index", Location::BAD());
+							}
 						}
 					}
 					rt = rf + sizeExpr->GetReturnType()->GetAccessPointCount();
@@ -1643,10 +1643,78 @@ void VariableAccessValidator::ValidateCheckOutputElementsWritten()
 		if (elementsWritten[i] == 0)
 		{
 			// TODO location
-			// TODO detailed info
-			diag.EmitError("not all outputs have been assigned before 'return'", Location::BAD());
+			std::string err = "not all outputs have been assigned before 'return':";
+			for (ASTNode* arg = curASTFunction->GetFirstArg(); arg; arg = arg->next)
+			{
+				auto* argvd = arg->ToVarDecl();
+				if (argvd->APRangeFrom == argvd->APRangeTo)
+					continue;
+				AddMissingOutputAccessPoints(err, argvd->GetType(), argvd->APRangeFrom, argvd->name);
+			}
+			diag.EmitError(err, Location::BAD());
 			break;
 		}
+	}
+}
+
+static const char* g_VecSuffixStr[4] = { ".x", ".y", ".z", ".w" };
+static const char* g_Arr4SuffixStr[4] = { "[0]", "[1]", "[2]", "[3]" };
+void VariableAccessValidator::AddMissingOutputAccessPoints(
+	std::string& outerr, ASTType* type, int from, std::string pfx /* TODO twine */)
+{
+	switch (type->kind)
+	{
+	case ASTType::Void:
+		break;
+	case ASTType::Function:
+	case ASTType::Sampler1D:
+	case ASTType::Sampler2D:
+	case ASTType::Sampler3D:
+	case ASTType::SamplerCUBE:
+		// ...
+	case ASTType::Bool:
+	case ASTType::Int32:
+	case ASTType::Float16:
+	case ASTType::Float32:
+		if (elementsWritten[from] == 0)
+		{
+			outerr += "\n - ";
+			outerr += pfx;
+		}
+		break;
+	case ASTType::Vector:
+		for (int i = 0; i < type->sizeX; ++i)
+		{
+			AddMissingOutputAccessPoints(outerr, type->subType, from + i, pfx + g_VecSuffixStr[i]);
+		}
+		break;
+	case ASTType::Matrix:
+		for (int x = 0; x < type->sizeX; ++x)
+		{
+			for (int y = 0; y < type->sizeY; ++y)
+			{
+				AddMissingOutputAccessPoints(outerr, type->subType, from + x * type->sizeY + y,
+					pfx + g_Arr4SuffixStr[x] + g_Arr4SuffixStr[y]);
+			}
+		}
+		break;
+	case ASTType::Structure:
+		{
+			auto* strTy = type->ToStructType();
+			for (auto& mmb : strTy->members)
+			{
+				AddMissingOutputAccessPoints(outerr, mmb.type, from, pfx + "." + mmb.name);
+				from += mmb.type->GetAccessPointCount();
+			}
+		}
+		break;
+	case ASTType::Array:
+		for (uint32_t i = 0; i < type->elementCount; ++i)
+		{
+			AddMissingOutputAccessPoints(outerr, type->subType, from, pfx + "[" + std::to_string(i) + "]");
+			from += type->subType->GetAccessPointCount();
+		}
+		break;
 	}
 }
 
@@ -1700,6 +1768,16 @@ static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat s
 				}
 				return;
 			}
+		}
+	}
+
+	if (shaderFormat == OSF_GLSL_ES_100)
+	{
+		// force rename varyings to semantics to automate linkage
+		if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
+			((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
+		{
+			vd->name = "attr" + vd->semanticName + std::to_string(vd->semanticIndex);
 		}
 	}
 
@@ -2366,7 +2444,7 @@ static void CastExprTo(Expr* val, ASTType* to)
 
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
-	GLSLConversionPass(AST& a) : ast(a){}
+	GLSLConversionPass(AST& a, OutputShaderFormat of) : ast(a), outputFmt(of){}
 	void MatrixUnpack1(FCallExpr* fcintrin)
 	{
 		auto* mtxTy = fcintrin->GetReturnType();
@@ -2391,6 +2469,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			ile->AppendChild(fcx);
 		}
 	}
+	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PostVisit(ASTNode* node)
 	{
 		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
@@ -2406,7 +2485,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					}
 					if (dre->name == "tex2D")
 					{
-						dre->name = "texture";
+						dre->name = IsNewSamplingAPI() ? "texture" : "texture2D";
 						return;
 					}
 					if (dre->name == "lerp")
@@ -2462,11 +2541,12 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		}
 	}
 	AST& ast;
+	OutputShaderFormat outputFmt;
 };
 
-static void GLSLConvert(AST& ast)
+static void GLSLConvert(AST& ast, OutputShaderFormat outputFmt)
 {
-	GLSLConversionPass(ast).VisitAST(ast);
+	GLSLConversionPass(ast, outputFmt).VisitAST(ast);
 }
 
 
@@ -2734,7 +2814,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 			RepackInitListExprs(p.ast);
 			RemoveArraysOfArrays(p.ast);
 			GLSLUnpackEntryPoint(p.ast, stage, outputFmt);
-			GLSLConvert(p.ast);
+			GLSLConvert(p.ast, outputFmt);
 			break;
 		}
 

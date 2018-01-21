@@ -22,10 +22,10 @@ struct Parser
 {
 	Parser(Diagnostic& d, ShaderStage s, LoadIncludeFilePFN lifpfn, void* lifud) :
 		diag(d),
-		stage(s),
 		loadIncludeFilePFN(lifpfn),
 		loadIncludeFileUD(lifud)
 	{
+		ast.stage = s;
 		// for int bool token
 		int32_t i01[2] = { 0, 1 };
 		tokenData.insert(tokenData.end(),
@@ -142,7 +142,6 @@ struct Parser
 
 
 	Diagnostic& diag;
-	ShaderStage stage;
 	LoadIncludeFilePFN loadIncludeFilePFN;
 	void* loadIncludeFileUD;
 

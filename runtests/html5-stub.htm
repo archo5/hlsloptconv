@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html style="height:100%"><body style="margin:0;padding:0;position:relative;height:100%">
+	<canvas id="c" style="width:100%;height:100%;position:absolute;"></canvas>
+	<script type="text/javascript">
+	var VERTEX_SHADER = VERTEX_SHADER_STRING_POS;
+	var PIXEL_SHADER = PIXEL_SHADER_STRING_POS;
+	var canvas = document.getElementById("c");
+	var gl = canvas.getContext("webgl");
+	var vertices =
+	[
+		-1,-1,
+		1,-1,
+		1,1,
+		-1,1,
+	];
+	var indices = [0,1,2,2,3,0];
+	var VB = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, VB);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+	var IB = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IB);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+	var VS = gl.createShader(gl.VERTEX_SHADER);
+	var PS = gl.createShader(gl.FRAGMENT_SHADER);
+	function shaderCompile(sh, code)
+	{
+		gl.shaderSource(sh, code);
+		gl.compileShader(sh);
+		if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+		{
+			throw gl.getShaderInfoLog(sh);
+		}
+	}
+	shaderCompile(VS, VERTEX_SHADER);
+	shaderCompile(PS, PIXEL_SHADER);
+	var PROG = gl.createProgram();
+	gl.attachShader(PROG, VS);
+	gl.attachShader(PROG, PS);
+	gl.linkProgram(PROG);
+	if (!gl.getProgramParameter(PROG, gl.LINK_STATUS))
+	{
+		throw gl.getProgramInfoLog(PROG);
+	}
+	gl.validateProgram(PROG);
+	if (!gl.getProgramParameter(PROG, gl.VALIDATE_STATUS))
+	{
+		throw gl.getProgramInfoLog(PROG);
+	}
+	gl.useProgram(PROG);
+	var aPOS = gl.getAttribLocation(PROG, "pos");
+	gl.vertexAttribPointer(aPOS, 2, gl.FLOAT, false, 8, 0);
+	gl.enableVertexAttribArray(aPOS);
+
+	gl.clearColor(0.2, 0.3, 0.5, 1.0);
+	function draw()
+	{
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		gl.viewport(0, 0, canvas.width, canvas.height);
+
+		var loc;
+		loc = gl.getUniformLocation(PROG, "iResolution");
+		if (loc !== null)
+			gl.uniform2f(loc, canvas.width, canvas.height);
+
+		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+
+		window.requestAnimationFrame(draw);
+	}
+	window.requestAnimationFrame(draw);
+	</script>
+</body></html>
