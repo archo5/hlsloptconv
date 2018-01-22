@@ -110,7 +110,8 @@ struct Parser
 	}
 
 #define SPLITSCORE_RTLASSOC 0x80
-	int GetSplitScore(SLTokenType tt, size_t pos, size_t start, bool allowFunctions) const;
+	int GetSplitScore(const std::vector<SLToken>& tokenArr,
+		size_t pos, size_t start, bool allowFunctions) const;
 
 	bool TokenStringDataEquals(const SLToken& t, const char* comp, size_t compsz) const;
 	std::string TokenStringData(const SLToken& t) const;

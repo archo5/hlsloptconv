@@ -1308,7 +1308,7 @@ static bool EffectivelyEqual(ASTType* a, ASTType* b)
 {
 	if (a == b)
 		return true;
-	if (a->IsNumericOrVM1() && b->IsNumericOrVM1() && a->GetNVM1Kind() == b->GetNVM1Kind())
+	if (a->IsNumericOrVM1() && b->IsNumericOrVM1() && a->GetNVMKind() == b->GetNVMKind())
 		return true;
 	return false;
 }
@@ -1854,7 +1854,7 @@ void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunct
 	{
 		if (braceStack.empty())
 		{
-			int curScore = GetSplitScore(tokenArr[curPos].type, curPos, startPos, allowFunctions);
+			int curScore = GetSplitScore(tokenArr, curPos, startPos, allowFunctions);
 			bool rtl = (curScore & SPLITSCORE_RTLASSOC) != 0;
 			if (curScore - (rtl ? 1 : 0) >= bestScore) // ltr: >=, rtl: > (-1)
 			{
@@ -2825,12 +2825,14 @@ void Parser::ParseDecl()
 		EXPECT(STT_LBrace);
 		FWD();
 
+		uint32_t totalAPCount = 0;
 		std::vector<AccessPointDecl> members;
 		while (TT() != STT_RBrace)
 		{
 			AccessPointDecl member;
 
 			member.type = ParseType();
+			totalAPCount += member.type->GetAccessPointCount();
 
 			EXPECT(STT_Ident);
 			member.name = TokenStringData();
@@ -2845,6 +2847,7 @@ void Parser::ParseDecl()
 		}
 
 		ASTStructType* stc = ast.CreateStructType(name);
+		stc->totalAccessPointCount = totalAPCount;
 		std::swap(stc->members, members);
 
 		FWD();
@@ -3082,11 +3085,12 @@ void Parser::ParseDecl()
 
 static bool TokenIsExprPreceding(SLTokenType tt)
 {
+//	FILEStream(stderr) << "preceding:" << TokenTypeToString(tt) << "\n";
 	switch (tt)
 	{
 	case STT_Ident:
 	case STT_RParen:
-	case STT_RBrace:
+	case STT_RBracket:
 	case STT_StrLit:
 	case STT_BoolLit:
 	case STT_Int32Lit:
@@ -3097,13 +3101,16 @@ static bool TokenIsExprPreceding(SLTokenType tt)
 	}
 }
 
-int Parser::GetSplitScore(SLTokenType tt, size_t pos, size_t start, bool allowFunctions) const
+int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
+	size_t pos, size_t start, bool allowFunctions) const
 {
 	// http://en.cppreference.com/w/c/language/operator_precedence
 
+	auto tt = tokenArr[pos].type;
+
 	if (TokenIsOpAssign(tt)) return 14 | SPLITSCORE_RTLASSOC;
 
-	if (start < pos && TokenIsExprPreceding(tokens[pos - 1].type))
+	if (start < pos && TokenIsExprPreceding(tokenArr[pos - 1].type))
 	{
 		if (tt == STT_OP_LogicalOr) return 12;
 		if (tt == STT_OP_LogicalAnd) return 11;

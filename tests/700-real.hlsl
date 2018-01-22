@@ -11,6 +11,14 @@ void main( in a2v IN, out v2p OUT )
 compile_hlsl_before_after ``
 compile_glsl ``
 
+// `partial position output`
+source `float2 main(float2 p : POSITION) : POSITION { return p; }`
+compile_fail ``
+
+// `partial position output 2`
+source `void main(float2 p : POSITION, out float2 op : POSITION){ op = p; }`
+compile_fail ``
+
 // `blur pixel shader`
 source `
 sampler2D texOCOL : register( s0 );
@@ -76,7 +84,9 @@ void main(VS2PS_c i, out float4 RT0 : COLOR0, out float4 RT1 : COLOR1)
 #endif
 }`
 compile_hlsl_before_after `/T ps_3_0`
+in_shader `clip`
 compile_glsl `-S frag`
+in_shader `discard`
 
 // `raymarching shader`
 source `

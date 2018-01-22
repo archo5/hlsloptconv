@@ -85,6 +85,8 @@ float4 main( float4 p : COLOR ) : COLOR
 	return p;
 }`
 compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+in_shader `discard`
 
 // `cross`
 source `
@@ -94,6 +96,7 @@ float4 main( float3 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `distance`
 source `
@@ -102,6 +105,8 @@ float4 main( float3 p : POSITION ) : POSITION
 	return distance( 4, 5 ) + distance( true, false ) + distance( 0.5, 0.6 ) + distance( p, p );
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
 
 // `dot`
 source `
@@ -110,6 +115,8 @@ float4 main( float3 p : POSITION ) : POSITION
 	return dot( 4, 5 ) + dot( true, false ) + dot( 0.5, 0.6 ) + dot( p, p );
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
 
 // `normalize`
 source `

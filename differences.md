@@ -7,6 +7,7 @@
 |         array init: | remapped init list | element ctor | not supported |
 |        struct init: | remapped init list | member ctor | member ctor |
 | shader i/o linkage: | by semantic match | by variable name match | by variable name match |
+|        derivatives: | available | available | optional, ext:OES_standard_derivatives (WebGL) |
 
 #### Matrices
 

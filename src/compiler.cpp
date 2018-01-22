@@ -40,13 +40,7 @@ unsigned ASTType::GetAccessPointCount() const
 	case Vector: return sizeX;
 	case Matrix: return sizeX * sizeY;
 	case Array: return subType->GetAccessPointCount() * elementCount;
-	case Structure:
-	{
-		int out = 0;
-		for (const auto& m : static_cast<const ASTStructType*>(this)->members)
-			out += m.type->GetAccessPointCount();
-		return out;
-	}
+	case Structure: return ToStructType()->totalAccessPointCount;
 	default: return 0;
 	}
 }
@@ -73,9 +67,9 @@ ASTType::SubTypeCount ASTType::CountSubTypes() const
 	}
 }
 
-ASTType::Kind ASTType::GetNVM1Kind() const
+ASTType::Kind ASTType::GetNVMKind() const
 {
-	// only guaranteed to return correct values for Numeric/VM1 types
+	// only guaranteed to return correct values for numeric/vector/matrix types
 	switch (kind)
 	{
 	case Vector:
@@ -1158,7 +1152,23 @@ void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
 		if (vd && !(vd->flags & VarDecl::ATTR_Uniform))
 		{
 			vd->flags |= VarDecl::ATTR_StageIO;
+
+			if (stage == ShaderStage_Vertex &&
+				vd->semanticName == "POSITION" &&
+				(vd->flags & VarDecl::ATTR_Out) &&
+				(vd->type->kind != ASTType::Vector || vd->type->sizeX != 4))
+			{
+				diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
+					Location::BAD());
+			}
 		}
+	}
+	if (stage == ShaderStage_Vertex &&
+		EPF->returnSemanticName == "POSITION" &&
+		(EPF->returnType->kind != ASTType::Vector || EPF->returnType->sizeX != 4))
+	{
+		diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
+			Location::BAD());
 	}
 
 	UsedFuncMarker ufm(fns->second.begin()->second);
@@ -2482,6 +2492,25 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			ile->AppendChild(fcx);
 		}
 	}
+	void CastArgsToFloat(FCallExpr* fcintrin, bool preserveInts)
+	{
+		int numInts = 0;
+		for (ASTNode* arg = fcintrin->GetFirstArg(); arg; )
+		{
+			Expr* curArg = arg->ToExpr();
+			arg = arg->next;
+
+			auto* rt = curArg->GetReturnType();
+			if (rt->IsIntBased())
+				numInts++;
+			if (rt->IsFloatBased() == false)
+				CastExprTo(curArg, ast.CastToFloat(rt));
+		}
+		if (preserveInts && fcintrin->childCount - 1 == numInts)
+		{
+			CastExprTo(fcintrin, ast.CastToInt(fcintrin->GetReturnType()));
+		}
+	}
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PostVisit(ASTNode* node)
 	{
@@ -2498,6 +2527,8 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					}
 					if (dre->name == "ddx") { dre->name = "dFdx"; return; }
 					if (dre->name == "ddy") { dre->name = "dFdy"; return; }
+					if (dre->name == "distance") { CastArgsToFloat(fcall, false); return; }
+					if (dre->name == "dot") { CastArgsToFloat(fcall, true); return; }
 					if (dre->name == "frac") { dre->name = "fract"; return; }
 					if (dre->name == "saturate")
 					{
@@ -2546,6 +2577,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 							case ASTType::Float32: cnst = new Float32Expr(0, srcTy); break;
 							}
 							binop->AppendChild(cnst);
+							fcall->parent->InsertBeforeMe(ifstmt);
 						}
 
 						delete fcall; // leaves unused ExprStmt

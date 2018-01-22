@@ -144,7 +144,7 @@ struct ASTType
 	unsigned GetElementCount() const;
 	unsigned GetAccessPointCount() const;
 	SubTypeCount CountSubTypes() const;
-	Kind GetNVM1Kind() const;
+	Kind GetNVMKind() const;
 	void GetMangling(std::string& out) const;
 	virtual void Dump(OutStream& out) const;
 	std::string GetName() const;
@@ -212,6 +212,7 @@ struct ASTStructType : ASTType
 
 	std::string name;
 	std::vector<AccessPointDecl> members;
+	uint32_t totalAccessPointCount = 0;
 	ASTStructType* prevStructType = nullptr;
 	ASTStructType* nextStructType = nullptr;
 };

@@ -614,6 +614,15 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (Result("true"))
 					GLSL(decoded_value);
 			}
+			else if (ident == "in_shader")
+			{
+				if (lastShader.find(decoded_value) == std::string::npos)
+				{
+					printf("[%s] ERROR in 'in_shader': not found '%s' in shader\n",
+						testName, decoded_value.c_str());
+					hasErrors = true;
+				}
+			}
 			else if (ident == "not_in_shader")
 			{
 				if (lastShader.find(decoded_value) != std::string::npos)
