@@ -405,6 +405,18 @@ struct InitListExpr : Expr
 	void Dump(OutStream& out, int level) const override;
 };
 
+struct IncDecOpExpr : Expr
+{
+	IMPLEMENT_CLONE(IncDecOpExpr);
+	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
+	void SetSource(Expr* e) { SetFirst(e); }
+
+	void Dump(OutStream& out, int level) const override;
+
+	bool dec = false;
+	bool post = false;
+};
+
 struct UnaryOpExpr : Expr
 {
 	IMPLEMENT_CLONE(UnaryOpExpr);

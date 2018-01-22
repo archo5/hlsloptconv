@@ -10,6 +10,7 @@ void main( in a2v IN, out v2p OUT )
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
 
 // `partial position output`
 source `float2 main(float2 p : POSITION) : POSITION { return p; }`
@@ -41,6 +42,7 @@ void main(float2 itex : TEXCOORD0, out float4 RT0 : COLOR)
 }`
 compile_hlsl_before_after `/T ps_3_0`
 compile_glsl `-S frag`
+compile_glsl_es100 `-S frag`
 
 // `stipple transparency pixel shader`
 source `
@@ -102,7 +104,7 @@ float sceneSDF(float3 s)
 float raymarch(float3 eye, float3 dir, float start, float end)
 {
 	float depth = start;
-	for (int i = 0; i < 100; i += 1)
+	for (int i = 0; i < 100; ++i)
 	{
 		float dst = sceneSDF(eye + depth * dir);
 		if (dst < 0.001)

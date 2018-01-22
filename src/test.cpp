@@ -566,6 +566,31 @@ static void exec_test(const char* fname, const char* nameonly)
 			{
 				Source(decoded_value);
 			}
+			else if (ident == "source_replace")
+			{
+				auto splitpos = decoded_value.find("=>");
+				if (splitpos == std::string::npos)
+				{
+					printf("[%s] ERROR in 'source_replace': "
+						"find/replace separator '=>' not found\n", testName);
+					hasErrors = true;
+				}
+				else
+				{
+					std::string strToFind = decoded_value.substr(0, splitpos);
+					std::string strReplacement = decoded_value.substr(splitpos + 2);
+
+					size_t i = 0;
+					for (;;)
+					{
+						i = lastSource.find(strToFind, i);
+						if (i == std::string::npos)
+							break;
+						lastSource.replace(i, strToFind.size(), strReplacement);
+						i += strReplacement.size();
+					}
+				}
+			}
 		//	else if( ident == "compile" )
 		//	{
 		//		Source( decoded_value );

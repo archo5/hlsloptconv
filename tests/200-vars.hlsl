@@ -156,6 +156,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+source_replace `float4x3=>float4x4`
 compile_glsl_es100 ``
 
 // `matrix RW swizzle x4`
@@ -167,6 +168,7 @@ source `float4 main() : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+source_replace `float4x3=>float4x4`
 compile_glsl_es100 ``
 
 // `struct I/O 1`
@@ -308,3 +310,17 @@ float4 main() : POSITION { return 0; }`
 compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
+
+// `increment, decrement scalar`
+source `float4 main() : POSITION { float a = 1;
+	++a; ++a; --a;
+	a++; a--; a--;
+	return a; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `bad increment`
+source `float4 main() : POSITION { float a;
+	++a; a = 1; return a; }`
+compile_fail ``

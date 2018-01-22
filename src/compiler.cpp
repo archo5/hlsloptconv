@@ -663,6 +663,16 @@ void InitListExpr::Dump(OutStream& out, int level) const
 	level--; LVL(out, level); out << "}\n";
 }
 
+void IncDecOpExpr::Dump(OutStream& out, int level) const
+{
+	out << "unop(" << (dec ? "--" : "++") << " " << (post ? "post" : "pre") << ") [";
+	GetReturnType()->Dump(out);
+	out << "]\n";
+	LVL(out, level); out << "{\n"; level++;
+	LVL(out, level); GetSource()->Dump(out, level);
+	level--; LVL(out, level); out << "}\n";
+}
+
 void UnaryOpExpr::Dump(OutStream& out, int level) const
 {
 	out << "unop(" << TokenTypeToString(opType) << ") [";
@@ -1244,6 +1254,12 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 			ProcessReadExpr(binop->GetLft());
 			ProcessReadExpr(binop->GetRgt());
 		}
+		return;
+	}
+	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	{
+		ProcessReadExpr(idop->GetSource());
+		ProcessWriteExpr(idop->GetSource());
 		return;
 	}
 	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
@@ -2586,6 +2602,14 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				}
 			}
 		}
+		if (auto* idxe = dynamic_cast<IndexExpr*>(node))
+		{
+			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())
+			{
+				CastExprTo(idxe->GetIndex(), ast.CastToInt(idxe->GetIndex()->GetReturnType()));
+				return;
+			}
+		}
 		if (auto* exprStmt = dynamic_cast<ExprStmt*>(node))
 		{
 			if (!exprStmt->GetExpr())
@@ -2679,12 +2703,15 @@ struct ArrayOfArrayRemover : ASTWalker<ArrayOfArrayRemover>
 					mul->AppendChild(srcidxe->GetIndex());
 					mul->AppendChild(new Int32Expr(srcidxe->GetReturnType()->elementCount, ast.GetInt32Type()));
 					mul->opType = STT_OP_Mul;
-					mul->SetReturnType(ast.GetInt32Type());
+					mul->SetReturnType(mul->GetLft()->GetReturnType()->IsFloatBased()
+						? ast.GetFloat32Type() : ast.GetInt32Type());
 					auto* add = new BinaryOpExpr;
 					add->AppendChild(mul);
 					add->AppendChild(idxe->GetIndex());
 					add->opType = STT_OP_Add;
-					add->SetReturnType(ast.GetInt32Type());
+					add->SetReturnType(mul->GetReturnType()->IsFloatBased()
+						|| add->GetRgt()->GetReturnType()->IsFloatBased()
+						? ast.GetFloat32Type() : ast.GetInt32Type());
 					idxe->SetSource(srcidxe->GetSource());
 					assert(idxe->childCount == 1);
 					idxe->AppendChild(add);

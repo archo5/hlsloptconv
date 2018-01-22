@@ -203,6 +203,16 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
+	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	{
+		out << "(";
+		const char* opstr = idop->dec ? "--" : "++";
+		if (!idop->post) out << opstr;
+		EmitExpr(idop->GetSource());
+		if (idop->post) out << opstr;
+		out << ")";
+		return;
+	}
 	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
 	{
 		out << "(";
@@ -231,7 +241,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
 	{
 		char bfr[32];
-		sprintf(bfr, "%.6g", f32expr->value);
+		sprintf(bfr, "%.18g", f32expr->value);
 		out << bfr;
 		if (strstr(bfr, ".") == nullptr &&
 			strstr(bfr, "e") == nullptr &&

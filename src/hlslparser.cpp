@@ -2069,13 +2069,23 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		else if (idx->GetSource()->GetReturnType()->IsIndexable() == false)
 		{
 			EmitError("type '" + idx->GetSource()->GetReturnType()->GetName()
-				+ "' is not indexable, expected array, vector or string");
+				+ "' is not indexable, expected array, vector or matrix");
 		}
-		else if (TryCastExprTo(idx->GetIndex(), ast.GetInt32Type(), "index"))
+		else if (idx->GetIndex()->GetReturnType()->IsNumericOrVM1() &&
+			TryCastExprTo(idx->GetIndex(),
+			idx->GetIndex()->GetReturnType()->IsFloatBased()
+				? ast.CastToScalar(idx->GetIndex()->GetReturnType())
+				: ast.GetInt32Type(),
+			"index"))
 		{
 			idx->SetReturnType(idx->GetSource()->GetReturnType()->subType);
 
 			// TODO validate constant indices
+		}
+		else
+		{
+			EmitError("type '" + idx->GetIndex()->GetReturnType()->GetName()
+				+ "' is not a valid index type");
 		}
 
 		curToken = bkCur;
@@ -2085,13 +2095,15 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 	{
 		if (bestSplit == start)
 		{
-			if (tokens[start].type == STT_OP_Add ||
-				tokens[start].type == STT_OP_Sub ||
-				tokens[start].type == STT_OP_Not ||
-				tokens[start].type == STT_OP_Inv)
+			if (ttSplit == STT_OP_Add ||
+				ttSplit == STT_OP_Sub ||
+				ttSplit == STT_OP_Not ||
+				ttSplit == STT_OP_Inv ||
+				ttSplit == STT_OP_Inc ||
+				ttSplit == STT_OP_Dec)
 			{
 				// unary operators
-				auto tt = tokens[start].type;
+				auto tt = ttSplit;
 				size_t bcp = curToken;
 
 				curToken = start + 1;
@@ -2100,6 +2112,18 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				if (tt == STT_OP_Add)
 					return rtexpr;
+
+				if (tt == STT_OP_Inc ||
+					tt == STT_OP_Dec)
+				{
+					auto* idop = new IncDecOpExpr;
+					ast.unassignedNodes.AppendChild(idop);
+					idop->dec = tt == STT_OP_Dec;
+					idop->post = false;
+					idop->SetSource(rtexpr);
+					idop->SetReturnType(idop->GetSource()->GetReturnType());
+					return idop;
+				}
 
 				auto* unop = new UnaryOpExpr;
 				ast.unassignedNodes.AppendChild(unop);
@@ -2116,6 +2140,23 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				return unop;
 			}
+		}
+		else if (ttSplit == STT_OP_Inc
+			|| ttSplit == STT_OP_Dec)
+		{
+			size_t bcp = curToken;
+
+			curToken = start;
+			Expr* rtexpr = ParseExpr(STT_NULL, bestSplit);
+			curToken = bcp;
+
+			auto* idop = new IncDecOpExpr;
+			ast.unassignedNodes.AppendChild(idop);
+			idop->dec = tokens[bestSplit].type == STT_OP_Dec;
+			idop->post = true;
+			idop->SetSource(rtexpr);
+			idop->SetReturnType(idop->GetSource()->GetReturnType());
+			return idop;
 		}
 
 		size_t bkCur = curToken;
@@ -3131,12 +3172,16 @@ int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
 	// unary operators
 	if (pos == start)
 	{
-		if (tt == STT_OP_Add || tt == STT_OP_Sub || tt == STT_OP_Inv || tt == STT_OP_Not)
+		if (tt == STT_OP_Inc || tt == STT_OP_Dec ||
+			tt == STT_OP_Add || tt == STT_OP_Sub ||
+			tt == STT_OP_Inv || tt == STT_OP_Not)
 			return 2 | SPLITSCORE_RTLASSOC;
 	}
 
 	if (allowFunctions && start < pos)
 	{
+		if (tt == STT_OP_Inc || tt == STT_OP_Dec)
+			return 1;
 		// function call
 		if (tt == STT_LParen) return 1;
 		// array index

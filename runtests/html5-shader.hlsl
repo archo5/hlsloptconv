@@ -108,7 +108,7 @@ float sceneSDF(float3 s)
 float raymarch(float3 eye, float3 dir, float start, float end)
 {
 	float depth = start;
-	for (int i = 0; i < 256; i += 1)
+	for (int i = 0; i < 256; ++i)
 	{
 		float dst = sceneSDF(eye + depth * dir);
 		if (dst < 0.00001)
@@ -124,7 +124,7 @@ float computeAO(float3 p, float3 n)
 {
 	float ao = 0;
 	float delta = 0.2;
-	for (int i = 0; i < 16; i += 1)
+	for (int i = 0; i < 16; i++)
 	{
 		int i1 = i + 1;
 		float diff = i1 * delta - sceneSDF(p + n * i1 * delta);
@@ -137,7 +137,7 @@ float computeSoftShadow(float3 p, float3 dir, float start, float k)
 {
 	float res = 1.0;
 	float t = start;
-	for (int i = 0; i < 32; i += 1)
+	for (int i = 0; i < 32; ++i)
 	{
 		float h = sceneSDF(p + dir * t);
 		if (h < 0.001)
