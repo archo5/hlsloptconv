@@ -252,6 +252,18 @@ const float4 outval;
 float4 main() : POSITION { return outval; }`
 compile_fail ``
 
+// `explicit constant write 1`
+source `
+static const float4 outval1 = {1,2,3,4};
+float4 main() : POSITION { outval1 = 3; return outval1; }`
+compile_fail ``
+
+// `explicit constant write 2`
+source `
+static const float4 outval1 = {1,2,3,4};
+float4 main() : POSITION { outval1.y = 2; return outval1; }`
+compile_fail ``
+
 // `basic cbuffer`
 source `
 cbuffer mybuf

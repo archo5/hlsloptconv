@@ -20,7 +20,8 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * Non-square matrix emulation for GLSL ES 1.0
 * Array emulation for GLSL ES 1.0
 * Geometry shader support
-* Certain syntax constructs such as explicit cast.
+* Certain syntax constructs such as explicit cast
+* Some error location information
 
 #### Other differences from HLSL:
 

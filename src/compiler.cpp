@@ -1478,6 +1478,13 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 
 		if (auto* dre = dynamic_cast<const DeclRefExpr*>(exprIt))
 		{
+			if (dre->decl->flags & VarDecl::ATTR_Const)
+			{
+				// TODO location
+				diag.EmitFatalError("cannot write to constant value", Location::BAD());
+				return;
+			}
+
 			// mark variable part as written
 			int rf = dre->decl->APRangeFrom;
 			int rt = dre->decl->APRangeTo;
@@ -1553,6 +1560,13 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 	}
 	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
 	{
+		if (dre->decl->flags & VarDecl::ATTR_Const)
+		{
+			// TODO location
+			diag.EmitFatalError("cannot write to constant value", Location::BAD());
+			return;
+		}
+
 		// mark variable as written
 		for (int i = dre->decl->APRangeFrom; i < dre->decl->APRangeTo; ++i)
 			elementsWritten[i] = true;
