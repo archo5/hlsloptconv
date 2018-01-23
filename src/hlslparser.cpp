@@ -218,6 +218,7 @@ static const OperatorInfo g_allOperatorsResolveOrder[] =
 	{ STT_OP_Member, "." },
 	{ STT_OP_Not, "!" },
 	{ STT_OP_Inv, "~" },
+	{ STT_OP_Ternary, "?" },
 };
 
 void Parser::ParseCode(const char* text)
@@ -1868,7 +1869,9 @@ void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunct
 			braceStack.push_back(STT_RParen);
 		else if (tt == STT_LBracket)
 			braceStack.push_back(STT_RBracket);
-		else if (tt == STT_RParen || tt == STT_RBracket)
+		else if (tt == STT_OP_Ternary)
+			braceStack.push_back(STT_Colon);
+		else if (tt == STT_RParen || tt == STT_RBracket || tt == STT_Colon)
 		{
 			if (braceStack.empty())
 				EmitFatalError("brace mismatch (too many endings)", tokenArr[curPos].loc);
@@ -2090,6 +2093,43 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 		curToken = bkCur;
 		return idx;
+	}
+	else if (ttSplit == STT_OP_Ternary)
+	{
+		size_t bkCur = curToken;
+
+		auto* tnop = new TernaryOpExpr;
+		ast.unassignedNodes.AppendChild(tnop);
+		tnop->SetReturnType(ast.GetVoidType());
+
+		curToken = start;
+		tnop->AppendChild(ParseExpr(STT_OP_Ternary, bestSplit));
+
+		curToken = bestSplit + 1;
+		tnop->AppendChild(ParseExpr(STT_Colon, bkCur));
+
+		EXPECT(STT_Colon);
+		curToken++;
+		tnop->AppendChild(ParseExpr(endTokenType, bkCur));
+
+		TryCastExprTo(tnop->GetCond(), ast.GetBoolType(), "ternary operator condition");
+
+		ASTType* rt = Promote(tnop->GetTrueExpr()->GetReturnType(), tnop->GetFalseExpr()->GetReturnType());
+		if (rt)
+		{
+			if (TryCastExprTo(tnop->GetTrueExpr(), rt, "ternary operator first choice") &&
+				TryCastExprTo(tnop->GetTrueExpr(), rt, "ternary operator second choice"))
+			{
+				tnop->SetReturnType(rt);
+			}
+		}
+		else
+		{
+			EmitError("cannot find a common type for ternary operator", tokens[bestSplit].loc);
+		}
+
+		curToken = bkCur;
+		return tnop;
 	}
 	else // operator
 	{
@@ -3150,6 +3190,8 @@ int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
 	auto tt = tokenArr[pos].type;
 
 	if (TokenIsOpAssign(tt)) return 14 | SPLITSCORE_RTLASSOC;
+
+	if (tt == STT_OP_Ternary) return 13 | SPLITSCORE_RTLASSOC;
 
 	if (start < pos && TokenIsExprPreceding(tokenArr[pos - 1].type))
 	{

@@ -69,9 +69,27 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `basic ternary op`
+source `float4 main() : POSITION { return 1 ? 2 : 3; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `complex ternary op`
+source `float4 main() : POSITION { return 0 ? 1 ? 2 : 3 : 4 ? 5 : 6; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `multi-type ternary op`
+source `float4 main(float4 p : POSITION) : POSITION { return (1 ? 2 : p) + (0 ? 1 : p); }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `extra semicolon parsing`
 source `float4 main() : POSITION { ;; return 0; ;;;; }`
-compile_hlsl ``
+compile_hlsl_before_after ``
 
 // `nothing returned 1`
 source `float4 main() : POSITION {}`

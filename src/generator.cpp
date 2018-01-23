@@ -155,7 +155,55 @@ void SLGenerator::EmitVarDecl(const VarDecl* vd)
 
 void SLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
+	{
+		out << (bexpr->value ? "true" : "false");
+		return;
+	}
+	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
+	{
+		out << i32expr->value;
+		return;
+	}
+	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
+	{
+		char bfr[32];
+		sprintf(bfr, "%.18g", f32expr->value);
+		out << bfr;
+		if (strstr(bfr, ".") == nullptr &&
+			strstr(bfr, "e") == nullptr &&
+			strstr(bfr, "E") == nullptr)
+			out << ".0";
+		if (supportsDoubles)
+			out << "f";
+		return;
+	}
+	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	{
+		out << "(";
+		const char* opstr = idop->dec ? "--" : "++";
+		if (!idop->post) out << opstr;
+		EmitExpr(idop->GetSource());
+		if (idop->post) out << opstr;
+		out << ")";
+		return;
+	}
+	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	{
+		out << "(";
+		const char* opstr = "[TODO 1op]";
+		switch (unop->opType)
+		{
+		case STT_OP_Sub: opstr = "-"; break;
+		case STT_OP_Not: opstr = "!"; break;
+		case STT_OP_Inv: opstr = "~"; break;
+		}
+		out << opstr;
+		EmitExpr(unop->GetSource());
+		out << ")";
+		return;
+	}
+	else if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
 	{
 		out << "(";
 		EmitExpr(binop->GetLft());
@@ -203,52 +251,35 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	else if (auto* tnop = dynamic_cast<const TernaryOpExpr*>(node))
 	{
 		out << "(";
-		const char* opstr = idop->dec ? "--" : "++";
-		if (!idop->post) out << opstr;
-		EmitExpr(idop->GetSource());
-		if (idop->post) out << opstr;
+		EmitExpr(tnop->GetCond());
+		out << " ? ";
+		EmitExpr(tnop->GetTrueExpr());
+		out << " : ";
+		EmitExpr(tnop->GetFalseExpr());
 		out << ")";
 		return;
 	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
 	{
-		out << "(";
-		const char* opstr = "[TODO 1op]";
-		switch (unop->opType)
+		if (fce->resolvedFunc)
 		{
-		case STT_OP_Sub: opstr = "-"; break;
-		case STT_OP_Not: opstr = "!"; break;
-		case STT_OP_Inv: opstr = "~"; break;
+			out << fce->resolvedFunc->mangledName;
 		}
-		out << opstr;
-		EmitExpr(unop->GetSource());
+		else
+		{
+			EmitExpr(fce->GetFunc());
+		}
+		out << "(";
+		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
+		{
+			EmitExpr(arg->ToExpr());
+			if (arg->next)
+				out << ", ";
+		}
 		out << ")";
-		return;
-	}
-	else if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
-	{
-		out << (bexpr->value ? "true" : "false");
-		return;
-	}
-	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
-	{
-		out << i32expr->value;
-		return;
-	}
-	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
-	{
-		char bfr[32];
-		sprintf(bfr, "%.18g", f32expr->value);
-		out << bfr;
-		if (strstr(bfr, ".") == nullptr &&
-			strstr(bfr, "e") == nullptr &&
-			strstr(bfr, "E") == nullptr)
-			out << ".0";
-		if (supportsDoubles)
-			out << "f";
 		return;
 	}
 	else if (auto* ide = dynamic_cast<const IndexExpr*>(node))
@@ -475,26 +506,6 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
-	{
-		if (fce->resolvedFunc)
-		{
-			out << fce->resolvedFunc->mangledName;
-		}
-		else
-		{
-			EmitExpr(fce->GetFunc());
-		}
-		out << "(";
-		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
-		{
-			EmitExpr(arg->ToExpr());
-			if (arg->next)
-				out << ", ";
-		}
-		out << ")";
-		return;
-	}
 	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
 	{
 		if (ile->GetReturnType()->kind == ASTType::Array ||
@@ -662,6 +673,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 	}
 	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
 	{
+		// TODO move into previous stage
 		if (fce->isBuiltinFunc)
 		{
 			if (auto* name = dynamic_cast<const DeclRefExpr*>(fce->GetFunc()))
@@ -677,24 +689,6 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 				}
 			}
 		}
-
-		if (fce->resolvedFunc)
-		{
-			out << fce->resolvedFunc->mangledName;
-		}
-		else
-		{
-			EmitExpr(fce->GetFunc());
-		}
-		out << "(";
-		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
-		{
-			EmitExpr(arg->ToExpr());
-			if (arg->next)
-				out << ", ";
-		}
-		out << ")";
-		return;
 	}
 	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
 	{

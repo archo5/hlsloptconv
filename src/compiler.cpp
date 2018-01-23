@@ -694,6 +694,21 @@ void BinaryOpExpr::Dump(OutStream& out, int level) const
 	level--; LVL(out, level); out << "}\n";
 }
 
+void TernaryOpExpr::Dump(OutStream& out, int level) const
+{
+	out << "?: op [";
+	GetReturnType()->Dump(out);
+	out << "]\n";
+	LVL(out, level); out << "{\n"; level++;
+	LVL(out, level-1); out << "cond:\n";
+	LVL(out, level); GetCond()->Dump(out, level);
+	LVL(out, level-1); out << "true:\n";
+	LVL(out, level); GetTrueExpr()->Dump(out, level);
+	LVL(out, level-1); out << "false:\n";
+	LVL(out, level); GetFalseExpr()->Dump(out, level);
+	level--; LVL(out, level); out << "}\n";
+}
+
 void MemberExpr::Dump(OutStream& out, int level) const
 {
 	GetSource()->Dump(out, level);
@@ -1241,7 +1256,30 @@ void VariableAccessValidator::RunOnAST(const AST& ast)
 
 void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 {
-	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
+	{
+		return;
+	}
+	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
+	{
+		return;
+	}
+	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
+	{
+		return;
+	}
+	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	{
+		ProcessReadExpr(idop->GetSource());
+		ProcessWriteExpr(idop->GetSource());
+		return;
+	}
+	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	{
+		ProcessReadExpr(unop->GetSource());
+		return;
+	}
+	else if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
 	{
 		if (binop->opType == STT_OP_Assign)
 		{
@@ -1256,27 +1294,11 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	else if (auto* tnop = dynamic_cast<const TernaryOpExpr*>(node))
 	{
-		ProcessReadExpr(idop->GetSource());
-		ProcessWriteExpr(idop->GetSource());
-		return;
-	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
-	{
-		ProcessReadExpr(unop->GetSource());
-		return;
-	}
-	else if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
-	{
-		return;
-	}
-	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
-	{
-		return;
-	}
-	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
-	{
+		ProcessReadExpr(tnop->GetCond());
+		ProcessReadExpr(tnop->GetTrueExpr());
+		ProcessReadExpr(tnop->GetFalseExpr());
 		return;
 	}
 	else if (auto* castexpr = dynamic_cast<const CastExpr*>(node))

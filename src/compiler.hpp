@@ -87,6 +87,7 @@ enum SLTokenType
 	STT_OP_Inv,    /* ~    */
 	STT_OP_Inc,    /* ++   */
 	STT_OP_Dec,    /* --   */
+	STT_OP_Ternary, /* ?   */
 };
 
 bool TokenIsOpAssign(SLTokenType tt);
@@ -437,6 +438,16 @@ struct BinaryOpExpr : Expr
 	void Dump(OutStream& out, int level) const override;
 
 	SLTokenType opType = STT_NULL;
+};
+
+struct TernaryOpExpr : Expr
+{
+	IMPLEMENT_CLONE(TernaryOpExpr);
+	Expr* GetCond() const { return childCount >= 1 ? firstChild->ToExpr() : nullptr; }
+	Expr* GetTrueExpr() const { return childCount >= 2 ? firstChild->next->ToExpr() : nullptr; }
+	Expr* GetFalseExpr() const { return childCount >= 3 ? firstChild->next->next->ToExpr() : nullptr; }
+
+	void Dump(OutStream& out, int level) const override;
 };
 
 struct SubValExpr : Expr
