@@ -2574,30 +2574,41 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a, OutputShaderFormat of) : ast(a), outputFmt(of){}
-	void MatrixUnpack1(FCallExpr* fcintrin)
+	void MatrixUnpack(FCallExpr* fcintrin)
 	{
 		auto* mtxTy = fcintrin->GetReturnType();
 		if (mtxTy->kind != ASTType::Matrix)
 			return;
 
-		FoldOutIfBest(fcintrin->GetFirstArg()->ToExpr());
 		int numCols = mtxTy->sizeX;
 		auto* ile = new InitListExpr;
-		auto* idxe = new IndexExpr;
-		idxe->SetReturnType(ast.GetVectorType(mtxTy->subType, mtxTy->sizeY));
-		idxe->SetSource(fcintrin->GetFirstArg()->ToExpr());
-		idxe->AppendChild(new Int32Expr(0, ast.GetInt32Type()));
 		ile->SetReturnType(mtxTy);
-		fcintrin->AppendChild(idxe);
 		fcintrin->ReplaceWith(ile);
 		ile->AppendChild(fcintrin);
-		assert(dynamic_cast<IndexExpr*>(fcintrin->GetFirstArg()));
+
+		for (auto* arg = fcintrin->GetFirstArg(); arg; )
+		{
+			auto* argExpr = arg->ToExpr();
+			arg = arg->next;
+			assert(argExpr->GetReturnType() == mtxTy);
+
+			argExpr = FoldOutIfBest(argExpr);
+			auto* idxe = new IndexExpr;
+			argExpr->ReplaceWith(idxe);
+			idxe->SetSource(argExpr);
+			idxe->SetReturnType(ast.GetVectorType(mtxTy->subType, mtxTy->sizeY));
+			idxe->AppendChild(new Int32Expr(0, ast.GetInt32Type()));
+		}
 		for(int i = 1; i < numCols; ++i)
 		{
 			auto* fcx = dynamic_cast<FCallExpr*>(fcintrin->DeepClone());
-			dynamic_cast<Int32Expr*>(dynamic_cast<IndexExpr*>(fcx->GetFirstArg())->GetIndex())->value = i;
+			for (auto* arg = fcx->GetFirstArg(); arg; arg = arg->next)
+			{
+				dynamic_cast<Int32Expr*>(dynamic_cast<IndexExpr*>(arg)->GetIndex())->value = i;
+			}
 			ile->AppendChild(fcx);
 		}
+	//	ile->Dump(FILEStream(stderr),0);
 	}
 	void CastArgsToFloat(FCallExpr* fcintrin, bool preserveInts)
 	{
@@ -2632,11 +2643,12 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			{
 				if (auto* dre = dynamic_cast<DeclRefExpr*>(fcall->GetFunc()))
 				{
-					if (dre->name == "abs") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
-					if (dre->name == "acos") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
-					if (dre->name == "asin") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
-					if (dre->name == "atan") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
-					if (dre->name == "atan2") { CastArgsES100(fcall); /*MatrixUnpack1(fcall); TODO*/ return; }
+					if (dre->name == "abs") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
+					if (dre->name == "acos") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
+					if (dre->name == "asin") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
+					if (dre->name == "atan") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
+					if (dre->name == "atan2") { dre->name = "atan";
+						CastArgsToFloat(fcall, true); MatrixUnpack(fcall); return; }
 					if (dre->name == "clip")
 					{
 						// clip return type is 'void' so parent should be ExprStmt

@@ -16,16 +16,16 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 * Parsing support for the following intrinsics: `frexp`, `modf`, `refract`, `sincos`, `transpose`
 * GLSL output support for some renamed intrinsics
-* Matrix input emulation for several intrinsics on GLSL
 * Non-square matrix emulation for GLSL ES 1.0
 * Array emulation for GLSL ES 1.0
 * Geometry shader support
-* Certain syntax constructs such as explicit cast
+* Validation of certain syntax constructs such as register notation
 * Some error location information
 
 #### Other differences from HLSL:
 
 * `static const` requires an initialization expression, but it is disallowed to have one for just `const` or other types. This is to avoid creating constants that are not actually initialized in the shader, but just look like they might be.
+* `tex1D/tex2D/tex3D/texCUBE` overloads that work same as their `*grad` versions are not recognized.
 
 #### Other planned improvements:
 
