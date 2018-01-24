@@ -11,6 +11,7 @@ float4 main( float4 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
 // `acos`
@@ -21,6 +22,9 @@ float4 main( float4 p : POSITION ) : POSITION
 	return acos( 0 ) + acos( true ) + acos( 0.5 ) + acos( p ) + acos( MTX )._11_12_13_22;
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `all`
 source `
@@ -48,6 +52,9 @@ float4 main( float4 p : POSITION ) : POSITION
 	return asin( true ) + asin( 0 ) + asin( 0.5 ) + asin( p ) + asin( MTX )._11_12_13_22;
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `atan`
 source `
@@ -58,6 +65,9 @@ float4 main( float4 p : POSITION ) : POSITION
 	return atan( 0 ) + atan( true ) + b + atan( p ) + atan( MTX )._11_12_13_22;
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `atan2`
 source `
@@ -72,6 +82,9 @@ float4 main( float4 p : POSITION ) : POSITION
 		+ atan2( MTX, 1.5 )._11_12_13_22;
 }`
 compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `clip`
 source `
@@ -87,6 +100,8 @@ float4 main( float4 p : COLOR ) : COLOR
 compile_hlsl_before_after `/T ps_3_0`
 compile_glsl `-S frag`
 in_shader `discard`
+compile_glsl_es100 `-S frag`
+in_shader `discard`
 
 // `cross`
 source `
@@ -97,6 +112,30 @@ float4 main( float3 p : POSITION ) : POSITION
 compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
+
+// `ddx`
+source `
+float4 main(float4 p : TEXCOORD) : COLOR
+{
+	return ddx(p.x) + ddx(p.xy).xyxy + ddx(p.xyz).xyzx + ddx(p);
+}`
+compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+in_shader `dFdx`
+compile_glsl_es100 `-S frag`
+in_shader `dFdx`
+
+// `ddy`
+source `
+float4 main(float4 p : TEXCOORD) : COLOR
+{
+	return ddy(p.x) + ddy(p.xy).xyxy + ddy(p.xyz).xyzx + ddy(p);
+}`
+compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+in_shader `dFdy`
+compile_glsl_es100 `-S frag`
+in_shader `dFdy`
 
 // `distance`
 source `
@@ -118,6 +157,16 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `fwidth`
+source `
+float4 main(float4 p : TEXCOORD) : COLOR
+{
+	return fwidth(p.x) + fwidth(p.xy).xyxy + fwidth(p.xyz).xyzx + fwidth(p);
+}`
+compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+compile_glsl_es100 `-S frag`
+
 // `normalize`
 source `
 float4 main( float4 p : POSITION ) : POSITION
@@ -126,6 +175,27 @@ float4 main( float4 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+compile_glsl_es100 ``
+
+// `rsqrt`
+source `
+float4 main( float4 p : POSITION ) : POSITION
+{
+	return rsqrt( 4 ) + rsqrt( true ) + rsqrt( 0.5 ) + rsqrt( p );
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `sqrt`
+source `
+float4 main( float4 p : POSITION ) : POSITION
+{
+	return sqrt( 4 ) + sqrt( true ) + sqrt( 0.5 ) + sqrt( p );
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
 
 // `tex2Dgrad`
 source `

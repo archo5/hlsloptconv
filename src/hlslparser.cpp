@@ -992,7 +992,7 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 	size_t bestSplit;
 	int bestScore;
 	size_t curPos = startPos;
-	FindBestSplit(tokenArr, false, curPos, endPos, STT_NULL, bestSplit, bestScore);
+	FindBestSplit(tokenArr, true, curPos, endPos, STT_NULL, bestSplit, bestScore);
 
 	if (bestSplit == SIZE_MAX)
 	{
@@ -1744,6 +1744,12 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 				{
 					fcall->SetReturnType(retType);
 					fcall->isBuiltinFunc = true;
+					if (ie->name == "ddx" ||
+						ie->name == "ddy" ||
+						ie->name == "fwidth")
+					{
+						ast.usingDerivatives = true;
+					}
 				}
 				// otherwise error already printed
 				return;
@@ -1841,7 +1847,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 	EmitError("failed to find function", loc);
 }
 
-void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
+void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSplit,
 	size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore)
 {
 	bestSplit = SIZE_MAX;
@@ -1855,8 +1861,9 @@ void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunct
 	{
 		if (braceStack.empty())
 		{
-			int curScore = GetSplitScore(tokenArr, curPos, startPos, allowFunctions);
+			int curScore = GetSplitScore(tokenArr, curPos, startPos, preProcSplit);
 			bool rtl = (curScore & SPLITSCORE_RTLASSOC) != 0;
+			curScore &= ~SPLITSCORE_RTLASSOC;
 			if (curScore - (rtl ? 1 : 0) >= bestScore) // ltr: >=, rtl: > (-1)
 			{
 				bestScore = curScore;
@@ -1901,7 +1908,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 	size_t bestSplit;
 	int bestScore;
-	FindBestSplit(tokens, true, curToken, endPos, endTokenType, bestSplit, bestScore);
+	FindBestSplit(tokens, false, curToken, endPos, endTokenType, bestSplit, bestScore);
 #if 0
 	if (bestSplit != SIZE_MAX)
 	{
@@ -2007,7 +2014,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 	}
 
 	auto ttSplit = tokens[bestSplit].type;
-	if (ttSplit == STT_LParen)
+	if (start < bestSplit && ttSplit == STT_LParen)
 	{
 		size_t bkCur = curToken;
 
@@ -2051,7 +2058,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 		return fcall;
 	}
-	else if (ttSplit == STT_LBracket)
+	else if (start < bestSplit && ttSplit == STT_LBracket)
 	{
 		size_t bkCur = curToken;
 
@@ -2094,7 +2101,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		curToken = bkCur;
 		return idx;
 	}
-	else if (ttSplit == STT_OP_Ternary)
+	else if (start < bestSplit && ttSplit == STT_OP_Ternary)
 	{
 		size_t bkCur = curToken;
 
@@ -2179,6 +2186,30 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				CastExprTo(unop->GetSource(), unop->GetReturnType());
 
 				return unop;
+			}
+			if (ttSplit == STT_LParen)
+			{
+				// explicit cast
+				size_t bcp = curToken;
+
+				curToken = bestSplit + 1;
+				ASTType* tgtType = ParseType();
+				EXPECT(STT_RParen);
+				curToken++;
+
+				auto* cast = new CastExpr;
+				ast.unassignedNodes.AppendChild(cast);
+				cast->SetReturnType(tgtType);
+				cast->SetSource(ParseExpr(endTokenType, bcp));
+				curToken = bcp;
+
+				if (CanCast(cast->GetSource()->GetReturnType(), tgtType, true) == false)
+				{
+					EmitError("cannot cast from '" + cast->GetSource()->GetReturnType()->GetName()
+						+ "' to '" + tgtType->GetName() + "'");
+				}
+
+				return cast;
 			}
 		}
 		else if (ttSplit == STT_OP_Inc
@@ -3183,7 +3214,7 @@ static bool TokenIsExprPreceding(SLTokenType tt)
 }
 
 int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
-	size_t pos, size_t start, bool allowFunctions) const
+	size_t pos, size_t start, bool preProcSplit) const
 {
 	// http://en.cppreference.com/w/c/language/operator_precedence
 
@@ -3218,9 +3249,16 @@ int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
 			tt == STT_OP_Add || tt == STT_OP_Sub ||
 			tt == STT_OP_Inv || tt == STT_OP_Not)
 			return 2 | SPLITSCORE_RTLASSOC;
+		// explicit cast
+		if (!preProcSplit &&
+			tt == STT_LParen &&
+			pos + 1 < tokenArr.size() &&
+			tokenArr[pos + 1].type == STT_Ident &&
+			ast.IsTypeName(TokenStringData(tokenArr[pos + 1])))
+			return 2 | SPLITSCORE_RTLASSOC;
 	}
 
-	if (allowFunctions && start < pos)
+	if (!preProcSplit && start < pos)
 	{
 		if (tt == STT_OP_Inc || tt == STT_OP_Dec)
 			return 1;

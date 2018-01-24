@@ -6,6 +6,8 @@ OBJS := $(patsubst %,obj/%.obj,$(BASEOBJNAMES))
 tools: sltest.exe hlsloptconv.exe
 test: sltest.exe
 	sltest
+test5: sltest.exe
+	sltest -t tests/500-intrin.hlsl
 html5test: hlsloptconv.exe
 	py runtests/html5-compile.py
 

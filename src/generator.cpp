@@ -738,6 +738,10 @@ void GLSLGenerator::Generate()
 	if (version == 100)
 	{
 		out << "precision highp float;\n";
+		if (ast.usingDerivatives)
+		{
+			out << "#extension GL_OES_standard_derivatives : enable\n";
+		}
 	}
 
 	SLGenerator::GenerateStructs();

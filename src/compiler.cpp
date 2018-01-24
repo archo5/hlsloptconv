@@ -1838,7 +1838,7 @@ static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat s
 				else
 				{
 					char bfr[32];
-					sprintf(bfr, "_PSCOLOR%d", vd->semanticIndex >= 0 ? vd->semanticIndex : 0);
+					sprintf(bfr, "_PSCOLOR%d", vd->GetSemanticIndex());
 					vd->name = bfr;
 				}
 				return;
@@ -1852,7 +1852,7 @@ static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat s
 		if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
 			((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
 		{
-			vd->name = "attr" + vd->semanticName + std::to_string(vd->semanticIndex);
+			vd->name = "attr" + vd->semanticName + std::to_string(vd->GetSemanticIndex());
 		}
 	}
 
@@ -2537,6 +2537,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		fcintrin->AppendChild(idxe);
 		fcintrin->ReplaceWith(ile);
 		ile->AppendChild(fcintrin);
+		assert(dynamic_cast<IndexExpr*>(fcintrin->GetFirstArg()));
 		for(int i = 1; i < numCols; ++i)
 		{
 			auto* fcx = dynamic_cast<FCallExpr*>(fcintrin->DeepClone());
@@ -2563,6 +2564,11 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			CastExprTo(fcintrin, ast.CastToInt(fcintrin->GetReturnType()));
 		}
 	}
+	void CastArgsES100(FCallExpr* fcintrin)
+	{
+		if (outputFmt == OSF_GLSL_ES_100)
+			CastArgsToFloat(fcintrin, true);
+	}
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PostVisit(ASTNode* node)
 	{
@@ -2572,33 +2578,11 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			{
 				if (auto* dre = dynamic_cast<DeclRefExpr*>(fcall->GetFunc()))
 				{
-					if (dre->name == "abs")
-					{
-						MatrixUnpack1(fcall);
-						return;
-					}
-					if (dre->name == "ddx") { dre->name = "dFdx"; return; }
-					if (dre->name == "ddy") { dre->name = "dFdy"; return; }
-					if (dre->name == "distance") { CastArgsToFloat(fcall, false); return; }
-					if (dre->name == "dot") { CastArgsToFloat(fcall, true); return; }
-					if (dre->name == "frac") { dre->name = "fract"; return; }
-					if (dre->name == "saturate")
-					{
-						dre->name = "clamp";
-						fcall->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
-						fcall->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
-						return;
-					}
-					if (dre->name == "tex2D")
-					{
-						dre->name = IsNewSamplingAPI() ? "texture" : "texture2D";
-						return;
-					}
-					if (dre->name == "lerp")
-					{
-						dre->name = "mix";
-						return;
-					}
+					if (dre->name == "abs") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
+					if (dre->name == "acos") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
+					if (dre->name == "asin") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
+					if (dre->name == "atan") { CastArgsES100(fcall); MatrixUnpack1(fcall); return; }
+					if (dre->name == "atan2") { CastArgsES100(fcall); /*MatrixUnpack1(fcall); TODO*/ return; }
 					if (dre->name == "clip")
 					{
 						// clip return type is 'void' so parent should be ExprStmt
@@ -2633,6 +2617,25 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 						}
 
 						delete fcall; // leaves unused ExprStmt
+						return;
+					}
+					if (dre->name == "ddx") { dre->name = "dFdx"; return; }
+					if (dre->name == "ddy") { dre->name = "dFdy"; return; }
+					if (dre->name == "distance") { CastArgsToFloat(fcall, false); return; }
+					if (dre->name == "dot") { CastArgsToFloat(fcall, true); return; }
+					if (dre->name == "frac") { dre->name = "fract"; return; }
+					if (dre->name == "lerp") { dre->name = "mix"; return; }
+					if (dre->name == "rsqrt") { dre->name = "inversesqrt"; return; }
+					if (dre->name == "saturate")
+					{
+						dre->name = "clamp";
+						fcall->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
+						fcall->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
+						return;
+					}
+					if (dre->name == "tex2D")
+					{
+						dre->name = IsNewSamplingAPI() ? "texture" : "texture2D";
 						return;
 					}
 				}

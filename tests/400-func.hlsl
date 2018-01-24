@@ -98,6 +98,12 @@ float a(float1 a){ return 2.0; }
 float4 main(float4 p : POSITION):POSITION { return a(float1(1.f)); }`
 compile_fail_with_hlsl ``
 
+// `explicit cast`
+source `float4 main():POSITION { return (float4) 0.0f; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `assignment casts`
 source `
 struct stc4el

@@ -681,6 +681,8 @@ struct AST : TypeSystem
 	std::unordered_map<std::string, ASTFuncMap> functions;
 
 	BlockStmt unassignedNodes;
+
+	bool usingDerivatives = false;
 };
 
 template< class V > struct ASTVisitor
