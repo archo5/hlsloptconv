@@ -2476,7 +2476,19 @@ bool Parser::CanCast(ASTType* from, ASTType* to, bool castExplicitly)
 		// > cannot [implicitly] convert from 'float4' (which is float1x4) to 'float4x1'
 		if (HLSLIsTypeClass_Matrix(to)) return from->sizeX >= to->sizeX && from->sizeY >= to->sizeY;
 	}
-	// TODO structure
+	if (castExplicitly)
+	{
+		bool fns = from->IsNumericStructure();
+		bool tns = to->IsNumericStructure();
+		if((fns || tns) &&
+			(fns || from->IsNumericBased()) &&
+			(tns || to->IsNumericBased()) &&
+			(from->GetAccessPointCount() == to->GetAccessPointCount()
+				|| from->IsNumericOrVM1() || to->IsNumericOrVM1()))
+		{
+			return true;
+		}
+	}
 
 	return false;
 }

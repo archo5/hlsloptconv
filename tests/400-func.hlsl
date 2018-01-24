@@ -198,6 +198,62 @@ source `struct stc4el { float x; float2 yz; float w; }; float4 main():POSITION {
 	float4x4 vm44 = 3.6; stc4el stc; vm44 = stc; return 0; }`
 compile_fail_with_hlsl ``
 
+// `explicit assignment casts`
+source `
+struct stc4el
+{
+	float x;
+	float2 yz;
+	float w;
+};
+float4 main():POSITION {
+	float vs = 1;
+	float1 vv1 = 2.0;
+	float4 vv4 = 2.5;
+	float1x1 vm11 = 3.0;
+	float1x4 vm14 = 3.2;
+	float4x1 vm41 = 3.4;
+	float4x4 vm44 = 3.6;
+	stc4el stc = { 4, 5, 6, 7 };
+	stc = (stc4el) vs;
+	stc = (stc4el) vv1;
+	/*vm44 = (float4x4) vv4;*/ stc = (stc4el) vv4;
+	stc = (stc4el) vm11;
+	/*vm41 = (float4x1) vm14; vm44 = (float4x4) vm14;*/ stc = (stc4el) vm14;
+	/*vm14 = (float1x4) vm41; vm44 = (float4x4) vm41;*/ stc = (stc4el) vm41;
+	/*vv4 = (float4) vm44; stc = (stc4el) vm44;*/
+	vs = (float) stc; vv1 = (float1) stc; vv4 = (float4) stc; vm11 = (float1x1) stc;
+	vm14 = (float1x4) stc; vm41 = (float4x1) stc; /* vm44 = (float4x4) stc; */
+	return vv4;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `failed explicit assignment casts`
+source `float4 main():POSITION { float4x4 vm44; float4 vv4 = 2.5; vm44 = (float4x4) vv4; return 0; }`
+compile_fail_with_hlsl ``
+
+source `float4 main():POSITION { float4x1 vm41; float1x4 vm14 = 3.2; vm41 = (float4x1) vm14; return 0; }`
+compile_fail_with_hlsl ``
+source `float4 main():POSITION { float4x4 vm44; float1x4 vm14 = 3.2; vm44 = (float4x4) vm14; return 0; }`
+compile_fail_with_hlsl ``
+
+source `float4 main():POSITION { float1x4 vm14; float4x1 vm41 = 3.4; vm14 = (float1x4) vm41; return 0; }`
+compile_fail_with_hlsl ``
+source `float4 main():POSITION { float4x4 vm44; float4x1 vm41 = 3.4; vm44 = (float4x4) vm41; return 0; }`
+compile_fail_with_hlsl ``
+
+source `float4 main():POSITION { float4 vv4; float4x4 vm44 = 3.6; vv4 = (float4) vm44; return 0; }`
+compile_fail_with_hlsl ``
+source `struct stc4el { float x; float2 yz; float w; }; float4 main():POSITION {
+	stc4el stc; float4x4 vm44 = 3.6; stc = (stc4el) vm44; }`
+compile_fail_with_hlsl ``
+
+source `struct stc4el { float x; float2 yz; float w; }; float4 main():POSITION {
+	float4x4 vm44 = 3.6; stc4el stc; vm44 = (float4x4) stc; return 0; }`
+compile_fail_with_hlsl ``
+
 // `vector type casts in calls`
 source `
 float s(float a){ return 1; }

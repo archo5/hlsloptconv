@@ -6,6 +6,7 @@
 | ------------------: | -------- | --------- | ----------- |
 |         array init: | remapped init list | element ctor | not supported |
 |        struct init: | remapped init list | member ctor | member ctor |
+|         type casts: | available | unavailable (use ctor) | unavailable (use ctor) |
 |   array index type: | float/int (do NOT cast to int, it adds instructions) | int | int |
 | shader i/o linkage: | by semantic match | by variable name match | by variable name match |
 |        derivatives: | available | available | optional, ext:OES_standard_derivatives (WebGL) |

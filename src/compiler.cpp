@@ -2434,6 +2434,19 @@ static void UnpackMatrixSwizzle(AST& ast)
 }
 
 
+// TODO merge with hlslparser's version
+static void CastExprTo(Expr* val, ASTType* to)
+{
+	assert(to);
+	if (to != val->GetReturnType())
+	{
+		CastExpr* cast = new CastExpr;
+		cast->SetReturnType(to);
+		val->ReplaceWith(cast);
+		cast->SetSource(val);
+	}
+}
+
 static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 {
 	ASTType* t = src->GetReturnType();
@@ -2503,19 +2516,60 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 	}
 }
 
-
-// TODO merge with hlslparser's version
-static void CastExprTo(Expr* val, ASTType* to)
+static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 {
-	assert(to);
-	if (to != val->GetReturnType())
+	int numAPs = ile_or_cast->GetReturnType()->GetAccessPointCount();
+	int origInputs = ile_or_cast->childCount;
+
+	VarDecl* vd;
+	if (VarDecl* pvd = dynamic_cast<VarDecl*>(ile_or_cast->parent))
 	{
-		CastExpr* cast = new CastExpr;
-		cast->SetReturnType(to);
-		val->ReplaceWith(cast);
-		cast->SetSource(val);
+		vd = pvd;
 	}
+	else
+	{
+		DeclRefExpr* src = FoldOut(ile_or_cast);
+		vd = src->decl;
+	}
+	ASTNode* insertPos = vd->parent;
+	assert(dynamic_cast<VarDeclStmt*>(insertPos));
+
+	Expr* sourceNode = ile_or_cast->firstChild->ToExpr();
+	bool isSource1 = ile_or_cast->childCount == 1
+		&& sourceNode->GetReturnType()->GetAccessPointCount() == 1;
+	int sourceOffset = 0;
+	for (int i = 0; i < numAPs; ++i)
+	{
+		if (isSource1 == false)
+		{
+			for (;;)
+			{
+				int srcapc = sourceNode->GetReturnType()->GetAccessPointCount();
+				if (i - sourceOffset < srcapc)
+					break;
+				sourceOffset += srcapc;
+				sourceNode = sourceNode->next->ToExpr();
+			}
+		}
+		auto* exprStmt = new ExprStmt;
+		auto* binop = new BinaryOpExpr;
+		auto* dstdre = new DeclRefExpr;
+		dstdre->decl = vd;
+		dstdre->SetReturnType(vd->GetType());
+		binop->opType = STT_OP_Assign;
+		binop->AppendChild(GetReferenceToElement(ast, dstdre, i));
+		binop->AppendChild(GetReferenceToElement(ast, sourceNode->DeepClone()->ToExpr(),
+			isSource1 ? 0 : i - sourceOffset));
+		CastExprTo(binop->GetRgt(), binop->GetLft()->GetReturnType());
+		binop->SetReturnType(binop->GetLft()->GetReturnType());
+		exprStmt->AppendChild(binop);
+		insertPos->InsertAfterMe(exprStmt);
+		insertPos = exprStmt;
+	}
+
+	delete ile_or_cast; // now replaced with explicit component assignments
 }
+
 
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
@@ -2646,6 +2700,26 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())
 			{
 				CastExprTo(idxe->GetIndex(), ast.CastToInt(idxe->GetIndex()->GetReturnType()));
+				return;
+			}
+		}
+		if (auto* ile = dynamic_cast<InitListExpr*>(node))
+		{
+			if (ile->GetReturnType()->kind == ASTType::Structure ||
+				ile->GetReturnType()->kind == ASTType::Array)
+			{
+				GenerateComponentAssignments(ast, ile);
+				return;
+			}
+		}
+		if (auto* cast = dynamic_cast<CastExpr*>(node))
+		{
+			if ((cast->GetReturnType()->kind == ASTType::Structure &&
+				cast->GetSource()->GetReturnType()->IsNumericBased()) ||
+				(cast->GetSource()->GetReturnType()->kind == ASTType::Structure &&
+				cast->GetReturnType()->IsNumericBased()))
+			{
+				GenerateComponentAssignments(ast, cast);
 				return;
 			}
 		}
@@ -2785,72 +2859,6 @@ static void RemoveArraysOfArrays(AST& ast)
 }
 
 
-struct InitListExprRepacker : ASTWalker<InitListExprRepacker>
-{
-	InitListExprRepacker(AST& a) : ast(a){}
-	void PostVisit(ASTNode* node)
-	{
-		if (auto* ile = dynamic_cast<InitListExpr*>(node))
-		{
-			if (ile->GetReturnType()->kind == ASTType::Structure ||
-				ile->GetReturnType()->kind == ASTType::Array)
-			{
-				int numAPs = ile->GetReturnType()->GetAccessPointCount();
-				int origInputs = ile->childCount;
-
-				VarDecl* vd;
-				if (VarDecl* pvd = dynamic_cast<VarDecl*>(ile->parent))
-				{
-					vd = pvd;
-				}
-				else
-				{
-					DeclRefExpr* src = FoldOut(ile);
-					vd = src->decl;
-				}
-				ASTNode* insertPos = vd->parent;
-				assert(dynamic_cast<VarDeclStmt*>(insertPos));
-
-				Expr* sourceNode = ile->firstChild->ToExpr();
-				int sourceOffset = 0;
-				for (int i = 0; i < numAPs; ++i)
-				{
-					for (;;)
-					{
-						int srcapc = sourceNode->GetReturnType()->GetAccessPointCount();
-						if (i - sourceOffset < srcapc)
-							break;
-						sourceOffset += srcapc;
-						sourceNode = sourceNode->next->ToExpr();
-					}
-					auto* exprStmt = new ExprStmt;
-					auto* binop = new BinaryOpExpr;
-					auto* dstdre = new DeclRefExpr;
-					dstdre->decl = vd;
-					dstdre->SetReturnType(vd->GetType());
-					binop->opType = STT_OP_Assign;
-					binop->AppendChild(GetReferenceToElement(ast, dstdre, i));
-					binop->AppendChild(GetReferenceToElement(ast, sourceNode->DeepClone()->ToExpr(), i - sourceOffset));
-					CastExprTo(binop->GetRgt(), binop->GetLft()->GetReturnType());
-					binop->SetReturnType(binop->GetLft()->GetReturnType());
-					exprStmt->AppendChild(binop);
-					insertPos->InsertAfterMe(exprStmt);
-					insertPos = exprStmt;
-				}
-
-				delete ile; // now replaced with explicit component assignments
-			}
-		}
-	}
-	AST& ast;
-};
-
-static void RepackInitListExprs(AST& ast)
-{
-	InitListExprRepacker(ast).VisitAST(ast);
-}
-
-
 struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 {
 	void PreVisit(ASTNode* node)
@@ -2932,7 +2940,6 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		case OSF_GLSL_ES_100:
 			UnpackMatrixSwizzle(p.ast);
 			RemoveVM1AndM1DTypes(p.ast);
-			RepackInitListExprs(p.ast);
 			RemoveArraysOfArrays(p.ast);
 			GLSLUnpackEntryPoint(p.ast, stage, outputFmt);
 			GLSLConvert(p.ast, outputFmt);
