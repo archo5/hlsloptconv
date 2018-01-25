@@ -167,6 +167,36 @@ compile_hlsl_before_after `/T ps_3_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
 
+// `matrixCompMult (GLSL)`
+source `
+float2x3 MTX1;
+float2x3 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return p * (MTX1 * MTX2)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+in_shader `matrixCompMult`
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+in_shader `matrixCompMult`
+
+// `mod (GLSL)`
+source `
+float2x3 MTX1;
+float2x3 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return (p % float4(1,2,3,4)) * (MTX1 % MTX2)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+in_shader `mod`
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+in_shader `mod`
+
 // `normalize`
 source `
 float4 main( float4 p : POSITION ) : POSITION

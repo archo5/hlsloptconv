@@ -29,6 +29,7 @@ struct SLGenerator
 	bool supportsStatic = true;
 	bool supportsPacking = true;
 	bool supportsDoubles = true;
+	bool supportsScalarSwizzle = true;
 	int varDeclNameID = 0;
 };
 
@@ -41,6 +42,7 @@ struct HLSLGenerator : SLGenerator
 		supportsStatic = true;
 		supportsPacking = true;
 		supportsDoubles = true;
+		supportsScalarSwizzle = true;
 	}
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
@@ -56,6 +58,7 @@ struct GLSLGenerator : SLGenerator
 		supportsStatic = false;
 		supportsPacking = false;
 		supportsDoubles = false;
+		supportsScalarSwizzle = false;
 	}
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
@@ -191,7 +194,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
 	{
 		out << "(";
-		const char* opstr = "[TODO 1op]";
+		const char* opstr = "[UNIMPL 1op]";
 		switch (unop->opType)
 		{
 		case STT_OP_Sub: opstr = "-"; break;
@@ -207,7 +210,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 	{
 		out << "(";
 		EmitExpr(binop->GetLft());
-		const char* opstr = "[TODO 2op]";
+		const char* opstr = "[UNIMPL 2op]";
 		switch (binop->opType)
 		{
 		case STT_OP_Eq: opstr = "=="; break;
@@ -282,6 +285,23 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
+	else if (auto* mbe = dynamic_cast<const MemberExpr*>(node))
+	{
+		if (!supportsScalarSwizzle && mbe->GetSource()->GetReturnType()->IsNumeric())
+		{
+			if (mbe->swizzleComp > 1) // 1-component swizzles could otherwise generate vec1-like types
+				EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->memberName.size()));
+			out << "(";
+			EmitExpr(mbe->GetSource());
+			out << ")";
+		}
+		else
+		{
+			EmitExpr(mbe->GetSource());
+			out << "." << mbe->memberName;
+		}
+		return;
+	}
 	else if (auto* ide = dynamic_cast<const IndexExpr*>(node))
 	{
 		EmitExpr(ide->GetSource());
@@ -290,13 +310,21 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << "]";
 		return;
 	}
+	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+	{
+		if (dre->decl)
+			out << dre->decl->name;
+		else
+			out << dre->name;
+		return;
+	}
 	else if (dynamic_cast<const VoidExpr*>(node))
 	{
 		out << "/*--*/";
 		return;
 	}
 
-	out << "[TODO " << typeid(*node).name() << "]";
+	out << "[UNIMPL " << typeid(*node).name() << "]";
 }
 
 void SLGenerator::EmitStmt(const Stmt* node, int level)
@@ -412,7 +440,7 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 	}
 
 	out << "\n"; LVL(level);
-	out << "[TODO " << typeid(*node).name() << "]";
+	out << "[UNIMPL " << typeid(*node).name() << "]";
 }
 
 void SLGenerator::GenerateStructs()
@@ -534,17 +562,6 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* mbe = dynamic_cast<const MemberExpr*>(node))
-	{
-		EmitExpr(mbe->GetSource());
-		out << "." << mbe->memberName;
-		return;
-	}
-	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
-	{
-		out << dre->name;
-		return;
-	}
 
 	SLGenerator::EmitExpr(node);
 }
@@ -635,60 +652,13 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 
 void GLSLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
-	{
-		const char* func = "[TODO glsl op func]";
-		switch (binop->opType)
-		{
-		case STT_OP_Mul:
-			if (binop->GetReturnType()->kind == ASTType::Matrix)
-			{
-				func = "matrixCompMult";
-				goto emitBinOp;
-			}
-			break;
-		case STT_OP_Mod:
-			func = "mod";
-			goto emitBinOp;
-		default:
-			break;
-		emitBinOp:
-			out << func << "(";
-			EmitExpr(binop->GetLft());
-			out << ", ";
-			EmitExpr(binop->GetRgt());
-			out << ")";
-			return;
-		}
-		// if not one of exceptions, use default output
-		// TODO implement hlsl2glsl general pass
-	}
-	else if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
+	if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
 	{
 		EmitTypeRef(castexpr->GetReturnType());
 		out << "(";
 		EmitExpr(castexpr->GetSource());
 		out << ")";
 		return;
-	}
-	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
-	{
-		// TODO move into previous stage
-		if (fce->isBuiltinFunc)
-		{
-			if (auto* name = dynamic_cast<const DeclRefExpr*>(fce->GetFunc()))
-			{
-				if (name->name == "mul")
-				{
-					out << "(";
-					EmitExpr(fce->GetFirstArg()->ToExpr());
-					out << " * ";
-					EmitExpr(fce->GetFirstArg()->next->ToExpr());
-					out << ")";
-					return;
-				}
-			}
-		}
 	}
 	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
 	{
@@ -701,31 +671,6 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			EmitExpr(ch->ToExpr());
 		}
 		out << ")";
-		return;
-	}
-	else if (auto* mbe = dynamic_cast<const MemberExpr*>(node))
-	{
-		if (mbe->GetSource()->GetReturnType()->IsNumeric())
-		{
-			if (mbe->swizzleComp > 1) // 1-component swizzles could otherwise generate vec1-like types
-				EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->memberName.size()));
-			out << "(";
-			EmitExpr(mbe->GetSource());
-			out << ")";
-		}
-		else
-		{
-			EmitExpr(mbe->GetSource());
-			out << "." << mbe->memberName;
-		}
-		return;
-	}
-	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
-	{
-		if (dre->decl)
-			out << dre->decl->name;
-		else
-			out << dre->name;
 		return;
 	}
 

@@ -2691,6 +2691,25 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					if (dre->name == "dot") { CastArgsToFloat(fcall, true); return; }
 					if (dre->name == "frac") { dre->name = "fract"; return; }
 					if (dre->name == "lerp") { dre->name = "mix"; return; }
+					if (dre->name == "mul")
+					{
+						auto* arg1 = fcall->GetFirstArg()->ToExpr();
+						auto* arg2 = fcall->GetFirstArg()->next->ToExpr();
+						auto rt1k = arg1->GetReturnType()->kind;
+						auto rt2k = arg2->GetReturnType()->kind;
+						if ((rt1k == ASTType::Matrix && rt2k == ASTType::Matrix) ||
+							(rt1k == ASTType::Vector && rt2k == ASTType::Matrix) ||
+							(rt1k == ASTType::Matrix && rt2k == ASTType::Vector))
+						{
+							auto* binop = new BinaryOpExpr;
+							binop->opType = STT_OP_Mul;
+							binop->SetReturnType(fcall->GetReturnType());
+							binop->AppendChild(arg1);
+							binop->AppendChild(arg2);
+							delete fcall->ReplaceWith(binop);
+							return;
+						}
+					}
 					if (dre->name == "rsqrt") { dre->name = "inversesqrt"; return; }
 					if (dre->name == "saturate")
 					{
@@ -2706,14 +2725,50 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					}
 				}
 			}
+			return;
+		}
+		if (auto* binop = dynamic_cast<BinaryOpExpr*>(node))
+		{
+			bool mtxUnpack = false;
+			const char* funcName = nullptr;
+			switch (binop->opType)
+			{
+			case STT_OP_Mul:
+				if (binop->GetReturnType()->kind == ASTType::Matrix)
+				{
+					funcName = "matrixCompMult";
+				}
+				break;
+			case STT_OP_Mod:
+				funcName = "mod";
+				mtxUnpack = true;
+				break;
+			default:
+				break;
+			}
+			if (funcName)
+			{
+				auto* dre = new DeclRefExpr;
+				dre->name = funcName;
+				dre->SetReturnType(ast.GetFunctionType());
+				auto* fcall = new FCallExpr;
+				fcall->SetReturnType(binop->GetReturnType());
+				fcall->AppendChild(dre);
+				fcall->AppendChild(binop->firstChild);
+				fcall->AppendChild(binop->firstChild);
+				delete binop->ReplaceWith(fcall);
+				if (mtxUnpack)
+					MatrixUnpack(fcall);
+			}
+			return;
 		}
 		if (auto* idxe = dynamic_cast<IndexExpr*>(node))
 		{
 			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())
 			{
 				CastExprTo(idxe->GetIndex(), ast.CastToInt(idxe->GetIndex()->GetReturnType()));
-				return;
 			}
+			return;
 		}
 		if (auto* ile = dynamic_cast<InitListExpr*>(node))
 		{
@@ -2721,8 +2776,8 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				ile->GetReturnType()->kind == ASTType::Array)
 			{
 				GenerateComponentAssignments(ast, ile);
-				return;
 			}
+			return;
 		}
 		if (auto* cast = dynamic_cast<CastExpr*>(node))
 		{
@@ -2732,16 +2787,16 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				cast->GetReturnType()->IsNumericBased()))
 			{
 				GenerateComponentAssignments(ast, cast);
-				return;
 			}
+			return;
 		}
 		if (auto* exprStmt = dynamic_cast<ExprStmt*>(node))
 		{
 			if (!exprStmt->GetExpr())
 			{
 				delete exprStmt; // cleanup
-				return;
 			}
+			return;
 		}
 	}
 	AST& ast;
