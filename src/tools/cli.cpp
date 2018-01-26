@@ -49,6 +49,7 @@ struct ArgParser
 static const char* OUTPUT_FORMATS[] =
 {
 	"hlsl_sm3",
+	"hlsl_sm4",
 	"glsl_140",
 	"glsl_es_100",
 };

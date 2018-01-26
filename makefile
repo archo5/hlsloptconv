@@ -19,7 +19,7 @@ sltest.exe: $(OBJS) obj/test.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 four.exe: $(OBJS) obj/four.obj
-	link /nologo /out:$@ $^ /DEBUG /LIBPATH:$(DXSDK_DIR)\lib\x86 user32.lib gdi32.lib d3d9.lib d3dx9.lib
+	link /nologo /out:$@ $^ /DEBUG user32.lib gdi32.lib d3d9.lib d3d11.lib d3dcompiler.lib
 
 hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
@@ -28,7 +28,7 @@ obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
 	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
 
 obj/%.obj: src/tools/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
-	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $< /I$(DXSDK_DIR)\include
+	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
 
 obj:
 	mkdir obj

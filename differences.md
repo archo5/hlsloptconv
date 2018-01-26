@@ -20,7 +20,7 @@
 |         float mod. intrin.: | `r = fmod(a,b)` | `r = mod(a,b)` | `r = mod(a,b)` |
 |           float mod. rules: | `a = i * b + r`, `i = int(i)`, `sign(r) = sign(a)`, `abs(r) < abs(b)` | defined by equation | defined by equation |
 |        float mod. equation: | `x - y * trunc(x/y)` | `x - y * floor(x/y)` | `x - y * floor(x/y)` |
-| componentwise matrix mult.: | `mtx1 * mtx2` | `matrixCompMult` | `matrixCompMult` |
+| componentwise matrix mult.: | `mtx1 * mtx2` | `matrixCompMult(mtx1, mtx2)` | `matrixCompMult(mtx1, mtx2)` |
 |       regular matrix mult.: | `mul(mtx1, mtx2)` | `mtx1 * mtx2` | `mtx1 * mtx2` |
 |      matrix-vector product: | `mul(mtx, vec)` | `mtx * vec` | `mtx * vec` |
 

@@ -499,6 +499,7 @@ void HLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Void:        out << "void"; break;
 	case ASTType::Bool:        out << "bool"; break;
 	case ASTType::Int32:       out << "int"; break;
+	case ASTType::UInt32:      out << "uint"; break;
 	case ASTType::Float16:     out << "half"; break;
 	case ASTType::Float32:     out << "float"; break;
 	case ASTType::Sampler1D:   out << "sampler1D"; break;
@@ -612,6 +613,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Void: out << "void"; break;
 	case ASTType::Bool: out << "bool"; break;
 	case ASTType::Int32: out << "int"; break;
+	case ASTType::UInt32: out << "uint"; break;
 	case ASTType::Float16: out << "mediump float"; break;
 	case ASTType::Float32: out << "float"; break;
 	case ASTType::Sampler1D: out << "sampler1D"; break;
@@ -626,6 +628,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 		{
 		case ASTType::Bool: out << "bvec"; break;
 		case ASTType::Int32: out << "ivec"; break;
+		case ASTType::UInt32: out << "uvec"; break;
 		case ASTType::Float16: out << "mediump vec"; break;
 		case ASTType::Float32: out << "vec"; break;
 		}
@@ -636,6 +639,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 		{
 		case ASTType::Bool: out << "bmat"; break;
 		case ASTType::Int32: out << "imat"; break;
+		case ASTType::UInt32: out << "umat"; break;
 		case ASTType::Float16: out << "mediump mat"; break;
 		case ASTType::Float32: out << "mat"; break;
 		}
@@ -728,6 +732,13 @@ void GLSLGenerator::Generate()
 void GenerateHLSL_SM3(const AST& ast, OutStream& out)
 {
 	HLSLGenerator gen(ast, out);
+	gen.Generate();
+}
+
+void GenerateHLSL_SM4(const AST& ast, OutStream& out)
+{
+	HLSLGenerator gen(ast, out);
+	gen.shaderFormat = OSF_HLSL_SM4;
 	gen.Generate();
 }
 

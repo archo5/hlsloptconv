@@ -1,7 +1,12 @@
 
 #include <windows.h>
 #include <d3d9.h>
-#include <d3dx9.h>
+#if USE_D3DXCOMPILESHADER
+#  include <d3dx9.h>
+#  pragma comment(lib, "d3dx9.lib")
+#endif
+#include <d3d11.h>
+#include <d3dcompiler.h>
 
 #include "../compiler.hpp"
 
@@ -9,6 +14,8 @@
 #define WINDOW_HEIGHT (16+360+16+360)
 #define PART_WIDTH 640
 #define PART_HEIGHT 360
+
+const char* SHADER_NAME = "runtests/html5-shader.hlsl";
 
 HINSTANCE g_HInstance = nullptr;
 HWND g_MainWindow = nullptr;
@@ -129,6 +136,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 		SetBkColor(hdc, RGB(0,0,0));
 		SetTextColor(hdc, RGB(200,200,200));
 		TextOut(hdc, 0, 0, STRLIT_SIZE("Direct3D 9"));
+		TextOut(hdc, PART_WIDTH, 0, STRLIT_SIZE("Direct3D 11"));
 		EndPaint(window, &ps);
 		return 0L;
 	}
@@ -145,6 +153,7 @@ LRESULT CALLBACK SubWindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 	return DefWindowProc(window, msg, wp, lp);
 }
 
+
 void _Check_Succeeded(HRESULT hr, const char* code, int line)
 {
 	if (FAILED(hr))
@@ -155,13 +164,14 @@ void _Check_Succeeded(HRESULT hr, const char* code, int line)
 }
 #define CHK(x) _Check_Succeeded(x, #x, __LINE__)
 
+
 namespace D3D9
 {
-	HWND apiWin = nullptr;
-	IDirect3D9* d3d = nullptr;
-	IDirect3DDevice9* dev = nullptr;
-	IDirect3DVertexShader9* vs = nullptr;
-	IDirect3DPixelShader9* ps = nullptr;
+	HWND                    apiWin = nullptr;
+	IDirect3D9*             d3d    = nullptr;
+	IDirect3DDevice9*       dev    = nullptr;
+	IDirect3DVertexShader9* vs     = nullptr;
+	IDirect3DPixelShader9*  ps     = nullptr;
 
 	void CompileShader(bool pixelShader)
 	{
@@ -171,31 +181,39 @@ namespace D3D9
 		compiler.errorOutputStream = &errStream;
 		compiler.codeOutputStream = &codeStream;
 		compiler.outputFmt = OSF_HLSL_SM3;
-		compiler.stage = ShaderStage_Vertex;
+		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D9", "1" }, { nullptr, nullptr } };
 		compiler.defines = macros;
-		std::string inCode = GetFileContents("runtests/html5-shader.hlsl", true);
-		if (!compiler.CompileFile("runtests/html5-shader.hlsl", inCode.c_str()))
+		std::string inCode = GetFileContents(SHADER_NAME, true);
+		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
 		}
+#if USE_D3DXCOMPILESHADER
 		ID3DXBuffer* codeBuf = nullptr;
 		ID3DXBuffer* errBuf = nullptr;
 	//	puts(codeStream.str().c_str());
 		D3DXCompileShader(codeStream.str().c_str(), codeStream.str().size(), nullptr, nullptr,
 	//	D3DXMACRO xmacros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D9", "1" }, { nullptr, nullptr } };
 	//	D3DXCompileShader(inCode.c_str(), inCode.size(), xmacros, nullptr,
-			"main", pixelShader ? "ps_3_0" : "vs_3_0", D3DXSHADER_SKIPOPTIMIZATION, &codeBuf, &errBuf, nullptr);
+			"main", pixelShader ? "ps_3_0" : "vs_3_0",
+			/* slow otherwise: */ D3DXSHADER_SKIPOPTIMIZATION, &codeBuf, &errBuf, nullptr);
+#else
+		ID3DBlob* codeBuf = nullptr;
+		ID3DBlob* errBuf = nullptr;
+		D3DCompile(codeStream.str().c_str(), codeStream.str().size(), SHADER_NAME, nullptr, nullptr,
+			"main", pixelShader ? "ps_3_0" : "vs_3_0", 0, 0, &codeBuf, &errBuf);
+#endif
 		if (errBuf)
 		{
-			fprintf(stderr, "D3DXCompileShader failed, errors:\n%.*s\n",
+			fprintf(stderr, "D3D9 shader compilation failed, errors:\n%.*s\n",
 				int(errBuf->GetBufferSize()), (const char*) errBuf->GetBufferPointer());
 			errBuf->Release();
 		}
 		if (!codeBuf)
 		{
-			fprintf(stderr, "D3DXCompileShader failed, no output generated\n");
+			fprintf(stderr, "D3D9 shader compilation failed, no output generated\n");
 			exit(1);
 		}
 		if (pixelShader)
@@ -207,6 +225,7 @@ namespace D3D9
 
 	void Init()
 	{
+		printf("[%f] D3D9: init\n", GetTime());
 		apiWin = CreateWindowA("SubWindowClass", "Direct3D 9", WS_CHILD | WS_VISIBLE,
 			0, 16, PART_WIDTH, PART_HEIGHT, g_MainWindow, nullptr, g_HInstance, nullptr);
 
@@ -223,17 +242,21 @@ namespace D3D9
 		CHK(d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, apiWin,
 			D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &dev));
 
+		printf("[%f] D3D9: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
+		printf("[%f] D3D9: init done\n", GetTime());
 	}
 
 	void Free()
 	{
+		printf("[%f] D3D9: cleanup\n", GetTime());
 		ps->Release();
 		vs->Release();
 		dev->Release();
 		d3d->Release();
 		DestroyWindow(apiWin);
+		printf("[%f] D3D9: cleanup done\n", GetTime());
 	}
 
 	void Render(float mtx[16])
@@ -264,6 +287,155 @@ namespace D3D9
 		dev->Present(nullptr, nullptr, nullptr, nullptr);
 	}
 }
+
+namespace D3D11
+{
+	HWND                     apiWin      = nullptr;
+	ID3D11Device*            dev         = nullptr;
+	ID3D11DeviceContext*     ctx         = nullptr;
+	IDXGISwapChain*          swapChain   = nullptr;
+	ID3D11RenderTargetView*  backBufRTV  = nullptr;
+	ID3D11RasterizerState*   rasterState = nullptr;
+	ID3D11BlendState*        blendState  = nullptr;
+	ID3D11DepthStencilState* dsState     = nullptr;
+	ID3D11VertexShader*      vs          = nullptr;
+	ID3D11PixelShader*       ps          = nullptr;
+
+	void CompileShader(bool pixelShader)
+	{
+		Compiler compiler;
+		FILEStream errStream(stderr);
+		StringStream codeStream;
+		compiler.errorOutputStream = &errStream;
+		compiler.codeOutputStream = &codeStream;
+		compiler.outputFmt = OSF_HLSL_SM4;
+		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D11", "1" }, { nullptr, nullptr } };
+		compiler.defines = macros;
+		std::string inCode = GetFileContents(SHADER_NAME, true);
+		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		{
+			fprintf(stderr, "compilation failed, no output generated\n");
+			exit(1);
+		}
+		ID3DBlob* codeBuf = nullptr;
+		ID3DBlob* errBuf = nullptr;
+		D3DCompile(codeStream.str().c_str(), codeStream.str().size(), SHADER_NAME, nullptr, nullptr,
+			"main", pixelShader ? "ps_4_0" : "vs_4_0", 0, 0, &codeBuf, &errBuf);
+		if (errBuf)
+		{
+			fprintf(stderr, "D3D11 shader compilation failed, errors:\n%.*s\n",
+				int(errBuf->GetBufferSize()), (const char*) errBuf->GetBufferPointer());
+			errBuf->Release();
+		}
+		if (!codeBuf)
+		{
+			fprintf(stderr, "D3D11 shader compilation failed, no output generated\n");
+			exit(1);
+		}
+		if (pixelShader)
+			CHK(dev->CreatePixelShader((const DWORD*) codeBuf->GetBufferPointer(),
+				codeBuf->GetBufferSize(), nullptr, &ps));
+		else
+			CHK(dev->CreateVertexShader((const DWORD*) codeBuf->GetBufferPointer(),
+				codeBuf->GetBufferSize(), nullptr, &vs));
+		codeBuf->Release();
+	}
+
+	void Init()
+	{
+		printf("[%f] D3D11: init\n", GetTime());
+		apiWin = CreateWindowA("SubWindowClass", "Direct3D 11", WS_CHILD | WS_VISIBLE,
+			PART_WIDTH, 16, PART_WIDTH, PART_HEIGHT, g_MainWindow, nullptr, g_HInstance, nullptr);
+
+		DXGI_SWAP_CHAIN_DESC scd;
+		memset(&scd, 0, sizeof(scd));
+		scd.BufferDesc.Width = PART_WIDTH;
+		scd.BufferDesc.Height = PART_HEIGHT;
+		scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		scd.BufferDesc.RefreshRate.Numerator = 60;
+		scd.BufferDesc.RefreshRate.Denominator = 1;
+		scd.SampleDesc.Count = 1;
+		scd.SampleDesc.Quality = 0;
+		scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		scd.BufferCount = 2;
+		scd.OutputWindow = apiWin;
+		scd.Windowed = TRUE;
+		scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+		D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_10_0 };
+		CHK(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+			D3D11_CREATE_DEVICE_DEBUG, featureLevels, 1, D3D11_SDK_VERSION, &scd, &swapChain, &dev, nullptr, &ctx));
+
+		ID3D11Texture2D* backBuf;
+		D3D11_RENDER_TARGET_VIEW_DESC rtvd;
+		memset(&rtvd, 0, sizeof(rtvd));
+		rtvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		rtvd.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		CHK(swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backBuf));
+		CHK(dev->CreateRenderTargetView(backBuf, &rtvd, &backBufRTV));
+		backBuf->Release();
+
+		D3D11_RASTERIZER_DESC rd;
+		memset(&rd, 0, sizeof(rd));
+		rd.FillMode = D3D11_FILL_SOLID;
+		rd.CullMode = D3D11_CULL_NONE;
+		CHK(dev->CreateRasterizerState(&rd, &rasterState));
+
+		D3D11_DEPTH_STENCIL_DESC dsd;
+		memset(&dsd, 0, sizeof(dsd));
+		dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+		dsd.DepthFunc = D3D11_COMPARISON_ALWAYS;
+		CHK(dev->CreateDepthStencilState(&dsd, &dsState));
+
+		D3D11_BLEND_DESC bd;
+		memset(&bd, 0, sizeof(bd));
+		bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		CHK(dev->CreateBlendState(&bd, &blendState));
+
+		printf("[%f] D3D11: compiling shaders\n", GetTime());
+		CompileShader(false);
+		CompileShader(true);
+		printf("[%f] D3D11: init done\n", GetTime());
+	}
+
+	void Free()
+	{
+		printf("[%f] D3D11: cleanup\n", GetTime());
+		ps->Release();
+		vs->Release();
+		backBufRTV->Release();
+		swapChain->Release();
+		ctx->Release();
+		dev->Release();
+		printf("[%f] D3D11: cleanup done\n", GetTime());
+	}
+
+	void Render(float mtx[16])
+	{
+		float col[4] = { 10/255.0f, 20/255.0f, 180/255.0f, 1.0f };
+		ctx->ClearRenderTargetView(backBufRTV, col);
+
+		D3D11_VIEWPORT vp;
+		memset(&vp, 0, sizeof(vp));
+		vp.Width = PART_WIDTH;
+		vp.Height = PART_HEIGHT;
+		vp.MaxDepth = 1;
+		ctx->RSSetViewports(1, &vp);
+		ctx->VSSetShader(vs, nullptr, 0);
+		ctx->PSSetShader(ps, nullptr, 0);
+		ctx->IASetInputLayout(nullptr);
+		ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		ctx->RSSetState(rasterState);
+		ctx->OMSetRenderTargets(1, &backBufRTV, nullptr);
+		ctx->OMSetDepthStencilState(dsState, 0);
+		ctx->OMSetBlendState(blendState, nullptr, 0xffffffff);
+		ctx->Draw(3, 0);
+
+		swapChain->Present(1, 0);
+	}
+}
+
 
 int main()
 {
@@ -305,6 +477,7 @@ int main()
 		nullptr, nullptr, g_HInstance, nullptr);
 
 	D3D9::Init();
+	D3D11::Init();
 
 	float t = 0;
 	double curTime = GetTime();
@@ -328,9 +501,11 @@ int main()
 		float mtx[16];
 		LookAtMatrixInv(V3(sin(t) * 10, cos(t) * 10, 4), V3(0,0,0), V3(0,0,1), mtx);
 		D3D9::Render(mtx);
+		D3D11::Render(mtx);
 	}
 
 	D3D9::Free();
+	D3D11::Free();
 
 	DestroyWindow(g_MainWindow);
 	return 0;

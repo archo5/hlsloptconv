@@ -19,6 +19,7 @@ unsigned ASTType::GetElementCount() const
 	{
 	case Bool:
 	case Int32:
+	case UInt32:
 	case Float16:
 	case Float32:
 		return 1;
@@ -35,6 +36,7 @@ unsigned ASTType::GetAccessPointCount() const
 	{
 	case Bool:
 	case Int32:
+	case UInt32:
 	case Float16:
 	case Float32: return 1;
 	case Vector: return sizeX;
@@ -51,6 +53,7 @@ ASTType::SubTypeCount ASTType::CountSubTypes() const
 	{
 	case Bool:
 	case Int32:
+	case UInt32:
 	case Float16:
 	case Float32:
 	case Vector:
@@ -86,6 +89,7 @@ void ASTType::GetMangling(std::string& out) const
 	case Void:    out += "v"; break;
 	case Bool:    out += "b"; break;
 	case Int32:   out += "i"; break;
+	case UInt32:  out += "u"; break;
 	case Float16: out += "p"; break;
 	case Float32: out += "f"; break;
 	case Vector:
@@ -139,6 +143,7 @@ void ASTType::Dump(OutStream& out) const
 	case Void:        out << "void"; break;
 	case Bool:        out << "bool"; break;
 	case Int32:       out << "int"; break;
+	case UInt32:      out << "uint"; break;
 	case Float16:     out << "half"; break;
 	case Float32:     out << "float"; break;
 	case Vector:      subType->Dump(out); out << gVecNumbers[sizeX - 1]; break;
@@ -160,6 +165,7 @@ std::string ASTType::GetName() const
 	case Void:        return "void";
 	case Bool:        return "bool";
 	case Int32:       return "int";
+	case UInt32:      return "uint";
 	case Float16:     return "half";
 	case Float32:     return "float";
 	case Vector:      return subType->GetName() + gVecNumbers[sizeX - 1];
@@ -915,6 +921,7 @@ TypeSystem::TypeSystem() :
 	typeSamplerCUBEDef (ASTType::SamplerCUBE),
 	typeBoolDef        (ASTType::Bool       ),
 	typeInt32Def       (ASTType::Int32      ),
+	typeUInt32Def      (ASTType::UInt32     ),
 	typeFloat16Def     (ASTType::Float16    ),
 	typeFloat32Def     (ASTType::Float32    )
 {
@@ -940,12 +947,12 @@ void TypeSystem::InitBasicTypes()
 	typeNameMap["sampler3D"]   = GetSampler3DType();
 	typeNameMap["samplerCUBE"] = GetSamplerCUBEType();
 
-	const char* typeNames[4]  = { "bool", "int", "half", "float" };
-	ASTType* baseTypes[4]     = { GetBoolType(), GetInt32Type(), GetFloat16Type(), GetFloat32Type() };
-	ASTType* vecTypeArrays[4] = { typeBoolVecDefs, typeInt32VecDefs, typeFloat16VecDefs, typeFloat32VecDefs };
-	ASTType* mtxTypeArrays[4] = { typeBoolMtxDefs, typeInt32MtxDefs, typeFloat16MtxDefs, typeFloat32MtxDefs };
+	const char* typeNames[5]  = { "bool", "int", "uint", "half", "float" };
+	ASTType* baseTypes[5]     = { GetBoolType(), GetInt32Type(), GetUInt32Type(), GetFloat16Type(), GetFloat32Type() };
+	ASTType* vecTypeArrays[5] = { typeBoolVecDefs, typeInt32VecDefs, typeUInt32VecDefs, typeFloat16VecDefs, typeFloat32VecDefs };
+	ASTType* mtxTypeArrays[5] = { typeBoolMtxDefs, typeInt32MtxDefs, typeUInt32MtxDefs, typeFloat16MtxDefs, typeFloat32MtxDefs };
 	char bfr[32];
-	for (int t = 0; t < 4; ++t)
+	for (int t = 0; t < 5; ++t)
 	{
 		ASTType* baseType = baseTypes[t];
 		typeNameMap[typeNames[t]] = baseType;
@@ -977,6 +984,7 @@ ASTType* TypeSystem::CastToBool(ASTType* t)
 	{
 	case ASTType::Bool:
 	case ASTType::Int32:
+	case ASTType::UInt32:
 	case ASTType::Float16:
 	case ASTType::Float32: return GetBoolType();
 	case ASTType::Vector:  return &typeBoolVecDefs[t->sizeX - 1];
@@ -991,6 +999,7 @@ ASTType* TypeSystem::CastToInt(ASTType* t)
 	{
 	case ASTType::Bool:
 	case ASTType::Int32:
+	case ASTType::UInt32:
 	case ASTType::Float16:
 	case ASTType::Float32: return GetInt32Type();
 	case ASTType::Vector:  return &typeInt32VecDefs[t->sizeX - 1];
@@ -1004,7 +1013,8 @@ ASTType* TypeSystem::CastToFloat(ASTType* t)
 	switch (t->kind)
 	{
 	case ASTType::Bool:
-	case ASTType::Int32:   return GetFloat32Type();
+	case ASTType::Int32:
+	case ASTType::UInt32:  return GetFloat32Type();
 	case ASTType::Float16:
 	case ASTType::Float32: return t;
 	case ASTType::Vector:
@@ -1023,6 +1033,7 @@ ASTType* TypeSystem::CastToScalar(ASTType* t)
 	{
 	case ASTType::Bool:
 	case ASTType::Int32:
+	case ASTType::UInt32:
 	case ASTType::Float16:
 	case ASTType::Float32: return t;
 	case ASTType::Vector:
@@ -1039,6 +1050,7 @@ ASTType* TypeSystem::CastToVector(ASTType* t, int size)
 	{
 	case ASTType::Bool:    return &typeBoolVecDefs   [size - 1];
 	case ASTType::Int32:   return &typeInt32VecDefs  [size - 1];
+	case ASTType::UInt32:  return &typeUInt32VecDefs [size - 1];
 	case ASTType::Float32: return &typeFloat32VecDefs[size - 1];
 	case ASTType::Float16: return &typeFloat16VecDefs[size - 1];
 	case ASTType::Vector:  return t;
@@ -1054,6 +1066,7 @@ ASTType* TypeSystem::GetVectorType(ASTType* t, int size)
 	{
 	case ASTType::Bool:    return &typeBoolVecDefs   [size - 1];
 	case ASTType::Int32:   return &typeInt32VecDefs  [size - 1];
+	case ASTType::UInt32:  return &typeUInt32VecDefs [size - 1];
 	case ASTType::Float32: return &typeFloat32VecDefs[size - 1];
 	case ASTType::Float16: return &typeFloat16VecDefs[size - 1];
 	default: return nullptr;
@@ -1749,6 +1762,7 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 		// ...
 	case ASTType::Bool:
 	case ASTType::Int32:
+	case ASTType::UInt32:
 	case ASTType::Float16:
 	case ASTType::Float32:
 		if (elementsWritten[from] == 0)
@@ -1810,6 +1824,40 @@ void VariableAccessValidator::ValidateCheckVariableError(const std::string& varn
 	diag.EmitError("variable '" + varname + "' used before sufficient initialization", Location::BAD());
 }
 
+
+static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, OutputShaderFormat shaderFormat)
+{
+	if (out && stage == ShaderStage_Pixel && shaderFormat == OSF_HLSL_SM4 && sem == "COLOR")
+	{
+		sem = "SV_TARGET";
+	}
+	if (out && stage == ShaderStage_Vertex && shaderFormat == OSF_HLSL_SM4 && sem == "POSITION")
+	{
+		sem = "SV_POSITION";
+	}
+}
+
+static void HLSLAdjustEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
+{
+	for (const auto& fgdef : ast.functions)
+	{
+		for (const auto& fdef : fgdef.second)
+		{
+			ASTFunction* F = fdef.second;
+			if (F->isEntryPoint)
+			{
+				// extract return value
+				if (F->GetReturnType()->IsVoid() == false)
+					HLSLAdjustSemantic(F->returnSemanticName, true, stage, shaderFormat);
+				for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
+				{
+					auto* vd = arg->ToVarDecl();
+					HLSLAdjustSemantic(vd->semanticName, !!(vd->flags & VarDecl::ATTR_Out), stage, shaderFormat);
+				}
+			}
+		}
+	}
+}
 
 
 static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat shaderFormat)
@@ -2455,6 +2503,7 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 	{
 	case ASTType::Bool:
 	case ASTType::Int32:
+	case ASTType::UInt32:
 	case ASTType::Float16:
 	case ASTType::Float32:
 	case ASTType::Sampler1D:
@@ -2674,7 +2723,8 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 							switch (srcTy->kind)
 							{
 							case ASTType::Bool: CastExprTo(binop->GetLft(), ast.GetInt32Type()); // ...
-							case ASTType::Int32: cnst = new Int32Expr(0, srcTy); break;
+							case ASTType::Int32:
+							case ASTType::UInt32: cnst = new Int32Expr(0, srcTy); break;
 							case ASTType::Float16:
 							case ASTType::Float32: cnst = new Float32Expr(0, srcTy); break;
 							}
@@ -3003,6 +3053,10 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		// output-specific transformations (emulation/feature mapping)
 		switch (outputFmt)
 		{
+		case OSF_HLSL_SM3:
+		case OSF_HLSL_SM4:
+			HLSLAdjustEntryPoint(p.ast, stage, outputFmt);
+			break;
 		case OSF_GLSL_140:
 		case OSF_GLSL_ES_100:
 			UnpackMatrixSwizzle(p.ast);
@@ -3033,6 +3087,9 @@ bool Compiler::CompileFile(const char* name, const char* code)
 			{
 			case OSF_HLSL_SM3:
 				GenerateHLSL_SM3(p.ast, *codeOutputStream);
+				break;
+			case OSF_HLSL_SM4:
+				GenerateHLSL_SM4(p.ast, *codeOutputStream);
 				break;
 			case OSF_GLSL_140:
 				GenerateGLSL_140(p.ast, *codeOutputStream);

@@ -110,6 +110,7 @@ struct ASTType
 		Void,
 		Bool,
 		Int32,
+		UInt32,
 		Float16,
 		Float32,
 		Vector,
@@ -155,9 +156,9 @@ struct ASTType
 	bool IsVoid() const { return kind == Void; }
 	bool IsSampler() const { return kind == Sampler1D || kind == Sampler2D || kind == Sampler3D || kind == SamplerCUBE; }
 	bool IsFloat() const { return kind == Float16 || kind == Float32; }
-	bool IsNumber() const { return kind == Int32 || kind == Float16 || kind == Float32; }
+	bool IsNumber() const { return kind == Int32 || kind == UInt32 || kind == Float16 || kind == Float32; }
 	bool IsBoolBased() const { return kind == Bool || ((kind == Vector || kind == Matrix) && subType->kind == Bool); }
-	bool IsIntBased() const { return kind == Int32 || ((kind == Vector || kind == Matrix) && subType->kind == Int32); }
+	bool IsIntBased() const { return kind == Int32 || kind == UInt32 || ((kind == Vector || kind == Matrix) && (subType->kind == Int32 || subType->kind == UInt32)); }
 	bool IsFloatBased() const { return kind == Float16 || kind == Float32
 		|| ((kind == Vector || kind == Matrix) && (subType->kind == Float16 || subType->kind == Float32)); }
 	bool IsNumeric() const { return kind == Bool || IsNumber(); }
@@ -637,14 +638,17 @@ struct TypeSystem
 	ASTType* GetSamplerCUBEType() { return &typeSamplerCUBEDef; }
 	ASTType* GetBoolType()        { return &typeBoolDef; }
 	ASTType* GetInt32Type()       { return &typeInt32Def; }
+	ASTType* GetUInt32Type()      { return &typeUInt32Def; }
 	ASTType* GetFloat16Type()     { return &typeFloat16Def; }
 	ASTType* GetFloat32Type()     { return &typeFloat32Def; }
 	ASTType* GetBoolVecType   (int size ) { return &typeBoolVecDefs   [size - 1]; }
 	ASTType* GetInt32VecType  (int size ) { return &typeInt32VecDefs  [size - 1]; }
+	ASTType* GetUInt32VecType (int size ) { return &typeUInt32VecDefs [size - 1]; }
 	ASTType* GetFloat16VecType(int size ) { return &typeFloat16VecDefs[size - 1]; }
 	ASTType* GetFloat32VecType(int size ) { return &typeFloat32VecDefs[size - 1]; }
 	ASTType* GetBoolMtxType   (int sizeX, int sizeY) { return &typeBoolMtxDefs   [(sizeX - 1) + (sizeY - 1) * 4]; }
 	ASTType* GetInt32MtxType  (int sizeX, int sizeY) { return &typeInt32MtxDefs  [(sizeX - 1) + (sizeY - 1) * 4]; }
+	ASTType* GetUInt32MtxType (int sizeX, int sizeY) { return &typeUInt32MtxDefs [(sizeX - 1) + (sizeY - 1) * 4]; }
 	ASTType* GetFloat16MtxType(int sizeX, int sizeY) { return &typeFloat16MtxDefs[(sizeX - 1) + (sizeY - 1) * 4]; }
 	ASTType* GetFloat32MtxType(int sizeX, int sizeY) { return &typeFloat32MtxDefs[(sizeX - 1) + (sizeY - 1) * 4]; }
 	
@@ -656,14 +660,17 @@ struct TypeSystem
 	ASTType typeSamplerCUBEDef;
 	ASTType typeBoolDef;
 	ASTType typeInt32Def;
+	ASTType typeUInt32Def;
 	ASTType typeFloat16Def;
 	ASTType typeFloat32Def;
 	ASTType typeBoolVecDefs   [4];
 	ASTType typeInt32VecDefs  [4];
+	ASTType typeUInt32VecDefs [4];
 	ASTType typeFloat16VecDefs[4];
 	ASTType typeFloat32VecDefs[4];
 	ASTType typeBoolMtxDefs   [16];
 	ASTType typeInt32MtxDefs  [16];
+	ASTType typeUInt32MtxDefs [16];
 	ASTType typeFloat16MtxDefs[16];
 	ASTType typeFloat32MtxDefs[16];
 };
@@ -815,6 +822,7 @@ struct VariableAccessValidator
 enum OutputShaderFormat
 {
 	OSF_HLSL_SM3,
+	OSF_HLSL_SM4,
 	OSF_GLSL_140,
 	OSF_GLSL_ES_100,
 };
@@ -862,6 +870,7 @@ struct RemoveUnusedVariables : ASTWalker<RemoveUnusedVariables>
 
 // generator.cpp
 void GenerateHLSL_SM3(const AST& ast, OutStream& out);
+void GenerateHLSL_SM4(const AST& ast, OutStream& out);
 void GenerateGLSL_140(const AST& ast, OutStream& out);
 void GenerateGLSL_ES_100(const AST& ast, OutStream& out);
 

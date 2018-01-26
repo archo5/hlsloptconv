@@ -2,7 +2,7 @@
 
 #### What is it?
 
-This compiler takes HLSL 3.0 shader code and converts it to one of the following output formats:
+This compiler takes HLSL 3.0/4.0 shader code and converts it to one of the following output formats:
 
 * HLSL 3.0
 * GLSL 1.40
