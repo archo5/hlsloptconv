@@ -74,9 +74,13 @@ float3 extendBehind(float3 p, float3 n, float d)
 	return p + n * -behind;
 }
 
+float2 mod(float2 x, float2 y)
+{
+	return x - y * floor(x/y);
+}
 float3 xymod(float3 p, float m)
 {
-	p.xy = p.xy % m - 0.5 * m;
+	p.xy = mod(p.xy, m) - 0.5 * m;
 	return p;
 }
 

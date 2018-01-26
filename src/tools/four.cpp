@@ -5,22 +5,132 @@
 
 #include "../compiler.hpp"
 
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 960
+#define WINDOW_WIDTH (640+640)
+#define WINDOW_HEIGHT (16+360+16+360)
 #define PART_WIDTH 640
-#define PART_HEIGHT 480
+#define PART_HEIGHT 360
 
 HINSTANCE g_HInstance = nullptr;
 HWND g_MainWindow = nullptr;
 HFONT g_Font = nullptr;
 
+
+#ifndef FORCEINLINE
+#ifdef _MSC_VER
+#define FORCEINLINE __forceinline
+#else
+#define FORCEINLINE inline __attribute__((__always_inline__))
+#endif
+#endif
+
+#define SMALL_FLOAT 0.001f
+
+struct Vec3
+{
+	float x, y, z;
+
+	FORCEINLINE Vec3 operator + () const { return *this; }
+	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
+
+	FORCEINLINE Vec3 operator + ( const Vec3& o ) const { Vec3 v = { x + o.x, y + o.y, z + o.z }; return v; }
+	FORCEINLINE Vec3 operator - ( const Vec3& o ) const { Vec3 v = { x - o.x, y - o.y, z - o.z }; return v; }
+	FORCEINLINE Vec3 operator * ( const Vec3& o ) const { Vec3 v = { x * o.x, y * o.y, z * o.z }; return v; }
+	FORCEINLINE Vec3 operator / ( const Vec3& o ) const { Vec3 v = { x / o.x, y / o.y, z / o.z }; return v; }
+
+	FORCEINLINE Vec3 operator + ( float f ) const { Vec3 v = { x + f, y + f, z + f }; return v; }
+	FORCEINLINE Vec3 operator - ( float f ) const { Vec3 v = { x - f, y - f, z - f }; return v; }
+	FORCEINLINE Vec3 operator * ( float f ) const { Vec3 v = { x * f, y * f, z * f }; return v; }
+	FORCEINLINE Vec3 operator / ( float f ) const { Vec3 v = { x / f, y / f, z / f }; return v; }
+
+	FORCEINLINE Vec3& operator += ( const Vec3& o ){ x += o.x; y += o.y; z += o.z; return *this; }
+	FORCEINLINE Vec3& operator -= ( const Vec3& o ){ x -= o.x; y -= o.y; z -= o.z; return *this; }
+	FORCEINLINE Vec3& operator *= ( const Vec3& o ){ x *= o.x; y *= o.y; z *= o.z; return *this; }
+	FORCEINLINE Vec3& operator /= ( const Vec3& o ){ x /= o.x; y /= o.y; z /= o.z; return *this; }
+
+	FORCEINLINE Vec3& operator += ( float f ){ x += f; y += f; z += f; return *this; }
+	FORCEINLINE Vec3& operator -= ( float f ){ x -= f; y -= f; z -= f; return *this; }
+	FORCEINLINE Vec3& operator *= ( float f ){ x *= f; y *= f; z *= f; return *this; }
+	FORCEINLINE Vec3& operator /= ( float f ){ x /= f; y /= f; z /= f; return *this; }
+
+	FORCEINLINE bool operator == ( const Vec3& o ) const { return x == o.x && y == o.y && z == o.z; }
+	FORCEINLINE bool operator != ( const Vec3& o ) const { return x != o.x || y != o.y || z != o.z; }
+
+	FORCEINLINE bool IsZero() const { return x == 0 && y == 0 && z == 0; }
+	FORCEINLINE bool NearZero() const { return fabs(x) < SMALL_FLOAT && fabs(y) < SMALL_FLOAT && fabs(z) < SMALL_FLOAT; }
+	FORCEINLINE float LengthSq() const { return x * x + y * y + z * z; }
+	FORCEINLINE float Length() const { return sqrtf( LengthSq() ); }
+	FORCEINLINE Vec3 Normalized() const
+	{
+		float lensq = LengthSq();
+		if( lensq == 0 )
+		{
+			Vec3 v = { 0, 0, 0 };
+			return v;
+		}
+		float invlen = 1.0f / sqrtf( lensq );
+		Vec3 v = { x * invlen, y * invlen, z * invlen };
+		return v;
+	}
+
+	void Dump( FILE* f ) const
+	{
+		fprintf( f, "Vec3 ( %.2f %.2f %.2f )\n", x, y, z );
+	}
+};
+
+FORCEINLINE Vec3 operator + ( float f, const Vec3& v ){ Vec3 out = { f + v.x, f + v.y, f + v.z }; return out; }
+FORCEINLINE Vec3 operator - ( float f, const Vec3& v ){ Vec3 out = { f - v.x, f - v.y, f - v.z }; return out; }
+FORCEINLINE Vec3 operator * ( float f, const Vec3& v ){ Vec3 out = { f * v.x, f * v.y, f * v.z }; return out; }
+FORCEINLINE Vec3 operator / ( float f, const Vec3& v ){ Vec3 out = { f / v.x, f / v.y, f / v.z }; return out; }
+
+static FORCEINLINE Vec3 V3( float x ){ Vec3 o = { x, x, x }; return o; }
+static FORCEINLINE Vec3 V3( float x, float y, float z ){ Vec3 o = { x, y, z }; return o; }
+static FORCEINLINE Vec3 V3P( const float* x ){ Vec3 o = { x[0], x[1], x[2] }; return o; }
+
+FORCEINLINE float Vec3Dot( const Vec3& v1, const Vec3& v2 ){ return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
+FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
+{
+	Vec3 out =
+	{
+		v1.y * v2.z - v1.z * v2.y,
+		v1.z * v2.x - v1.x * v2.z,
+		v1.x * v2.y - v1.y * v2.x,
+	};
+	return out;
+}
+
+void LookAtMatrixInv(Vec3 eye, Vec3 at, Vec3 up, float outMtx[16])
+{
+	Vec3 zaxis = (eye - at).Normalized();
+	Vec3 xaxis = Vec3Cross(zaxis, up).Normalized();
+	Vec3 yaxis = Vec3Cross(xaxis, zaxis);
+
+	outMtx[0] = xaxis.x; outMtx[1] = yaxis.x; outMtx[2] = zaxis.x; outMtx[3] = eye.x;
+	outMtx[4] = xaxis.y; outMtx[5] = yaxis.y; outMtx[6] = zaxis.y; outMtx[7] = eye.y;
+	outMtx[8] = xaxis.z; outMtx[9] = yaxis.z; outMtx[10] = zaxis.z; outMtx[11] = eye.z;
+	outMtx[12] = outMtx[13] = outMtx[14] = 0; outMtx[15] = 1;
+}
+
+
 LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
+	PAINTSTRUCT ps;
+	HDC hdc;
+
 	switch (msg)
 	{
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
+	case WM_PAINT:
+		hdc = BeginPaint(window, &ps);
+		SelectObject(hdc, g_Font);
+		SetBkMode(hdc, TRANSPARENT);
+		SetBkColor(hdc, RGB(0,0,0));
+		SetTextColor(hdc, RGB(200,200,200));
+		TextOut(hdc, 0, 0, STRLIT_SIZE("Direct3D 9"));
+		EndPaint(window, &ps);
+		return 0L;
 	}
 
 	return DefWindowProc(window, msg, wp, lp);
@@ -28,21 +138,8 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 
 LRESULT CALLBACK SubWindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
-	PAINTSTRUCT ps;
-	HDC hdc;
-	char text[32];
-
 	switch (msg)
 	{
-	case WM_PAINT:
-		hdc = BeginPaint(window, &ps);
-		SelectObject(hdc, g_Font);
-		SetBkMode(hdc, TRANSPARENT);
-		SetBkColor(hdc, RGB(0,0,0));
-		SetTextColor(hdc, RGB(200,200,200));
-		TextOut(hdc, 0, 0, text, GetWindowText(window, text, 32));
-		EndPaint(window, &ps);
-		return 0L;
 	}
 
 	return DefWindowProc(window, msg, wp, lp);
@@ -111,7 +208,7 @@ namespace D3D9
 	void Init()
 	{
 		apiWin = CreateWindowA("SubWindowClass", "Direct3D 9", WS_CHILD | WS_VISIBLE,
-			0, 0, PART_WIDTH, PART_HEIGHT, g_MainWindow, nullptr, g_HInstance, nullptr);
+			0, 16, PART_WIDTH, PART_HEIGHT, g_MainWindow, nullptr, g_HInstance, nullptr);
 
 		d3d = Direct3DCreate9(D3D_SDK_VERSION);
 		D3DPRESENT_PARAMETERS pp;
@@ -139,7 +236,7 @@ namespace D3D9
 		DestroyWindow(apiWin);
 	}
 
-	void Render()
+	void Render(float mtx[16])
 	{
 		dev->SetRenderState(D3DRS_LIGHTING, FALSE);
 		dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -148,15 +245,9 @@ namespace D3D9
 		dev->SetVertexShader(vs);
 		dev->SetPixelShader(ps);
 		float reso[4] = { PART_WIDTH, PART_HEIGHT, 0, 0 };
-		float mtx[16] = {
-		//	1, 0, 0, -10,
-		//	0, 1, 0, -10,
-		//	0, 0, 1, 10,
-		//	0, 0, 0, 1,
-			-0.7991666718346001, 0.22324646365622025, -0.5581161591405507, -6.011094996993548, 0.6011094996993547, 0.2968030507723102, -0.7420076269307755, -7.991666718346001, 0, 0.9284766908852593, 0.3713906763541037, 4, 0, 0, 0, 1
-		};
-	//	for(int i = 0; i < 3; ++i) for(int j = i; j < 3; ++j){
-	//		float t = mtx[i*4+j]; mtx[i*4+j] = mtx[j*4+i]; mtx[j*4+i] = t; }
+	//	float mtx[16] = {
+	//		-0.7991666718346001, 0.22324646365622025, -0.5581161591405507, -6.011094996993548, 0.6011094996993547, 0.2968030507723102, -0.7420076269307755, -7.991666718346001, 0, 0.9284766908852593, 0.3713906763541037, 4, 0, 0, 0, 1
+	//	};
 		dev->SetVertexShaderConstantF(0, reso, 1);
 		dev->SetPixelShaderConstantF(0, mtx, 4);
 		dev->SetPixelShaderConstantF(3, reso, 1);
@@ -206,11 +297,17 @@ int main()
 	strcpy(lf.lfFaceName, "Tahoma");
 	g_Font = CreateFontIndirect(&lf);
 
-	g_MainWindow = CreateWindowA("MainWindowClass", "Four APIs", WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-		CW_USEDEFAULT, CW_USEDEFAULT, WINDOW_WIDTH, WINDOW_HEIGHT, nullptr, nullptr, g_HInstance, nullptr);
+	RECT winRect = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
+	AdjustWindowRect(&winRect, WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE, FALSE);
+	g_MainWindow = CreateWindowA("MainWindowClass", "Four APIs",
+		WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
+		CW_USEDEFAULT, CW_USEDEFAULT, winRect.right - winRect.left, winRect.bottom - winRect.top,
+		nullptr, nullptr, g_HInstance, nullptr);
 
 	D3D9::Init();
 
+	float t = 0;
+	double curTime = GetTime();
 	MSG msg;
 	for(;;)
 	{
@@ -222,7 +319,15 @@ int main()
 		if (msg.message == WM_QUIT)
 			break;
 
-		D3D9::Render();
+		double newTime = GetTime();
+		float delta = newTime - curTime;
+		curTime = newTime;
+		if (delta > 1.0f/30.0f)
+			delta = 1.0f/30.0f;
+		t += delta;
+		float mtx[16];
+		LookAtMatrixInv(V3(sin(t) * 10, cos(t) * 10, 4), V3(0,0,0), V3(0,0,1), mtx);
+		D3D9::Render(mtx);
 	}
 
 	D3D9::Free();
