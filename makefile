@@ -12,15 +12,23 @@ test5: sltest.exe
 	sltest -t tests/500-intrin.hlsl
 html5test: hlsloptconv.exe
 	py runtests/html5-compile.py
+four: four.exe
+	four
 
 sltest.exe: $(OBJS) obj/test.obj
 	link /nologo /out:$@ $^ /DEBUG
+
+four.exe: $(OBJS) obj/four.obj
+	link /nologo /out:$@ $^ /DEBUG /LIBPATH:$(DXSDK_DIR)\lib\x86 user32.lib gdi32.lib d3d9.lib d3dx9.lib
 
 hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
 	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
+
+obj/%.obj: src/tools/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
+	cl /nologo /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $< /I$(DXSDK_DIR)\include
 
 obj:
 	mkdir obj

@@ -1,6 +1,6 @@
 
 
-#include "compiler.hpp"
+#include "../compiler.hpp"
 
 #include <stdio.h>
 #include <errno.h>

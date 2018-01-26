@@ -7,6 +7,9 @@ void main(float4 pos : POSITION0, out float4 opos : POSITION0, out float2 otex :
 {
 	opos = pos;
 	otex = (pos.xy * 0.5 + 0.5) * iResolution;
+#if D3D9
+	opos.xy += float2(-1,1) / iResolution;
+#endif
 }
 #elif PS
 
