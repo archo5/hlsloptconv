@@ -7,6 +7,7 @@
 #endif
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <gl/gl.h>
 
 #include "../compiler.hpp"
 
@@ -20,6 +21,13 @@ const char* SHADER_NAME = "runtests/html5-shader.hlsl";
 HINSTANCE g_HInstance = nullptr;
 HWND g_MainWindow = nullptr;
 HFONT g_Font = nullptr;
+
+float FULLSCREEN_TRIANGLE_VERTICES[] =
+{
+	-1, -1, 0.5f,
+	3, -1, 0.5f,
+	-1, 3, 0.5f,
+};
 
 
 #ifndef FORCEINLINE
@@ -130,7 +138,7 @@ void Paint(HWND window)
 	{
 		{ "Direct3D 9 (SM 3.0)", 0, 0 },
 		{ "Direct3D 11 (SM 4.0, feature level 10)", PART_WIDTH, 0 },
-		{ "OpenGL ?? (GLSL ??)", 0, PART_HEIGHT+16 },
+		{ "OpenGL 3.1 (GLSL 1.40)", 0, PART_HEIGHT+16 },
 	};
 
 	PAINTSTRUCT ps;
@@ -301,18 +309,19 @@ namespace D3D9
 		dev->SetPixelShaderConstantF(0, mtx, 4);
 		dev->SetPixelShaderConstantF(3, reso, 1);
 		dev->SetFVF(D3DFVF_XYZ);
-		float verts[] =
-		{
-			-1, -1, 0.5f,
-			1, -1, 0.5f,
-			1, 1, 0.5f,
-			-1, 1, 0.5f,
-		};
-		dev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, verts, sizeof(float) * 3);
+		dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, FULLSCREEN_TRIANGLE_VERTICES, sizeof(float) * 3);
 		dev->EndScene();
 		dev->Present(nullptr, nullptr, nullptr, nullptr);
 	}
 }
+
+
+struct CBufData
+{
+	float resX, resY, pad[2];
+	float viewMtx[16];
+};
+
 
 namespace D3D11
 {
@@ -327,12 +336,6 @@ namespace D3D11
 	ID3D11Buffer*            cbuf        = nullptr;
 	ID3D11VertexShader*      vs          = nullptr;
 	ID3D11PixelShader*       ps          = nullptr;
-
-	struct CBufData
-	{
-		float resX, resY, pad[2];
-		float viewMtx[16];
-	};
 
 	void CompileShader(bool pixelShader)
 	{
@@ -453,6 +456,7 @@ namespace D3D11
 		swapChain->Release();
 		ctx->Release();
 		dev->Release();
+		DestroyWindow(apiWin);
 		printf("[%f] D3D11: cleanup done\n", GetTime());
 	}
 
@@ -489,6 +493,364 @@ namespace D3D11
 		ctx->Draw(3, 0);
 
 		swapChain->Present(1, 0);
+	}
+}
+
+
+// imported {
+#define WGL_CONTEXT_MAJOR_VERSION_ARB     0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB     0x2092
+#define WGL_CONTEXT_FLAGS_ARB             0x2094
+
+typedef const char *(WINAPI * PFNWGLGETEXTENSIONSSTRINGARBPROC) (HDC hdc);
+typedef HGLRC (WINAPI * PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC, HGLRC hShareContext, const int *attribList);
+
+typedef ptrdiff_t GLsizeiptr;
+typedef ptrdiff_t GLintptr;
+typedef char GLchar;
+#ifndef APIENTRYP
+#define APIENTRYP APIENTRY *
+#endif
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_STATIC_DRAW                    0x88E4
+#define GL_DYNAMIC_DRAW                   0x88E8
+#define GL_UNIFORM_BUFFER                 0x8A11
+#define GL_FRAGMENT_SHADER                0x8B30
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_COMPILE_STATUS                 0x8B81
+#define GL_LINK_STATUS                    0x8B82
+#define GL_VALIDATE_STATUS                0x8B83
+#define GL_INFO_LOG_LENGTH                0x8B84
+#define GL_INVALID_INDEX                  0xFFFFFFFFu
+typedef void (APIENTRYP PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+typedef void (APIENTRYP PFNGLENABLEVERTEXATTRIBARRAYPROC) (GLuint index);
+typedef void (APIENTRYP PFNGLBINDBUFFERPROC) (GLenum target, GLuint buffer);
+typedef void (APIENTRYP PFNGLGENBUFFERSPROC) (GLsizei n, GLuint *buffers);
+typedef void (APIENTRYP PFNGLBUFFERDATAPROC) (GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+typedef void (APIENTRYP PFNGLBUFFERSUBDATAPROC) (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
+
+typedef void (APIENTRYP PFNGLATTACHSHADERPROC) (GLuint program, GLuint shader);
+typedef void (APIENTRYP PFNGLCOMPILESHADERPROC) (GLuint shader);
+typedef GLuint (APIENTRYP PFNGLCREATEPROGRAMPROC) (void);
+typedef GLuint (APIENTRYP PFNGLCREATESHADERPROC) (GLenum type);
+typedef void (APIENTRYP PFNGLDELETEPROGRAMPROC) (GLuint program);
+typedef void (APIENTRYP PFNGLDELETESHADERPROC) (GLuint shader);
+typedef void (APIENTRYP PFNGLDETACHSHADERPROC) (GLuint program, GLuint shader);
+typedef void (APIENTRYP PFNGLGETPROGRAMIVPROC) (GLuint program, GLenum pname, GLint *params);
+typedef void (APIENTRYP PFNGLGETPROGRAMINFOLOGPROC) (GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+typedef void (APIENTRYP PFNGLGETSHADERIVPROC) (GLuint shader, GLenum pname, GLint *params);
+typedef void (APIENTRYP PFNGLGETSHADERINFOLOGPROC) (GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+typedef void (APIENTRYP PFNGLLINKPROGRAMPROC) (GLuint program);
+typedef void (APIENTRYP PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
+typedef void (APIENTRYP PFNGLUSEPROGRAMPROC) (GLuint program);
+typedef void (APIENTRYP PFNGLVALIDATEPROGRAMPROC) (GLuint program);
+
+typedef void (APIENTRYP PFNGLGENVERTEXARRAYSPROC) (GLsizei n, GLuint *arrays);
+typedef void (APIENTRYP PFNGLBINDVERTEXARRAYPROC) (GLuint array);
+
+typedef GLuint (APIENTRYP PFNGLGETUNIFORMBLOCKINDEXPROC) (GLuint program, const GLchar *uniformBlockName);
+typedef void (APIENTRYP PFNGLUNIFORMBLOCKBINDINGPROC) (GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding);
+typedef void (APIENTRYP PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
+// } imported
+
+namespace GL31
+{
+	HWND   apiWin = nullptr;
+	HDC    dc     = nullptr;
+	HGLRC  glrc   = nullptr;
+	GLuint vao    = 0;
+	GLuint vbo    = 0;
+	GLuint ubo    = 0;
+	GLuint vs     = 0;
+	GLuint ps     = 0;
+	GLuint prog   = 0;
+
+	void _GLCheck_Succeeded(const char* code, int line)
+	{
+		auto err = glGetError();
+		if (err != GL_NO_ERROR)
+		{
+			fprintf(stderr, "GL call failed (error=%X, line %d): %s\n", err, line, code);
+			exit(1);
+		}
+	}
+#define GLCHK(x) x;_GLCheck_Succeeded(#x, __LINE__)
+
+	bool IsExtSupported(const char* name, bool wgl = false)
+	{
+		const char* exts;
+		if (wgl)
+		{
+			PFNWGLGETEXTENSIONSSTRINGARBPROC wglGetExtensionsStringARB;
+			*(void**)&wglGetExtensionsStringARB = wglGetProcAddress("wglGetExtensionsStringARB");
+			exts = wglGetExtensionsStringARB(dc);
+		}
+		else
+		{
+			exts = (const char*) glGetString(GL_EXTENSIONS);
+		}
+		auto* start = exts;
+		size_t len = strlen(name);
+		while (start)
+		{
+			auto* which = strstr(start, name);
+			if (!which)
+				break;
+			if ((which == start || which[-1] == ' ') &&
+				(which[len] == '\0' || which[len] == ' '))
+				return true;
+			start = which + 1;
+		}
+		return false;
+
+	}
+
+	PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
+	PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
+	PFNGLBINDBUFFERPROC glBindBuffer;
+	PFNGLGENBUFFERSPROC glGenBuffers;
+	PFNGLBUFFERDATAPROC glBufferData;
+	PFNGLBUFFERSUBDATAPROC glBufferSubData;
+
+	PFNGLATTACHSHADERPROC glAttachShader;
+	PFNGLCOMPILESHADERPROC glCompileShader;
+	PFNGLCREATEPROGRAMPROC glCreateProgram;
+	PFNGLCREATESHADERPROC glCreateShader;
+	PFNGLDELETEPROGRAMPROC glDeleteProgram;
+	PFNGLDELETESHADERPROC glDeleteShader;
+	PFNGLDETACHSHADERPROC glDetachShader;
+	PFNGLGETPROGRAMIVPROC glGetProgramiv;
+	PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
+	PFNGLGETSHADERIVPROC glGetShaderiv;
+	PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
+	PFNGLLINKPROGRAMPROC glLinkProgram;
+	PFNGLSHADERSOURCEPROC glShaderSource;
+	PFNGLUSEPROGRAMPROC glUseProgram;
+	PFNGLVALIDATEPROGRAMPROC glValidateProgram;
+
+	PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
+	PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
+
+	PFNGLGETUNIFORMBLOCKINDEXPROC glGetUniformBlockIndex;
+	PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
+	PFNGLBINDBUFFERBASEPROC glBindBufferBase;
+
+	void LoadExtensions()
+	{
+		*(void**)&glVertexAttribPointer = wglGetProcAddress("glVertexAttribPointer");
+		*(void**)&glEnableVertexAttribArray = wglGetProcAddress("glEnableVertexAttribArray");
+		*(void**)&glGenBuffers = wglGetProcAddress("glGenBuffers");
+		*(void**)&glBindBuffer = wglGetProcAddress("glBindBuffer");
+		*(void**)&glBufferData = wglGetProcAddress("glBufferData");
+		*(void**)&glBufferSubData = wglGetProcAddress("glBufferSubData");
+
+		*(void**)&glAttachShader = wglGetProcAddress("glAttachShader");
+		*(void**)&glCompileShader = wglGetProcAddress("glCompileShader");
+		*(void**)&glCreateProgram = wglGetProcAddress("glCreateProgram");
+		*(void**)&glCreateShader = wglGetProcAddress("glCreateShader");
+		*(void**)&glDeleteProgram = wglGetProcAddress("glDeleteProgram");
+		*(void**)&glDeleteShader = wglGetProcAddress("glDeleteShader");
+		*(void**)&glDetachShader = wglGetProcAddress("glDetachShader");
+		*(void**)&glGetProgramiv = wglGetProcAddress("glGetProgramiv");
+		*(void**)&glGetProgramInfoLog = wglGetProcAddress("glGetProgramInfoLog");
+		*(void**)&glGetShaderiv = wglGetProcAddress("glGetShaderiv");
+		*(void**)&glGetShaderInfoLog = wglGetProcAddress("glGetShaderInfoLog");
+		*(void**)&glLinkProgram = wglGetProcAddress("glLinkProgram");
+		*(void**)&glShaderSource = wglGetProcAddress("glShaderSource");
+		*(void**)&glUseProgram = wglGetProcAddress("glUseProgram");
+		*(void**)&glValidateProgram = wglGetProcAddress("glValidateProgram");
+
+		*(void**)&glGenVertexArrays = wglGetProcAddress("glGenVertexArrays");
+		*(void**)&glBindVertexArray = wglGetProcAddress("glBindVertexArray");
+
+		*(void**)&glGetUniformBlockIndex = wglGetProcAddress("glGetUniformBlockIndex");
+		*(void**)&glUniformBlockBinding = wglGetProcAddress("glUniformBlockBinding");
+		*(void**)&glBindBufferBase = wglGetProcAddress("glBindBufferBase");
+	}
+
+	void CompileShader(bool pixelShader)
+	{
+		Compiler compiler;
+		FILEStream errStream(stderr);
+		StringStream codeStream;
+		compiler.errorOutputStream = &errStream;
+		compiler.codeOutputStream = &codeStream;
+		compiler.outputFmt = OSF_GLSL_140;
+		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "GL31", "1" }, { nullptr, nullptr } };
+		compiler.defines = macros;
+		std::string inCode = GetFileContents(SHADER_NAME, true);
+		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		{
+			fprintf(stderr, "compilation failed, no output generated\n");
+			exit(1);
+		}
+	//	printf("%s ---------------\n%s\n----------------\n\n",
+	//		pixelShader ? "PIXEL" : "VERTEX", codeStream.str().c_str());
+
+		GLuint shader = GLCHK(glCreateShader(pixelShader ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER));
+		const char* shaderSources[] = { codeStream.str().c_str() };
+		GLCHK(glShaderSource(shader, 1, shaderSources, nullptr));
+		GLCHK(glCompileShader(shader));
+		GLint compileSuccessful = GL_FALSE;
+		GLCHK(glGetShaderiv(shader, GL_COMPILE_STATUS, &compileSuccessful));
+		if (!compileSuccessful)
+		{
+			GLint infoLogLength;
+			GLCHK(glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength));
+			std::string log;
+			log.resize(infoLogLength);
+			GLCHK(glGetShaderInfoLog(shader, infoLogLength, nullptr, &log[0]));
+			fprintf(stderr, "GLSL compilation failed:\n%s\n", log.c_str());
+			exit(1);
+		}
+
+		if (pixelShader)
+			ps = shader;
+		else
+			vs = shader;
+	}
+
+	void Init()
+	{
+		printf("[%f] GL3.1: init\n", GetTime());
+		apiWin = CreateWindowA("SubWindowClass", "OpenGL 3.1", WS_CHILD | WS_VISIBLE,
+			0, 16+PART_HEIGHT+16, PART_WIDTH, PART_HEIGHT, g_MainWindow, nullptr, g_HInstance, nullptr);
+
+		dc = GetDC(apiWin);
+		PIXELFORMATDESCRIPTOR pfd;
+		memset(&pfd, 0, sizeof(pfd));
+		pfd.nSize = sizeof(pfd);
+		pfd.nVersion = 1;
+		pfd.dwFlags = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW;
+		pfd.iPixelType = PFD_TYPE_RGBA;
+		pfd.cColorBits = 32;
+		pfd.cDepthBits = 32;
+		pfd.iLayerType = PFD_MAIN_PLANE;
+		int pixelFmt = ChoosePixelFormat(dc, &pfd);
+		if (pixelFmt == 0)
+		{
+			fprintf(stderr, "GL3.1 - could not choose a pixel format\n");
+			exit(1);
+		}
+		if (!SetPixelFormat(dc, pixelFmt, &pfd))
+		{
+			fprintf(stderr, "GL3.1 - could not set the pixel format\n");
+			exit(1);
+		}
+		HGLRC tempContext = wglCreateContext(dc);
+		wglMakeCurrent(dc, tempContext);
+		int attribs[] =
+		{
+			WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+			WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+			WGL_CONTEXT_FLAGS_ARB, 0,
+			0
+		};
+
+		if (IsExtSupported("WGL_ARB_create_context", true))
+		{
+			PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB;
+			*(void**)&wglCreateContextAttribsARB = wglGetProcAddress("wglCreateContextAttribsARB");
+
+			glrc = wglCreateContextAttribsARB(dc, 0, attribs);
+			wglMakeCurrent(nullptr, nullptr);
+			wglDeleteContext(tempContext);
+			wglMakeCurrent(dc, glrc);
+		}
+		else
+		{
+			fprintf(stderr, "GL3.1 - WGL_ARB_create_context not supported\n");
+			exit(1);
+		}
+
+		LoadExtensions();
+
+		GLCHK(glGenVertexArrays(1, &vao));
+		GLCHK(glBindVertexArray(vao));
+		GLCHK(glGenBuffers(1, &vbo));
+		GLCHK(glBindBuffer(GL_ARRAY_BUFFER, vbo));
+		GLCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(FULLSCREEN_TRIANGLE_VERTICES),
+			FULLSCREEN_TRIANGLE_VERTICES, GL_STATIC_DRAW));
+		GLCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0););
+		GLCHK(glEnableVertexAttribArray(0));
+
+		GLCHK(glGenBuffers(1, &ubo));
+		GLCHK(glBindBuffer(GL_UNIFORM_BUFFER, ubo));
+		GLCHK(glBufferData(GL_UNIFORM_BUFFER, sizeof(CBufData), nullptr, GL_DYNAMIC_DRAW));
+
+		printf("[%f] GL3.1: compiling shaders\n", GetTime());
+		CompileShader(false);
+		CompileShader(true);
+		printf("[%f] GL3.1: linking shaders\n", GetTime());
+		prog = GLCHK(glCreateProgram());
+		assert(prog != 0 && vs != 0 && ps != 0);
+		GLCHK(glAttachShader(prog, vs));
+		GLCHK(glAttachShader(prog, ps));
+		GLCHK(glLinkProgram(prog));
+		GLint linkSuccessful = GL_FALSE;
+		GLCHK(glGetProgramiv(prog, GL_LINK_STATUS, &linkSuccessful));
+		if (!linkSuccessful)
+		{
+			GLint infoLogLength;
+			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
+			std::string log;
+			log.resize(infoLogLength);
+			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
+			fprintf(stderr, "GLSL program linking failed:\n%s\n", log.c_str());
+			exit(1);
+		}
+		GLCHK(glValidateProgram(prog));
+		GLint validationSuccessful = GL_FALSE;
+		GLCHK(glGetProgramiv(prog, GL_VALIDATE_STATUS, &validationSuccessful));
+		if (!validationSuccessful)
+		{
+			GLint infoLogLength;
+			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
+			std::string log;
+			log.resize(infoLogLength);
+			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
+			fprintf(stderr, "GLSL program validation failed:\n%s\n", log.c_str());
+			exit(1);
+		}
+		GLuint ubidx = GLCHK(glGetUniformBlockIndex(prog, "uniformData"));
+		assert(ubidx != GL_INVALID_INDEX);
+		GLCHK(glUniformBlockBinding(prog, ubidx, 0));
+		GLCHK(glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo));
+		printf("[%f] GL3.1: init done\n", GetTime());
+	}
+
+	void Free()
+	{
+		printf("[%f] GL3.1: cleanup\n", GetTime());
+		GLCHK(glDetachShader(prog, vs));
+		GLCHK(glDetachShader(prog, ps));
+		GLCHK(glDeleteProgram(prog));
+		GLCHK(glDeleteShader(vs));
+		GLCHK(glDeleteShader(ps));
+		wglMakeCurrent(nullptr, nullptr);
+		wglDeleteContext(glrc);
+		ReleaseDC(apiWin, dc);
+		DestroyWindow(apiWin);
+		printf("[%f] GL3.1: cleanup done\n", GetTime());
+	}
+
+	void Render(float mtx[16])
+	{
+		GLCHK(glViewport(0, 0, PART_WIDTH, PART_HEIGHT));
+		GLCHK(glClearColor(0.4f, 0.2f, 0.1f, 1.0f));
+		GLCHK(glClearDepth(1.0f));
+		GLCHK(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+		GLCHK(glUseProgram(prog));
+		CBufData bufData;
+		bufData.resX = PART_WIDTH;
+		bufData.resY = PART_HEIGHT;
+		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
+		GLCHK(glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(bufData), &bufData));
+		GLCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
+
+		SwapBuffers(dc);
 	}
 }
 
@@ -537,7 +899,7 @@ int main()
 
 	RECT winRect = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
 	AdjustWindowRect(&winRect, WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE, FALSE);
-	g_MainWindow = CreateWindowA("MainWindowClass", "Four APIs",
+	g_MainWindow = CreateWindowA("MainWindowClass", "HLSL Optimizing Converter - Four API test",
 		WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
 		CW_USEDEFAULT, CW_USEDEFAULT, winRect.right - winRect.left, winRect.bottom - winRect.top,
 		nullptr, nullptr, g_HInstance, nullptr);
@@ -545,6 +907,8 @@ int main()
 	D3D9::Init();
 	EmptyMessageQueue();
 	D3D11::Init();
+	EmptyMessageQueue();
+	GL31::Init();
 
 	float t = 0;
 	double curTime = GetTime();
@@ -569,10 +933,12 @@ int main()
 		LookAtMatrixInv(V3(sin(t) * 10, cos(t) * 10, 4), V3(0,0,0), V3(0,0,1), mtx);
 		D3D9::Render(mtx);
 		D3D11::Render(mtx);
+		GL31::Render(mtx);
 	}
 
 	D3D9::Free();
 	D3D11::Free();
+	GL31::Free();
 
 	DestroyWindow(g_MainWindow);
 	return 0;

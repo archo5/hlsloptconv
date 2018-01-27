@@ -260,6 +260,7 @@ void RemoveUnusedVariables::RunOnAST(AST& ast)
 		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
 		{
 			g = g->next;
+#if 0
 			for (ASTNode* cbv = cbuf->firstChild; cbv; )
 			{
 				auto* cbvd = cbv->ToVarDecl();
@@ -269,6 +270,7 @@ void RemoveUnusedVariables::RunOnAST(AST& ast)
 			}
 			if (cbuf->childCount == 0)
 				delete cbuf;
+#endif
 		}
 		else if (VarDecl* cg = g->ToVarDecl())
 		{

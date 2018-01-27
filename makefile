@@ -19,7 +19,8 @@ sltest.exe: $(OBJS) obj/test.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 four.exe: $(OBJS) obj/four.obj
-	link /nologo /out:$@ $^ /DEBUG user32.lib gdi32.lib msimg32.lib d3d9.lib d3d11.lib d3dcompiler.lib
+	link /nologo /out:$@ $^ /DEBUG user32.lib gdi32.lib msimg32.lib \
+	d3d9.lib d3d11.lib d3dcompiler.lib OpenGL32.lib
 
 hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG

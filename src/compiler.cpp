@@ -1894,7 +1894,8 @@ static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat s
 		}
 	}
 
-	if (shaderFormat == OSF_GLSL_ES_100)
+	// TODO geometry shaders?
+//	if (shaderFormat == OSF_GLSL_ES_100)
 	{
 		// force rename varyings to semantics to automate linkage
 		if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
