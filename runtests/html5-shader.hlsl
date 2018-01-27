@@ -76,7 +76,10 @@ float cylinderSDF(float3 p, float3 c)
 
 float length8(float2 v)
 {
-	return pow(dot(pow(v, 8), 1), 1.0 / 8);
+	float2 v2 = v * v;
+	float2 v4 = v2 * v2;
+	float2 v8 = v4 * v4;
+	return pow(dot(v8, 1), 1.0 / 8);
 }
 
 float torusSDF(float3 p, float one, float two)
