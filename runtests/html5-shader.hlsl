@@ -1,8 +1,24 @@
 
-float2 iResolution;
-float4x4 viewMatrix;
+cbuffer uniformData
+{
+	float2 iResolution;
+	float4x4 viewMatrix;
+}
 
 #if VS
+#if D3D11
+static const float4 verts[3] =
+{
+	-1, -1, 0.5f, 1,
+	3, -1, 0.5f, 1,
+	-1, 3, 0.5f, 1,
+};
+void main(uint vtxid : SV_VertexID, out float2 otex : TEXCOORD0, out float4 opos : POSITION0)
+{
+	opos = verts[vtxid];
+	otex = (opos.xy * 0.5 + 0.5) * iResolution;
+}
+#else
 void main(float4 pos : POSITION0, out float4 opos : POSITION0, out float2 otex : TEXCOORD0)
 {
 	opos = pos;
@@ -11,6 +27,7 @@ void main(float4 pos : POSITION0, out float4 opos : POSITION0, out float2 otex :
 	opos.xy += float2(-1,1) / iResolution;
 #endif
 }
+#endif
 #elif PS
 
 float csgUnion(float d1, float d2)

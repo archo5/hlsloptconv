@@ -3012,6 +3012,7 @@ void Parser::ParseDecl()
 			funcInfo.scopeVars = vd;
 
 			vd->type = ParseType();
+			vd->flags |= VarDecl::ATTR_Uniform;
 
 			EXPECT(STT_Ident);
 			vd->name = TokenStringData();

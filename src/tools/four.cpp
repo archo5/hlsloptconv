@@ -119,25 +119,51 @@ void LookAtMatrixInv(Vec3 eye, Vec3 at, Vec3 up, float outMtx[16])
 }
 
 
+struct TitleInfo
+{
+	const char* name;
+	int x, y;
+};
+void Paint(HWND window)
+{
+	TitleInfo titles[] =
+	{
+		{ "Direct3D 9 (SM 3.0)", 0, 0 },
+		{ "Direct3D 11 (SM 4.0, feature level 10)", PART_WIDTH, 0 },
+		{ "OpenGL ?? (GLSL ??)", 0, PART_HEIGHT+16 },
+	};
+
+	PAINTSTRUCT ps;
+	HDC hdc = BeginPaint(window, &ps);
+	SelectObject(hdc, g_Font);
+	SetBkMode(hdc, TRANSPARENT);
+	SetBkColor(hdc, RGB(0,0,0));
+	SetTextAlign(hdc, TA_CENTER);
+	SetTextColor(hdc, RGB(200,200,200));
+	for (TitleInfo& t : titles)
+	{
+		TRIVERTEX verts[4] =
+		{
+			{ t.x, t.y, 0x10<<8, 0x20<<8, 0x40<<8, 0xff00 },
+			{ t.x + PART_WIDTH/2, t.y + 16, 0x10<<8, 0x10<<8, 0x10<<8, 0xff00 },
+			{ t.x + PART_WIDTH/2, t.y, 0x10<<8, 0x10<<8, 0x10<<8, 0xff00 },
+			{ t.x + PART_WIDTH, t.y + 16, 0x10<<8, 0x20<<8, 0x40<<8, 0xff00 },
+		};
+		GRADIENT_RECT gradRects[2] = { { 0, 1 }, { 2, 3 } };
+		GradientFill(hdc, verts, 4, gradRects, 2, GRADIENT_FILL_RECT_H);
+		TextOut(hdc, t.x + PART_WIDTH / 2, t.y, t.name, strlen(t.name));
+	}
+	EndPaint(window, &ps);
+}
 LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
-	PAINTSTRUCT ps;
-	HDC hdc;
-
 	switch (msg)
 	{
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
 	case WM_PAINT:
-		hdc = BeginPaint(window, &ps);
-		SelectObject(hdc, g_Font);
-		SetBkMode(hdc, TRANSPARENT);
-		SetBkColor(hdc, RGB(0,0,0));
-		SetTextColor(hdc, RGB(200,200,200));
-		TextOut(hdc, 0, 0, STRLIT_SIZE("Direct3D 9"));
-		TextOut(hdc, PART_WIDTH, 0, STRLIT_SIZE("Direct3D 11"));
-		EndPaint(window, &ps);
+		Paint(window);
 		return 0L;
 	}
 
@@ -298,8 +324,15 @@ namespace D3D11
 	ID3D11RasterizerState*   rasterState = nullptr;
 	ID3D11BlendState*        blendState  = nullptr;
 	ID3D11DepthStencilState* dsState     = nullptr;
+	ID3D11Buffer*            cbuf        = nullptr;
 	ID3D11VertexShader*      vs          = nullptr;
 	ID3D11PixelShader*       ps          = nullptr;
+
+	struct CBufData
+	{
+		float resX, resY, pad[2];
+		float viewMtx[16];
+	};
 
 	void CompileShader(bool pixelShader)
 	{
@@ -393,6 +426,14 @@ namespace D3D11
 		bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		CHK(dev->CreateBlendState(&bd, &blendState));
 
+		D3D11_BUFFER_DESC cbd;
+		cbd.ByteWidth = sizeof(CBufData);
+		cbd.Usage = D3D11_USAGE_DYNAMIC;
+		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		cbd.MiscFlags = 0;
+		CHK(dev->CreateBuffer(&cbd, NULL, &cbuf));
+
 		printf("[%f] D3D11: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
@@ -404,6 +445,10 @@ namespace D3D11
 		printf("[%f] D3D11: cleanup\n", GetTime());
 		ps->Release();
 		vs->Release();
+		cbuf->Release();
+		blendState->Release();
+		dsState->Release();
+		rasterState->Release();
 		backBufRTV->Release();
 		swapChain->Release();
 		ctx->Release();
@@ -416,6 +461,15 @@ namespace D3D11
 		float col[4] = { 10/255.0f, 20/255.0f, 180/255.0f, 1.0f };
 		ctx->ClearRenderTargetView(backBufRTV, col);
 
+		CBufData bufData;
+		D3D11_MAPPED_SUBRESOURCE mapRsrc;
+		CHK(ctx->Map(cbuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapRsrc));
+		bufData.resX = PART_WIDTH;
+		bufData.resY = PART_HEIGHT;
+		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
+		memcpy(mapRsrc.pData, &bufData, sizeof(bufData));
+		ctx->Unmap(cbuf, 0);
+
 		D3D11_VIEWPORT vp;
 		memset(&vp, 0, sizeof(vp));
 		vp.Width = PART_WIDTH;
@@ -424,6 +478,8 @@ namespace D3D11
 		ctx->RSSetViewports(1, &vp);
 		ctx->VSSetShader(vs, nullptr, 0);
 		ctx->PSSetShader(ps, nullptr, 0);
+		ctx->VSSetConstantBuffers(0, 1, &cbuf);
+		ctx->PSSetConstantBuffers(0, 1, &cbuf);
 		ctx->IASetInputLayout(nullptr);
 		ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		ctx->RSSetState(rasterState);
@@ -436,6 +492,16 @@ namespace D3D11
 	}
 }
 
+
+void EmptyMessageQueue()
+{
+	MSG msg;
+	while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+}
 
 int main()
 {
@@ -477,6 +543,7 @@ int main()
 		nullptr, nullptr, g_HInstance, nullptr);
 
 	D3D9::Init();
+	EmptyMessageQueue();
 	D3D11::Init();
 
 	float t = 0;
