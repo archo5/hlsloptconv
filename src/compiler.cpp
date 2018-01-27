@@ -1197,7 +1197,7 @@ void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
 				(vd->type->kind != ASTType::Vector || vd->type->sizeX != 4))
 			{
 				diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
-					Location::BAD());
+					vd->loc);
 			}
 		}
 	}
@@ -1206,7 +1206,7 @@ void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
 		(EPF->returnType->kind != ASTType::Vector || EPF->returnType->sizeX != 4))
 	{
 		diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
-			Location::BAD());
+			EPF->loc);
 	}
 
 	UsedFuncMarker ufm(fns->second.begin()->second);
@@ -1251,14 +1251,13 @@ void VariableAccessValidator::RunOnAST(const AST& ast)
 			{
 				if (fn->GetReturnType()->IsVoid())
 				{
-					ValidateCheckOutputElementsWritten();
+					ValidateCheckOutputElementsWritten(fn->loc);
 				}
 				else
 				{
-					// TODO location
 					diag.EmitError("'" + fn->name +
 						"' - not all control paths return a value",
-						Location::BAD());
+						fn->loc);
 				}
 			}
 		}
@@ -1325,15 +1324,6 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		{
 			if (fce->isBuiltinFunc)
 			{
-#if 0
-				IntrinsicType ity = FindIntrinsicByName(name->name.c_str());
-				// TODO location
-				if (ity == IT__COUNT)
-					diag.EmitFatalError("(internal) intrinsic not found: " + name->name, Location::BAD());
-				if (GetIntrinsicArgumentCount(ity) != fce->GetArgCount())
-					diag.EmitFatalError("(internal) incorrect number of arguments for intrinsic "
-						+ name->name, Location::BAD());
-#endif
 				// TODO write-out intrinsics
 				for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
 					ProcessReadExpr(arg->ToExpr());
@@ -1442,7 +1432,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 					{
 						if (elementsWritten[rf + ((swizzle >> (i * mult)) & mask)] == 0)
 						{
-							ValidateCheckVariableError(dre->decl->name);
+							ValidateCheckVariableError(dre);
 						}
 					}
 				}
@@ -1452,7 +1442,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 					{
 						if (elementsWritten[i] == 0)
 						{
-							ValidateCheckVariableError(dre->decl->name);
+							ValidateCheckVariableError(dre);
 						}
 					}
 				}
@@ -1466,7 +1456,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	}
 	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
 	{
-		ValidateCheckVariableInitialized(dre->decl->APRangeFrom, dre->decl->APRangeTo, dre->decl->name);
+		ValidateCheckVariableInitialized(dre);
 		return;
 	}
 	else if (dynamic_cast<const VoidExpr*>(node))
@@ -1474,7 +1464,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		return;
 	}
 
-	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + typeid(*node).name(), Location::BAD());
+	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + typeid(*node).name(), node->loc);
 }
 
 void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
@@ -1493,8 +1483,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		{
 			if (dre->decl->flags & VarDecl::ATTR_Const)
 			{
-				// TODO location
-				diag.EmitFatalError("cannot write to constant value", Location::BAD());
+				diag.EmitFatalError("cannot write to constant value", dre->loc);
 				return;
 			}
 
@@ -1541,8 +1530,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 							}
 							else
 							{
-								// TODO location
-								diag.EmitError("cannot write to local array from a computed index", Location::BAD());
+								diag.EmitError("cannot write to local array from a computed index", idx->loc);
 							}
 						}
 					}
@@ -1567,16 +1555,14 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		}
 		else
 		{
-			// TODO location
-			diag.EmitFatalError("cannot write to temporary value", Location::BAD());
+			diag.EmitFatalError("cannot write to temporary value", exprIt->loc);
 		}
 	}
 	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
 	{
 		if (dre->decl->flags & VarDecl::ATTR_Const)
 		{
-			// TODO location
-			diag.EmitFatalError("cannot write to constant value", Location::BAD());
+			diag.EmitFatalError("cannot write to constant value", dre->loc);
 			return;
 		}
 
@@ -1586,8 +1572,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		return;
 	}
 
-	// TODO node location
-	diag.EmitFatalError("cannot write to read-only expression", Location::BAD());
+	diag.EmitFatalError("cannot write to read-only expression", node->loc);
 }
 
 bool VariableAccessValidator::ProcessStmt(const Stmt* node)
@@ -1651,7 +1636,7 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 			ProcessReadExpr(retstmt->GetExpr());
 		}
 
-		ValidateCheckOutputElementsWritten();
+		ValidateCheckOutputElementsWritten(retstmt->loc);
 		return true;
 	}
 	else if (auto* dscstmt = dynamic_cast<const DiscardStmt*>(node))
@@ -1688,9 +1673,8 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		return false;
 	}
 
-	// TODO node location
 	diag.EmitFatalError("(internal) statement "
-		+ std::string(typeid(*node).name()) + " not processed", Location::BAD());
+		+ std::string(typeid(*node).name()) + " not processed", node->loc);
 	return false;
 }
 
@@ -1724,13 +1708,12 @@ void VariableAccessValidator::ValidateSetupFunc(const ASTFunction* fn)
 	memset(elementsWritten.data(), 0, elementsWritten.size());
 }
 
-void VariableAccessValidator::ValidateCheckOutputElementsWritten()
+void VariableAccessValidator::ValidateCheckOutputElementsWritten(Location loc)
 {
 	for (int i = 0; i < endOfOutputElements; ++i)
 	{
 		if (elementsWritten[i] == 0)
 		{
-			// TODO location
 			std::string err = "not all outputs have been assigned before 'return':";
 			for (ASTNode* arg = curASTFunction->GetFirstArg(); arg; arg = arg->next)
 			{
@@ -1739,7 +1722,7 @@ void VariableAccessValidator::ValidateCheckOutputElementsWritten()
 					continue;
 				AddMissingOutputAccessPoints(err, argvd->GetType(), argvd->APRangeFrom, argvd->name);
 			}
-			diag.EmitError(err, Location::BAD());
+			diag.EmitError(err, loc);
 			break;
 		}
 	}
@@ -1807,21 +1790,20 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 	}
 }
 
-void VariableAccessValidator::ValidateCheckVariableInitialized(int from, int to, const std::string& varname)
+void VariableAccessValidator::ValidateCheckVariableInitialized(const DeclRefExpr* dre)
 {
-	for (int i = from; i < to; ++i)
+	for (int i = dre->decl->APRangeFrom; i < dre->decl->APRangeTo; ++i)
 	{
 		if (elementsWritten[i] == 0)
 		{
-			ValidateCheckVariableError(varname);
+			ValidateCheckVariableError(dre);
 		}
 	}
 }
 
-void VariableAccessValidator::ValidateCheckVariableError(const std::string& varname)
+void VariableAccessValidator::ValidateCheckVariableError(const DeclRefExpr* dre)
 {
-	// TODO location
-	diag.EmitError("variable '" + varname + "' used before sufficient initialization", Location::BAD());
+	diag.EmitError("variable '" + dre->decl->name + "' used before sufficient initialization", dre->loc);
 }
 
 

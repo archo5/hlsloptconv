@@ -260,6 +260,7 @@ struct ASTNode
 	ASTNode* prevTypeUse = nullptr;
 	ASTNode* nextTypeUse = nullptr;
 	int childCount = 0;
+	Location loc = Location::BAD();
 };
 
 struct Stmt : ASTNode
@@ -808,10 +809,10 @@ struct VariableAccessValidator
 	bool ProcessStmt(const Stmt* node);
 
 	void ValidateSetupFunc(const ASTFunction* fn);
-	void ValidateCheckOutputElementsWritten();
+	void ValidateCheckOutputElementsWritten(Location loc);
 	void AddMissingOutputAccessPoints(std::string& outerr, ASTType* type, int from, std::string pfx);
-	void ValidateCheckVariableInitialized(int from, int to, const std::string& varname);
-	void ValidateCheckVariableError(const std::string& varname);
+	void ValidateCheckVariableInitialized(const DeclRefExpr* dre);
+	void ValidateCheckVariableError(const DeclRefExpr* dre);
 
 	Diagnostic& diag;
 	const ASTFunction* curASTFunction = nullptr;

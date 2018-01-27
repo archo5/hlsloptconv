@@ -1267,6 +1267,7 @@ void Parser::ParseArgList(ASTNode* out)
 	for (;;)
 	{
 		VarDecl* vd = new VarDecl;
+		vd->loc = T().loc;
 		out->AppendChild(vd);
 
 		switch (TT())
@@ -1355,6 +1356,7 @@ static void CastExprTo(Expr* val, ASTType* to)
 	if (to != val->GetReturnType())
 	{
 		CastExpr* cast = new CastExpr;
+		cast->loc = val->loc;
 		cast->SetReturnType(to);
 		val->ReplaceWith(cast);
 		cast->SetSource(val);
@@ -1937,6 +1939,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				auto* expr = new DeclRefExpr;
 				ast.unassignedNodes.AppendChild(expr);
 				expr->name = TokenStringData();
+				expr->loc = T().loc;
 
 				for (VarDecl* vd = funcInfo.scopeVars; vd; vd = vd->prevScopeDecl)
 				{
@@ -1969,6 +1972,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				auto* expr = new BoolExpr;
 				ast.unassignedNodes.AppendChild(expr);
 				expr->SetReturnType(ast.GetBoolType());
+				expr->loc = T().loc;
 				expr->value = TokenBoolData();
 				FWD();
 				return expr;
@@ -1978,6 +1982,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				auto* expr = new Int32Expr;
 				ast.unassignedNodes.AppendChild(expr);
 				expr->SetReturnType(ast.GetInt32Type());
+				expr->loc = T().loc;
 				expr->value = TokenInt32Data();
 				FWD();
 				return expr;
@@ -1987,6 +1992,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				auto* expr = new Float32Expr;
 				ast.unassignedNodes.AppendChild(expr);
 				expr->SetReturnType(ast.GetFloat32Type());
+				expr->loc = T().loc;
 				expr->value = TokenFloatData();
 				FWD();
 				return expr;
@@ -2018,6 +2024,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 	{
 		size_t bkCur = curToken;
 
+		// constructor
 		if (bestSplit - start == 1 && tokens[start].type == STT_Ident)
 		{
 			auto it = ast.typeNameMap.find(TokenStringData(start));
@@ -2028,6 +2035,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				auto* ilist = new InitListExpr;
 				ast.unassignedNodes.AppendChild(ilist);
 				ilist->SetReturnType(ty);
+				ilist->loc = tokens[bestSplit].loc;
 
 				curToken = bestSplit + 1;
 				ParseInitList(ilist, ty->GetAccessPointCount(), true);
@@ -2046,6 +2054,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		auto* fcall = new FCallExpr;
 		ast.unassignedNodes.AppendChild(fcall);
 		fcall->SetReturnType(ast.GetVoidType());
+		fcall->loc = tokens[bestSplit].loc;
 
 		curToken = start;
 		fcall->AppendChild(ParseExpr(endTokenType, bestSplit));
@@ -2065,6 +2074,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		auto* idx = new IndexExpr;
 		ast.unassignedNodes.AppendChild(idx);
 		idx->SetReturnType(ast.GetVoidType());
+		idx->loc = tokens[bestSplit].loc;
 
 		curToken = start;
 		idx->AppendChild(ParseExpr(endTokenType, bestSplit));
@@ -2108,6 +2118,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		auto* tnop = new TernaryOpExpr;
 		ast.unassignedNodes.AppendChild(tnop);
 		tnop->SetReturnType(ast.GetVoidType());
+		tnop->loc = tokens[bestSplit].loc;
 
 		curToken = start;
 		tnop->AppendChild(ParseExpr(STT_OP_Ternary, bestSplit));
@@ -2165,6 +2176,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				{
 					auto* idop = new IncDecOpExpr;
 					ast.unassignedNodes.AppendChild(idop);
+					idop->loc = tokens[bestSplit].loc;
 					idop->dec = tt == STT_OP_Dec;
 					idop->post = false;
 					idop->SetSource(rtexpr);
@@ -2174,6 +2186,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				auto* unop = new UnaryOpExpr;
 				ast.unassignedNodes.AppendChild(unop);
+				unop->loc = tokens[bestSplit].loc;
 				unop->opType = tt;
 				unop->SetSource(rtexpr);
 				unop->SetReturnType(unop->GetSource()->GetReturnType());
@@ -2199,6 +2212,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				auto* cast = new CastExpr;
 				ast.unassignedNodes.AppendChild(cast);
+				cast->loc = tokens[bestSplit].loc;
 				cast->SetReturnType(tgtType);
 				cast->SetSource(ParseExpr(endTokenType, bcp));
 				curToken = bcp;
@@ -2223,6 +2237,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 			auto* idop = new IncDecOpExpr;
 			ast.unassignedNodes.AppendChild(idop);
+			idop->loc = tokens[bestSplit].loc;
 			idop->dec = tokens[bestSplit].type == STT_OP_Dec;
 			idop->post = true;
 			idop->SetSource(rtexpr);
@@ -2259,6 +2274,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 					auto* mmb = new MemberExpr;
 					ast.unassignedNodes.AppendChild(mmb);
+					mmb->loc = tokens[bestSplit].loc;
 					mmb->SetSource(lft);
 					mmb->memberName = memberName;
 					mmb->memberID = memberID;
@@ -2283,6 +2299,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		{
 			auto* binop = new BinaryOpExpr;
 			ast.unassignedNodes.AppendChild(binop);
+			binop->loc = tokens[bestSplit].loc;
 			binop->SetReturnType(ast.GetVoidType());
 			binop->opType = ttSplit;
 			binop->AppendChild(lft); // LFT
@@ -2579,6 +2596,7 @@ Stmt* Parser::ParseStatement()
 
 		auto* blockStmt = new BlockStmt;
 		ast.unassignedNodes.AppendChild(blockStmt);
+		blockStmt->loc = T().loc;
 		FWD();
 		while (TT() != STT_RBrace)
 		{
@@ -2591,6 +2609,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* ret = new ReturnStmt;
 		ast.unassignedNodes.AppendChild(ret);
+		ret->loc = T().loc;
 		FWD();
 		if (TT() != STT_Semicolon)
 		{
@@ -2608,6 +2627,7 @@ Stmt* Parser::ParseStatement()
 		}
 		auto* dsc = new DiscardStmt;
 		ast.unassignedNodes.AppendChild(dsc);
+		dsc->loc = T().loc;
 		FWD();
 		EXPECT(STT_Semicolon);
 		return dsc;
@@ -2616,6 +2636,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* bst = new BreakStmt;
 		ast.unassignedNodes.AppendChild(bst);
+		bst->loc = T().loc;
 		FWD();
 		EXPECT(STT_Semicolon);
 		return bst;
@@ -2624,6 +2645,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* cst = new ContinueStmt;
 		ast.unassignedNodes.AppendChild(cst);
+		cst->loc = T().loc;
 		FWD();
 		EXPECT(STT_Semicolon);
 		return cst;
@@ -2632,6 +2654,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* ifelse = new IfElseStmt;
 		ast.unassignedNodes.AppendChild(ifelse);
+		ifelse->loc = T().loc;
 		FWD();
 		EXPECT(STT_LParen);
 		FWD();
@@ -2663,6 +2686,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* whst = new WhileStmt;
 		ast.unassignedNodes.AppendChild(whst);
+		whst->loc = T().loc;
 		FWD();
 		EXPECT(STT_LParen);
 		FWD();
@@ -2687,6 +2711,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* dwst = new DoWhileStmt;
 		ast.unassignedNodes.AppendChild(dwst);
+		dwst->loc = T().loc;
 		FWD();
 
 		dwst->PrependChild(ParseStatement()); // BODY
@@ -2715,6 +2740,7 @@ Stmt* Parser::ParseStatement()
 	{
 		auto* forst = new ForStmt;
 		ast.unassignedNodes.AppendChild(forst);
+		forst->loc = T().loc;
 		FWD();
 		EXPECT(STT_LParen);
 		FWD();
@@ -2756,12 +2782,14 @@ Stmt* Parser::ParseExprDeclStatement()
 	{
 		auto* bs = new EmptyStmt;
 		ast.unassignedNodes.AppendChild(bs);
+		bs->loc = T().loc;
 		return bs;
 	}
 	else if (tt == STT_Ident && ast.IsTypeName(TokenStringData()))
 	{
 		auto* varDecl = new VarDeclStmt;
 		ast.unassignedNodes.AppendChild(varDecl);
+		varDecl->loc = T().loc;
 
 		ASTType* commonType = ParseType();
 
@@ -2769,6 +2797,7 @@ Stmt* Parser::ParseExprDeclStatement()
 		{
 			ASTType* curType = commonType;
 			VarDecl* vd = new VarDecl;
+			vd->loc = T().loc;
 			varDecl->AppendChild(vd);
 
 			EXPECT(STT_Ident);
@@ -2802,10 +2831,11 @@ Stmt* Parser::ParseExprDeclStatement()
 
 				if (TT() == STT_LBrace)
 				{
-					FWD();
-
 					auto* ilist = new InitListExpr;
+					ilist->loc = T().loc;
 					vd->SetInitExpr(ilist);
+
+					FWD();
 
 					ilist->SetReturnType(curType);
 
@@ -2841,6 +2871,7 @@ Stmt* Parser::ParseExprDeclStatement()
 	{
 		auto* out = new ExprStmt;
 		ast.unassignedNodes.AppendChild(out);
+		out->loc = T().loc;
 		out->SetExpr(ParseExpr());
 
 		EXPECT(STT_Semicolon);
@@ -2985,6 +3016,7 @@ void Parser::ParseDecl()
 
 		auto* cb = new CBufferDecl;
 		cb->name = TokenStringData();
+		cb->loc = T().loc;
 		ast.globalVars.AppendChild(cb);
 
 		FWD();
@@ -3006,11 +3038,13 @@ void Parser::ParseDecl()
 		while (TT() != STT_RBrace)
 		{
 			auto* vd = new VarDecl;
+			vd->loc = T().loc;
 			cb->AppendChild(vd);
 
 			vd->prevScopeDecl = funcInfo.scopeVars;
 			funcInfo.scopeVars = vd;
 
+			vd->loc = T().loc;
 			vd->type = ParseType();
 			vd->flags |= VarDecl::ATTR_Uniform;
 
@@ -3063,6 +3097,7 @@ void Parser::ParseDecl()
 			}
 		}
 
+		auto loc = T().loc;
 		ASTType* commonType = ParseType(true);
 
 		EXPECT(STT_Ident);
@@ -3077,6 +3112,7 @@ void Parser::ParseDecl()
 			func->AppendChild(&tmpStmt); // placeholder for body
 			func->SetReturnType(commonType);
 			func->name = name;
+			func->loc = loc;
 
 			FWD();
 
@@ -3154,11 +3190,12 @@ void Parser::ParseDecl()
 					FWD();
 					if (TT() == STT_LBrace)
 					{
-						FWD();
-
 						auto* ile = new InitListExpr;
+						ile->loc = T().loc;
 						ile->SetReturnType(type);
 						gvardef->AppendChild(ile);
+
+						FWD();
 						ParseInitList(ile, type->GetAccessPointCount(), false);
 
 						EXPECT(STT_RBrace);
