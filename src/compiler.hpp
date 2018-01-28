@@ -616,16 +616,19 @@ struct TypeSystem
 	ASTType* GetVectorType(ASTType* t, int size);
 	const ASTType* GetVectorType(ASTType* t, int size) const {
 		return const_cast<TypeSystem*>(this)->GetVectorType(t, size); }
+	ASTType* GetMatrixType(ASTType* t, int sizeX, int sizeY);
+	const ASTType* GetMatrixType(ASTType* t, int sizeX, int sizeY) const {
+		return const_cast<TypeSystem*>(this)->GetMatrixType(t, sizeX, sizeY); }
 	ASTType* GetArrayType(ASTType* t, uint32_t size);
 
 	ASTStructType* CreateStructType(const std::string& name);
 
-	bool IsTypeName(const std::string& id) const
-	{
-		return typeNameMap.find(id) != typeNameMap.end();
-	}
+	ASTType* _GetSVMTypeByName(ASTType* t, const char* sub);
+	ASTType* GetBaseTypeByName(const char* name);
+	ASTStructType* GetStructTypeByName(const char* name);
+	ASTType* GetTypeByName(const char* name);
+	bool IsTypeName(const std::string& id);
 
-	std::unordered_map<std::string, ASTType*> typeNameMap;
 	ASTType* firstAllocType = nullptr;
 	ASTType* firstArrayType = nullptr;
 	ASTStructType* firstStructType = nullptr;
@@ -642,11 +645,11 @@ struct TypeSystem
 	ASTType* GetUInt32Type()      { return &typeUInt32Def; }
 	ASTType* GetFloat16Type()     { return &typeFloat16Def; }
 	ASTType* GetFloat32Type()     { return &typeFloat32Def; }
-	ASTType* GetBoolVecType   (int size ) { return &typeBoolVecDefs   [size - 1]; }
-	ASTType* GetInt32VecType  (int size ) { return &typeInt32VecDefs  [size - 1]; }
-	ASTType* GetUInt32VecType (int size ) { return &typeUInt32VecDefs [size - 1]; }
-	ASTType* GetFloat16VecType(int size ) { return &typeFloat16VecDefs[size - 1]; }
-	ASTType* GetFloat32VecType(int size ) { return &typeFloat32VecDefs[size - 1]; }
+	ASTType* GetBoolVecType   (int size) { return &typeBoolVecDefs   [size - 1]; }
+	ASTType* GetInt32VecType  (int size) { return &typeInt32VecDefs  [size - 1]; }
+	ASTType* GetUInt32VecType (int size) { return &typeUInt32VecDefs [size - 1]; }
+	ASTType* GetFloat16VecType(int size) { return &typeFloat16VecDefs[size - 1]; }
+	ASTType* GetFloat32VecType(int size) { return &typeFloat32VecDefs[size - 1]; }
 	ASTType* GetBoolMtxType   (int sizeX, int sizeY) { return &typeBoolMtxDefs   [(sizeX - 1) + (sizeY - 1) * 4]; }
 	ASTType* GetInt32MtxType  (int sizeX, int sizeY) { return &typeInt32MtxDefs  [(sizeX - 1) + (sizeY - 1) * 4]; }
 	ASTType* GetUInt32MtxType (int sizeX, int sizeY) { return &typeUInt32MtxDefs [(sizeX - 1) + (sizeY - 1) * 4]; }

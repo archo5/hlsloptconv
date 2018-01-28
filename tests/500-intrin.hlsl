@@ -194,6 +194,85 @@ source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 in_shader `matrixCompMult`
 
+// `mul (overload 1)`
+source `
+float4 main(float p : POSITION) : POSITION
+{
+	return mul(1, p) + mul(2, true) + mul(2, p) + mul(p, p) + mul(true, true) + mul(1, 2);
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `mul (overload 2)`
+source `
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(1, p) + mul(true, p) + mul(0.5, p.xy).xyxy;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `mul (overload 3)`
+source `
+float2x3 MTX;
+float4 main() : POSITION
+{
+	return (mul(1, MTX) + mul(true, MTX) + mul(0.5, MTX))._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `mul (overload 4)`
+source `
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(p, 1) + mul(p, true) + mul(p.xy, 0.5).xyxy;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `mul (overload 5)`
+source `
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(p, p) + mul(p.xyz, p.yzw) + mul(p.xy, p.zw);
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+in_shader `dot`
+compile_glsl_es100 ``
+in_shader `dot`
+
+// `mul (overload 6)`
+source `
+float4x4 MTX4;
+float3x3 MTX3;
+float2x2 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(p, MTX4) + mul(p.xyz, MTX3).xyzx + mul(p.xy, MTX2).xyyx;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `mul (overload 7)`
+source `
+float2x3 MTX;
+float4 main() : POSITION
+{
+	return (mul(MTX, 1) + mul(MTX, true) + mul(MTX, 0.5))._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `mod (GLSL)`
 source `
 float2x3 MTX1;

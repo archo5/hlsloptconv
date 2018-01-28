@@ -940,39 +940,25 @@ TypeSystem::~TypeSystem()
 
 void TypeSystem::InitBasicTypes()
 {
-	typeNameMap["void"]        = GetVoidType();
-	typeNameMap["function"]    = GetFunctionType();
-	typeNameMap["sampler1D"]   = GetSampler1DType();
-	typeNameMap["sampler2D"]   = GetSampler2DType();
-	typeNameMap["sampler3D"]   = GetSampler3DType();
-	typeNameMap["samplerCUBE"] = GetSamplerCUBEType();
-
-	const char* typeNames[5]  = { "bool", "int", "uint", "half", "float" };
 	ASTType* baseTypes[5]     = { GetBoolType(), GetInt32Type(), GetUInt32Type(), GetFloat16Type(), GetFloat32Type() };
 	ASTType* vecTypeArrays[5] = { typeBoolVecDefs, typeInt32VecDefs, typeUInt32VecDefs, typeFloat16VecDefs, typeFloat32VecDefs };
 	ASTType* mtxTypeArrays[5] = { typeBoolMtxDefs, typeInt32MtxDefs, typeUInt32MtxDefs, typeFloat16MtxDefs, typeFloat32MtxDefs };
-	char bfr[32];
 	for (int t = 0; t < 5; ++t)
 	{
 		ASTType* baseType = baseTypes[t];
-		typeNameMap[typeNames[t]] = baseType;
 		for (int x = 1; x <= 4; ++x)
 		{
-			sprintf(bfr, "%s%d", typeNames[t], x);
 			ASTType* vt = &vecTypeArrays[t][x - 1];
 			vt->kind = ASTType::Vector;
 			vt->subType = baseType;
 			vt->sizeX = x;
-			typeNameMap[bfr] = vt;
 			for (int y = 1; y <= 4; ++y)
 			{
-				sprintf(bfr, "%s%dx%d", typeNames[t], x, y);
 				ASTType* mt = &mtxTypeArrays[t][(x - 1) + (y - 1) * 4];
 				mt->kind = ASTType::Matrix;
 				mt->subType = baseType;
 				mt->sizeX = x;
 				mt->sizeY = y;
-				typeNameMap[bfr] = mt;
 			}
 		}
 	}
@@ -1073,6 +1059,21 @@ ASTType* TypeSystem::GetVectorType(ASTType* t, int size)
 	}
 }
 
+ASTType* TypeSystem::GetMatrixType(ASTType* t, int sizeX, int sizeY)
+{
+	if (sizeX < 1 || sizeX > 4 || sizeY < 1 || sizeY > 4)
+		return nullptr;
+	switch (t->kind)
+	{
+	case ASTType::Bool:    return &typeBoolMtxDefs   [(sizeX - 1) + (sizeY - 1) * 4];
+	case ASTType::Int32:   return &typeInt32MtxDefs  [(sizeX - 1) + (sizeY - 1) * 4];
+	case ASTType::UInt32:  return &typeUInt32MtxDefs [(sizeX - 1) + (sizeY - 1) * 4];
+	case ASTType::Float32: return &typeFloat32MtxDefs[(sizeX - 1) + (sizeY - 1) * 4];
+	case ASTType::Float16: return &typeFloat16MtxDefs[(sizeX - 1) + (sizeY - 1) * 4];
+	default: return nullptr;
+	}
+}
+
 ASTType* TypeSystem::GetArrayType(ASTType* t, uint32_t size)
 {
 	for (ASTType* at = firstArrayType; at; at = at->nextArrayType)
@@ -1109,9 +1110,71 @@ ASTStructType* TypeSystem::CreateStructType(const std::string& name)
 	if (!firstStructType)
 		firstStructType = stc;
 
-	typeNameMap[name] = stc;
-
 	return stc;
+}
+
+ASTType* TypeSystem::_GetSVMTypeByName(ASTType* t, const char* sub)
+{
+	if (sub[0] == '\0')
+		return t;
+	if (sub[0] >= '1' && sub[0] <= '4')
+	{
+		if (sub[1] == '\0')
+			return GetVectorType(t, sub[0] - '0');
+		if (sub[1] == 'x' && sub[2] >= '1' && sub[2] <= '4' && sub[3] == '\0')
+			return GetMatrixType(t, sub[0] - '0', sub[2] - '0');
+	}
+	return nullptr;
+}
+
+ASTType* TypeSystem::GetBaseTypeByName(const char* name)
+{
+	if (strncmp(name, STRLIT_SIZE("bool")) == 0)
+		return _GetSVMTypeByName(&typeBoolDef, name + sizeof("bool") - 1);
+	if (strncmp(name, STRLIT_SIZE("int")) == 0)
+		return _GetSVMTypeByName(&typeInt32Def, name + sizeof("int") - 1);
+	if (strncmp(name, STRLIT_SIZE("uint")) == 0)
+		return _GetSVMTypeByName(&typeUInt32Def, name + sizeof("uint") - 1);
+	if (strncmp(name, STRLIT_SIZE("half")) == 0)
+		return _GetSVMTypeByName(&typeFloat16Def, name + sizeof("half") - 1);
+	if (strncmp(name, STRLIT_SIZE("float")) == 0)
+		return _GetSVMTypeByName(&typeFloat32Def, name + sizeof("float") - 1);
+	if (strncmp(name, STRLIT_SIZE("sampler")) == 0)
+	{
+		if (strcmp(name + sizeof("sampler") - 1, "1D") == 0)
+			return &typeSampler1DDef;
+		if (strcmp(name + sizeof("sampler") - 1, "2D") == 0)
+			return &typeSampler2DDef;
+		if (strcmp(name + sizeof("sampler") - 1, "3D") == 0)
+			return &typeSampler3DDef;
+		if (strcmp(name + sizeof("sampler") - 1, "CUBE") == 0)
+			return &typeSamplerCUBEDef;
+	}
+	if (strcmp(name, "void") == 0)
+		return &typeVoidDef;
+	return nullptr;
+}
+
+ASTStructType* TypeSystem::GetStructTypeByName(const char* name)
+{
+	for (ASTStructType* strTy = firstStructType; strTy; strTy = strTy->nextStructType)
+	{
+		if (strTy->name == name)
+			return strTy;
+	}
+	return nullptr;
+}
+
+ASTType* TypeSystem::GetTypeByName(const char* name)
+{
+	if (auto* t = GetBaseTypeByName(name))
+		return t;
+	return GetStructTypeByName(name);
+}
+
+bool TypeSystem::IsTypeName(const std::string& id)
+{
+	return GetTypeByName(id.c_str()) != nullptr;
 }
 
 
@@ -2730,9 +2793,13 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 						auto* arg2 = fcall->GetFirstArg()->next->ToExpr();
 						auto rt1k = arg1->GetReturnType()->kind;
 						auto rt2k = arg2->GetReturnType()->kind;
-						if ((rt1k == ASTType::Matrix && rt2k == ASTType::Matrix) ||
-							(rt1k == ASTType::Vector && rt2k == ASTType::Matrix) ||
-							(rt1k == ASTType::Matrix && rt2k == ASTType::Vector))
+						if (rt1k == ASTType::Vector && rt2k == ASTType::Vector)
+						{
+							// overload 5 (v,v) - dot product
+							dre->name = "dot";
+							return;
+						}
+						else // overloads 1-4,6-9
 						{
 							auto* binop = new BinaryOpExpr;
 							binop->opType = STT_OP_Mul;

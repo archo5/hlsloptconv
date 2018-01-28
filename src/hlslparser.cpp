@@ -1057,9 +1057,8 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 
 ASTType* Parser::GetType(const std::string& name)
 {
-	auto it = ast.typeNameMap.find(name);
-	if (it != ast.typeNameMap.end())
-		return it->second;
+	if (auto* t = ast.GetTypeByName(name.c_str()))
+		return t;
 	EmitFatalError("type not found: " + name);
 	return nullptr;
 }
@@ -1074,9 +1073,8 @@ ASTType* Parser::ParseType(bool isFuncRet)
 	}
 	FWD();
 
-	auto it = ast.typeNameMap.find(name);
-	if (it != ast.typeNameMap.end())
-		return it->second;
+	if (auto* t = ast.GetTypeByName(name.c_str()))
+		return t;
 
 	EmitError("unknown type: " + name);
 	return ast.GetVoidType();
@@ -1669,17 +1667,71 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		ASTType* rt0 = fcall->GetFirstArg()->ToExpr()->GetReturnType();
 		ASTType* rt1 = fcall->GetFirstArg()->next->ToExpr()->GetReturnType();
 
-		// overload 1
-		if (rt0->IsNumber() && rt1->IsNumber())
-			return rt0;
-		// overload 6
-		if (rt0->IsNumVector() &&
-			rt1->IsNumMatrix() &&
-			rt0->sizeX == rt1->sizeY)
-			return parser->ast.GetVectorType(rt0->subType, rt1->sizeX);
-
-		parser->EmitError("none of 'mul' overloads matched the argument list");
-		return nullptr;
+		ASTType* retTy = nullptr;
+		for (;;)
+		{
+			// overload 1
+			if (rt0->IsNumeric() && rt1->IsNumeric())
+			{
+				retTy = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				break;
+			}
+			// overload 2
+			if (rt0->IsNumeric() && rt1->kind == ASTType::Vector)
+			{
+				retTy = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), parser->ast.CastToScalar(retTy));
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				break;
+			}
+			// overload 3
+			if (rt0->IsNumeric() && rt1->kind == ASTType::Matrix)
+			{
+				retTy = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), parser->ast.CastToScalar(retTy));
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				break;
+			}
+			// overload 4
+			if (rt0->kind == ASTType::Vector && rt1->IsNumeric())
+			{
+				retTy = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), parser->ast.CastToScalar(retTy));
+				break;
+			}
+			// overload 5
+			if (rt0->kind == ASTType::Vector && rt1->kind == ASTType::Vector && rt0->sizeX == rt1->sizeX)
+			{
+				ASTType* commonType = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), commonType);
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), commonType);
+				retTy = parser->ast.CastToScalar(commonType);
+				break;
+			}
+			// overload 6
+			if (rt0->kind == ASTType::Vector &&
+				rt1->kind == ASTType::Matrix &&
+				rt0->sizeX == rt1->sizeY)
+			{
+				retTy = parser->ast.GetVectorType(rt0->subType, rt1->sizeX);
+				break;
+			}
+			// overload 7
+			if (rt0->kind == ASTType::Matrix && rt1->IsNumeric())
+			{
+				retTy = parser->Promote(rt0, rt1);
+				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
+				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), parser->ast.CastToScalar(retTy));
+				break;
+			}
+			parser->EmitError("none of 'mul' overloads matched the argument list");
+			return nullptr;
+		}
+		assert(retTy);
+		return retTy;
 	} },
 	{ "normalize", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return VectorIntrin(parser, fcall, "normalize", false, false); } },
@@ -2091,11 +2143,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		// constructor
 		if (bestSplit - start == 1 && tokens[start].type == STT_Ident)
 		{
-			auto it = ast.typeNameMap.find(TokenStringData(start));
-			if (it != ast.typeNameMap.end())
+			if (auto* ty = ast.GetTypeByName(TokenStringData(start).c_str()))
 			{
-				auto* ty = it->second;
-
 				auto* ilist = new InitListExpr;
 				ast.unassignedNodes.AppendChild(ilist);
 				ilist->SetReturnType(ty);
@@ -2385,7 +2434,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			}
 			else
 			{
-				commonType = FindCommonOpType(rt0, rt1, ttSplit);
+				commonType = FindCommonOpType(rt0, rt1);
 				if (ttSplit == STT_OP_LogicalAnd || ttSplit == STT_OP_LogicalOr)
 				{
 					commonType = ast.CastToBool(commonType);
@@ -2449,6 +2498,8 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 		no = ast.GetFloat32Type();
 	else if (na->kind == ASTType::Int32 || nb->kind == ASTType::Int32)
 		no = ast.GetInt32Type();
+	else if (na->kind == ASTType::UInt32 || nb->kind == ASTType::UInt32)
+		no = ast.GetUInt32Type();
 	else
 		EmitFatalError("UNHANDLED SCALAR PROMOTION!");
 
@@ -2463,19 +2514,13 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 	if (a->kind == ASTType::Matrix || b->kind == ASTType::Matrix)
 	{
 		ASTType* mt = a->IsNumericOrVM1() == false ? a : b;
-		switch (no->kind)
-		{
-		case ASTType::Bool: return ast.GetBoolMtxType(a->sizeX, a->sizeY);
-		case ASTType::Int32: return ast.GetInt32MtxType(a->sizeX, a->sizeY);
-		case ASTType::Float16: return ast.GetFloat16MtxType(a->sizeX, a->sizeY);
-		case ASTType::Float32: return ast.GetFloat32MtxType(a->sizeX, a->sizeY);
-		}
+		return ast.GetMatrixType(no, mt->sizeX, mt->sizeY);
 	}
 	EmitFatalError("UNHANDLED PROMOTION!");
 	return nullptr;
 }
 
-ASTType* Parser::FindCommonOpType(ASTType* rt0, ASTType* rt1, SLTokenType token)
+ASTType* Parser::FindCommonOpType(ASTType* rt0, ASTType* rt1)
 {
 	if (rt0 == rt1 && rt0->IsNumberBased())
 	{
@@ -2490,24 +2535,6 @@ ASTType* Parser::FindCommonOpType(ASTType* rt0, ASTType* rt1, SLTokenType token)
 		(rt0->kind == ASTType::Vector && rt1->kind == ASTType::Vector) ||
 		(rt0->kind == ASTType::Matrix && rt1->kind == ASTType::Matrix))
 		return Promote(rt0, rt1);
-#if 0
-	else if (rt0 == rt1 && token == STT_OP_Assign)
-	{
-		// assignment operator works with equal types of any kind
-		return rt0;
-	}
-	// TODO expand with implicit casting and limit by operator type
-	else if (rt0->IsNumVector() && rt0->subType == rt1)
-	{
-		return rt0;
-	}
-	else if (rt1->IsNumVector() && rt1->subType == rt0)
-	{
-		return rt1;
-	}
-	else if (rt0->kind == ASTType::Vector && rt1->IsNumeric()) return rt0;
-	else if (rt1->kind == ASTType::Vector && rt0->IsNumeric()) return rt1;
-#endif
 	return nullptr;
 }
 
@@ -3328,7 +3355,7 @@ static bool TokenIsExprPreceding(SLTokenType tt)
 }
 
 int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
-	size_t pos, size_t start, bool preProcSplit) const
+	size_t pos, size_t start, bool preProcSplit)
 {
 	// http://en.cppreference.com/w/c/language/operator_precedence
 

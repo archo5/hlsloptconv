@@ -51,7 +51,7 @@ struct Parser
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);
 	ASTType* Promote(ASTType* a, ASTType* b);
-	ASTType* FindCommonOpType(ASTType* rt0, ASTType* rt1, SLTokenType token);
+	ASTType* FindCommonOpType(ASTType* rt0, ASTType* rt1);
 	bool CanCast(ASTType* from, ASTType* to, bool castExplicitly);
 	void ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos);
 	void ParseInitList(ASTNode* out, int numItems, bool ctor);
@@ -111,7 +111,7 @@ struct Parser
 
 #define SPLITSCORE_RTLASSOC 0x80
 	int GetSplitScore(const std::vector<SLToken>& tokenArr,
-		size_t pos, size_t start, bool allowFunctions) const;
+		size_t pos, size_t start, bool allowFunctions);
 
 	bool TokenStringDataEquals(const SLToken& t, const char* comp, size_t compsz) const;
 	std::string TokenStringData(const SLToken& t) const;

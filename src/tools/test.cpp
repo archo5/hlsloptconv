@@ -199,7 +199,6 @@ static void exec_test(const char* fname, const char* nameonly)
 	printf("> running %20s\t", nameonly);
 
 	FILE* fp = fopen(outfile, "a");
-	setvbuf(fp, NULL, _IONBF, 0);
 	fprintf(fp, "//\n/// O U T P U T  o f  %s\n//\n\n", nameonly);
 
 	double tm1 = GetTime();

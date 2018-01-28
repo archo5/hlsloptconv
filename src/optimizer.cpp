@@ -62,7 +62,9 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 	{
 		auto* lft = dynamic_cast<const ConstExpr*>(binop->GetLft());
 		auto* rgt = dynamic_cast<const ConstExpr*>(binop->GetRgt());
-		if (lft && rgt)
+		if (lft && rgt &&
+			binop->GetReturnType() == lft->GetReturnType() &&
+			binop->GetReturnType() == rgt->GetReturnType())
 		{
 			switch (binop->GetReturnType()->kind)
 			{
