@@ -157,6 +157,18 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `frac`
+source `
+float4 main(float4 p : POSITION) : POSITION
+{
+	return frac(p.x) + frac(p.xy).xyxy + frac(p.xyz).xyzx + frac(p);
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+in_shader `fract`
+compile_glsl_es100 ``
+in_shader `fract`
+
 // `fwidth`
 source `
 float4 main(float4 p : TEXCOORD) : COLOR
@@ -207,6 +219,26 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `reflect`
+source `
+float4 main(float4 p : POSITION, float4 c : COLOR) : POSITION
+{
+	return reflect(p, c) + reflect(p, 5) + reflect(4, c)/* TODO + reflect(2, 3)*/;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `refract`
+source `
+float4 main(float4 p : POSITION, float4 c : COLOR) : POSITION
+{
+	return refract(p, c, 0.314) + refract(p, 5, 0.314) + refract(4, c, 0.314)/* TODO + refract(2, 3, 0.314)*/;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `rsqrt`
 source `
 float4 main( float4 p : POSITION ) : POSITION
@@ -226,6 +258,33 @@ float4 main( float4 p : POSITION ) : POSITION
 compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
+
+// `tex1D`
+source `
+sampler1D Sampler;
+float4 main(float p : TEXCOORD) : COLOR
+{
+	return tex1D(Sampler, 4) + tex1D(Sampler, true) + tex1D(Sampler, p);
+}`
+compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+in_shader `texture`
+compile_glsl_es100 `-S frag`
+in_shader `texture2D`
+
+// `tex2D`
+source `
+sampler2D Sampler;
+float4 main(float2 p : TEXCOORD) : COLOR
+{
+	return tex2D(Sampler, 4) + tex2D(Sampler, true)
+		+ tex2D(Sampler, 0.5) + tex2D(Sampler, p);
+}`
+compile_hlsl_before_after `/T ps_3_0`
+compile_glsl `-S frag`
+in_shader `texture`
+compile_glsl_es100 `-S frag`
+in_shader `texture2D`
 
 // `tex2Dgrad`
 source `

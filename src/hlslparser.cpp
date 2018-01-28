@@ -1426,7 +1426,17 @@ static ASTType* VectorIntrin(Parser* parser, FCallExpr* fcall,
 		return nullptr;
 	}
 
-	ASTType* rt0 = parser->ast.CastToVector(fcall->GetFirstArg()->ToExpr()->GetReturnType());
+	ASTType* rt0 = nullptr;
+	for (ASTNode* arg = fcall->GetFirstArg()->next; arg; arg = arg->next)
+	{
+		if (arg->ToExpr()->GetReturnType()->kind == ASTType::Vector)
+		{
+			rt0 = arg->ToExpr()->GetReturnType();
+			break;
+		}
+	}
+	if (!rt0)
+		rt0 = parser->ast.CastToVector(fcall->GetFirstArg()->ToExpr()->GetReturnType());
 	if (!rt0)
 		goto unmatched;
 	ASTType* reqty = rt0;
@@ -1479,14 +1489,28 @@ static ASTType* TexSampleIntrin(Parser* parser, FCallExpr* fcall,
 		for (ASTNode* arg = fcall->GetFirstArg()->next; arg; arg = arg->next)
 		{
 			ASTType* rtN = arg->ToExpr()->GetReturnType();
-			if (rtN->IsNumericBased() == false || rtN->kind == ASTType::Matrix ||
-				(rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize)))
+			if (rtN->IsNumericBased() == false || rtN->kind == ASTType::Matrix)
+			{
+				notMatch = true;
+				break;
+			}
+			if (vecSize == 1)
+			{
+				if (rtN->IsNumeric() == false)
+				{
+					notMatch = true;
+					break;
+				}
+			}
+			else if (rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize))
 			{
 				notMatch = true;
 				break;
 			}
 
-			ASTType* reqty = parser->ast.CastToVector(parser->ast.CastToFloat(rtN), vecSize);
+			ASTType* reqty = parser->ast.CastToFloat(rtN);
+			if (vecSize > 1)
+				reqty = parser->ast.CastToVector(reqty, vecSize);
 			CastExprTo(arg->ToExpr(), reqty);
 		}
 	}
@@ -1664,7 +1688,47 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		DEF_INTRIN_SSF(radians),
 	{ "reflect", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return VectorIntrin(parser, fcall, "reflect", false, false, 2); } },
-	/// refract
+	{ "refract", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{
+		if (fcall->GetArgCount() != 3)
+		{
+			parser->EmitError("'refract' requires 3 arguments");
+			return nullptr;
+		}
+
+		ASTType* rt0 = nullptr;
+		ASTNode* arg = fcall->GetFirstArg();
+		if (arg->ToExpr()->GetReturnType()->kind == ASTType::Vector)
+			rt0 = arg->ToExpr()->GetReturnType();
+		else if (arg->next->ToExpr()->GetReturnType()->kind == ASTType::Vector)
+			rt0 = arg->next->ToExpr()->GetReturnType();
+		if (!rt0)
+			rt0 = parser->ast.CastToVector(fcall->GetFirstArg()->ToExpr()->GetReturnType());
+		if (!rt0)
+			goto unmatched;
+		ASTType* reqty = parser->ast.CastToFloat(rt0);
+
+		bool notMatch = rt0->IsNumericBased() == false;
+		arg = fcall->GetFirstArg();
+		if (arg->ToExpr()->GetReturnType()->kind == ASTType::Matrix ||
+			parser->CanCast(arg->ToExpr()->GetReturnType(), reqty, false) == false ||
+			!(arg = arg->next) ||
+			arg->ToExpr()->GetReturnType()->kind == ASTType::Matrix ||
+			parser->CanCast(arg->ToExpr()->GetReturnType(), reqty, false) == false ||
+			!(arg = arg->next) ||
+			arg->ToExpr()->GetReturnType()->IsNumericOrVM1() == false)
+			notMatch = true;
+
+		if (notMatch)
+		{
+	unmatched:
+			parser->EmitError("none of 'refract' overloads matched the argument list");
+			return nullptr;
+		}
+		for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
+			CastExprTo(arg->ToExpr(), arg->next ? reqty : parser->ast.GetFloat32Type());
+		return reqty;
+	} },
 	DEF_INTRIN_SSF(round),
 	DEF_INTRIN_SSF(rsqrt),
 	{ "saturate", [](Parser* parser, FCallExpr* fcall) -> ASTType*
@@ -1686,15 +1750,15 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		DEF_INTRIN_SSF(tanh),
 
 	{ "tex1D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1D", ASTType::Sampler2D, 1, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex1D", ASTType::Sampler1D, 1, 2); } },
 	{ "tex1Dbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dbias", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex1Dbias", ASTType::Sampler1D, 4, 2); } },
 	{ "tex1Dgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dgrad", ASTType::Sampler2D, 1, 4); } },
+	{ return TexSampleIntrin(parser, fcall, "tex1Dgrad", ASTType::Sampler1D, 1, 4); } },
 	{ "tex1Dlod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dlod", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex1Dlod", ASTType::Sampler1D, 4, 2); } },
 	{ "tex1Dproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dproj", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex1Dproj", ASTType::Sampler1D, 4, 2); } },
 
 	{ "tex2D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2D", ASTType::Sampler2D, 2, 2); } },
@@ -1708,26 +1772,26 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 	{ return TexSampleIntrin(parser, fcall, "tex2Dproj", ASTType::Sampler2D, 4, 2); } },
 
 	{ "tex3D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3D", ASTType::Sampler2D, 3, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex3D", ASTType::Sampler3D, 3, 2); } },
 	{ "tex3Dbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dbias", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex3Dbias", ASTType::Sampler3D, 4, 2); } },
 	{ "tex3Dgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dgrad", ASTType::Sampler2D, 3, 4); } },
+	{ return TexSampleIntrin(parser, fcall, "tex3Dgrad", ASTType::Sampler3D, 3, 4); } },
 	{ "tex3Dlod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dlod", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex3Dlod", ASTType::Sampler3D, 4, 2); } },
 	{ "tex3Dproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dproj", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "tex3Dproj", ASTType::Sampler3D, 4, 2); } },
 
 	{ "texCUBE", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBE", ASTType::Sampler2D, 3, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "texCUBE", ASTType::SamplerCUBE, 3, 2); } },
 	{ "texCUBEbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEbias", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "texCUBEbias", ASTType::SamplerCUBE, 4, 2); } },
 	{ "texCUBEgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEgrad", ASTType::Sampler2D, 3, 4); } },
+	{ return TexSampleIntrin(parser, fcall, "texCUBEgrad", ASTType::SamplerCUBE, 3, 4); } },
 	{ "texCUBElod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBElod", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "texCUBElod", ASTType::SamplerCUBE, 4, 2); } },
 	{ "texCUBEproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEproj", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, "texCUBEproj", ASTType::SamplerCUBE, 4, 2); } },
 
 	/// transpose
 	DEF_INTRIN_SSF( trunc ),

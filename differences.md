@@ -23,6 +23,7 @@
 | componentwise matrix mult.: | `mtx1 * mtx2` | `matrixCompMult(mtx1, mtx2)` | `matrixCompMult(mtx1, mtx2)` |
 |       regular matrix mult.: | `mul(mtx1, mtx2)` | `mtx1 * mtx2` | `mtx1 * mtx2` |
 |      matrix-vector product: | `mul(mtx, vec)` | `mtx * vec` | `mtx * vec` |
+|    fractional part intrin.: | `frac` | `fract` | `fract` |
 
 #### Matrices
 

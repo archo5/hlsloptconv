@@ -2605,7 +2605,7 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
-	GLSLConversionPass(AST& a, OutputShaderFormat of) : ast(a), outputFmt(of){}
+	GLSLConversionPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
 	void MatrixUnpack(FCallExpr* fcintrin)
 	{
 		auto* mtxTy = fcintrin->GetReturnType();
@@ -2751,10 +2751,28 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 						fcall->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
 						return;
 					}
-					if (dre->name == "tex2D")
+					if (IsNewSamplingAPI())
 					{
-						dre->name = IsNewSamplingAPI() ? "texture" : "texture2D";
-						return;
+						if (dre->name == "tex1D" ||
+							dre->name == "tex2D" ||
+							dre->name == "tex3D" ||
+							dre->name == "texCUBE") { dre->name = "texture"; return; }
+					}
+					else
+					{
+						if (dre->name == "tex1D")
+						{
+							dre->name = "texture2D";
+							CastExprTo(fcall->GetFirstArg()->next->ToExpr(), ast.GetFloat32VecType(2));
+							return;
+						}
+						if (dre->name == "tex2D") { dre->name = "texture2D"; return; }
+						if (dre->name == "tex3D")
+						{
+							diag.EmitFatalError("tex3D is not supported with GLSL 1.0", dre->loc);
+							return;
+						}
+						if (dre->name == "texCUBE") { dre->name = "textureCube"; return; }
 					}
 				}
 			}
@@ -2833,12 +2851,21 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		}
 	}
 	AST& ast;
+	Diagnostic& diag;
 	OutputShaderFormat outputFmt;
 };
 
-static void GLSLConvert(AST& ast, OutputShaderFormat outputFmt)
+static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
 {
-	GLSLConversionPass(ast, outputFmt).VisitAST(ast);
+	if (outputFmt == OSF_GLSL_ES_100)
+	{
+		// replace sampler1D with sampler2D for GLSL ES 1.0
+		auto* typeS1D = ast.GetSampler1DType();
+		auto* typeS2D = ast.GetSampler2DType();
+		while (typeS1D->firstUse)
+			typeS1D->firstUse->ChangeAssocType(typeS2D);
+	}
+	GLSLConversionPass(ast, diag, outputFmt).VisitAST(ast);
 }
 
 
@@ -3046,7 +3073,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 			RemoveVM1AndM1DTypes(p.ast);
 			RemoveArraysOfArrays(p.ast);
 			GLSLUnpackEntryPoint(p.ast, stage, outputFmt);
-			GLSLConvert(p.ast, outputFmt);
+			GLSLConvert(p.ast, diag, outputFmt);
 			break;
 		}
 
