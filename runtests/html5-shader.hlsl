@@ -185,6 +185,20 @@ float3 rayDir(float fov, float2 size, float2 coord)
 void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 {
 	float fov = 60;
+	if (coord.y > iResolution.y - 10)
+	{
+		float3 v1 = { -0.9, 0.3, 1.6 };
+		if (coord.x < 10)
+		{
+			outCol = float4(frac(v1), 1);
+			return;
+		}
+		else if (coord.x < 20)
+		{
+			outCol = float4(v1 % 2, 1);
+			return;
+		}
+	}
 	float3 dir = mul(float4(rayDir(fov, iResolution, coord),0), viewMatrix);
 	//float3 dir = rayDir(fov, iResolution, coord);
 	float3 eye = mul(float4(0,0,0,1), viewMatrix);
