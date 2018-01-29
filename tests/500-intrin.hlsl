@@ -273,6 +273,32 @@ compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
+// `mul (overload 8)`
+source `
+float4x4 MTX4;
+float3x3 MTX3;
+float2x2 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(MTX4, p) + mul(MTX3, p.xyz).xyzx + mul(MTX2, p.xy).xyyx;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `mul (overload 9)`
+source `
+float4x4 MTX4;
+float3x3 MTX3;
+float2x2 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mul(MTX4, MTX4)._11_44_23_32 + mul(MTX3, MTX3)._11_22_23_32 + mul(MTX2, MTX2)._11_12_21_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `mod (GLSL)`
 source `
 float2x3 MTX1;

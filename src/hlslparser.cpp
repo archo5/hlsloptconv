@@ -1714,9 +1714,10 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			// overload 6
 			if (rt0->kind == ASTType::Vector &&
 				rt1->kind == ASTType::Matrix &&
-				rt0->sizeX == rt1->sizeY)
+				rt0->sizeX == rt1->sizeX)
 			{
-				retTy = parser->ast.GetVectorType(rt0->subType, rt1->sizeX);
+				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
+				retTy = parser->ast.GetVectorType(commonType, rt1->sizeY);
 				break;
 			}
 			// overload 7
@@ -1725,6 +1726,24 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), parser->ast.CastToScalar(retTy));
+				break;
+			}
+			// overload 8
+			if (rt0->kind == ASTType::Matrix &&
+				rt1->kind == ASTType::Vector &&
+				rt0->sizeY == rt1->sizeX)
+			{
+				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
+				retTy = parser->ast.GetVectorType(commonType, rt0->sizeX);
+				break;
+			}
+			// overload 9
+			if (rt0->kind == ASTType::Matrix &&
+				rt1->kind == ASTType::Matrix &&
+				rt0->sizeY == rt1->sizeX)
+			{
+				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
+				retTy = parser->ast.GetMatrixType(commonType, rt0->sizeX, rt1->sizeY);
 				break;
 			}
 			parser->EmitError("none of 'mul' overloads matched the argument list");
