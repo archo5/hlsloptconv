@@ -222,14 +222,59 @@ struct ASTStructType : ASTType
 
 struct ASTNode
 {
+	enum Kind
+	{
+		Kind_None,
+		Kind_VarDecl,
+		Kind_CBufferDecl,
+		Kind_VoidExpr,
+		KindBegin_Expr = Kind_VoidExpr,
+		Kind_DeclRefExpr,
+		Kind_BoolExpr,
+		KindBegin_ConstExpr = Kind_BoolExpr,
+		Kind_Int32Expr,
+		Kind_Float32Expr,
+		KindEnd_ConstExpr = Kind_Float32Expr,
+		Kind_CastExpr,
+		Kind_FCallExpr,
+		Kind_InitListExpr,
+		Kind_IncDecOpExpr,
+		Kind_UnaryOpExpr,
+		Kind_BinaryOpExpr,
+		Kind_TernaryOpExpr,
+		Kind_MemberExpr,
+		Kind_IndexExpr,
+		KindEnd_Expr = Kind_IndexExpr,
+		Kind_EmptyStmt,
+		KindBegin_Stmt = Kind_EmptyStmt,
+		Kind_ExprStmt,
+		Kind_BlockStmt,
+		Kind_ReturnStmt,
+		Kind_DiscardStmt,
+		Kind_BreakStmt,
+		Kind_ContinueStmt,
+		Kind_IfElseStmt,
+		Kind_WhileStmt,
+		Kind_DoWhileStmt,
+		Kind_ForStmt,
+		Kind_VarDeclStmt,
+		KindEnd_Stmt = Kind_VarDeclStmt,
+		Kind_ASTFunction,
+	};
+
 	FINLINE ASTNode() {}
 	FINLINE ASTNode(const ASTNode&) {}
 	virtual ~ASTNode();
 	virtual void Dump(OutStream& out, int level = 0) const = 0;
 	ASTNode* DeepClone() const;
 	virtual ASTNode* Clone() const = 0;
-#define IMPLEMENT_CLONE( cls ) \
+#define IMPLEMENT_NODE(cls) \
+	FINLINE static bool IsThisType(ASTNode* node) { return node->kind == Kind_##cls; } \
+	FINLINE cls() { kind = Kind_##cls; } \
 	ASTNode* Clone() const override { return new cls(*this); }
+#define IMPLEMENT_ISTHISTYPE_RANGE(cls) \
+	FINLINE static bool IsThisType(ASTNode* node) { return \
+		node->kind >= KindBegin_##cls && node->kind <= KindEnd_##cls; }
 
 	void Unlink();
 	void InsertBefore(ASTNode* ch, ASTNode* before);
@@ -252,6 +297,8 @@ struct ASTNode
 	void _UnregisterTypeUse(ASTType* type);
 	void _ChangeUsedType(ASTType*& mytype, ASTType* t);
 
+	Kind kind = Kind_None;
+	int childCount = 0;
 	ASTNode* parent = nullptr;
 	ASTNode* prev = nullptr; // siblings
 	ASTNode* next = nullptr;
@@ -259,12 +306,12 @@ struct ASTNode
 	ASTNode* lastChild = nullptr;
 	ASTNode* prevTypeUse = nullptr;
 	ASTNode* nextTypeUse = nullptr;
-	int childCount = 0;
 	Location loc = Location::BAD();
 };
 
 struct Stmt : ASTNode
 {
+	IMPLEMENT_ISTHISTYPE_RANGE(Stmt);
 };
 
 struct Expr : ASTNode
@@ -274,19 +321,20 @@ struct Expr : ASTNode
 	~Expr();
 	ASTType* GetReturnType() const { return returnType; }
 	void SetReturnType(ASTType* t);
+	IMPLEMENT_ISTHISTYPE_RANGE(Expr);
 
 	ASTType* returnType = nullptr;
 };
 
 struct EmptyStmt : Stmt
 {
-	IMPLEMENT_CLONE(EmptyStmt);
+	IMPLEMENT_NODE(EmptyStmt);
 	void Dump(OutStream& out, int) const;
 };
 
 struct VoidExpr : Expr
 {
-	IMPLEMENT_CLONE(VoidExpr);
+	IMPLEMENT_NODE(VoidExpr);
 	void Dump(OutStream& out, int) const;
 };
 
@@ -303,10 +351,9 @@ struct VarDecl : ASTNode, AccessPointDecl
 		ATTR_StageIO = 0x0040, // whether the vardecl is stage i/o, not (just) function i/o
 	};
 
-	FINLINE VarDecl() {}
 	VarDecl(const VarDecl& o);
 	~VarDecl();
-	IMPLEMENT_CLONE(VarDecl);
+	IMPLEMENT_NODE(VarDecl);
 	Expr* GetInitExpr() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetInitExpr(Expr* e) { SetFirst(e); }
 	ASTType* GetType() const { return type; }
@@ -332,7 +379,7 @@ struct CBufferDecl : ASTNode
 {
 	// all children must be VarDecl
 
-	IMPLEMENT_CLONE(CBufferDecl);
+	IMPLEMENT_NODE(CBufferDecl);
 	void Dump(OutStream& out, int) const override;
 
 	std::string name;
@@ -341,7 +388,7 @@ struct CBufferDecl : ASTNode
 
 struct DeclRefExpr : Expr
 {
-	IMPLEMENT_CLONE(DeclRefExpr);
+	IMPLEMENT_NODE(DeclRefExpr);
 	void Dump(OutStream& out, int) const override;
 
 	std::string name;
@@ -350,13 +397,13 @@ struct DeclRefExpr : Expr
 
 struct ConstExpr : Expr
 {
+	IMPLEMENT_ISTHISTYPE_RANGE(ConstExpr);
 };
 
 struct BoolExpr : ConstExpr
 {
-	BoolExpr() {}
 	BoolExpr(bool v, ASTType* rt) : value(v) { SetReturnType(rt); }
-	IMPLEMENT_CLONE(BoolExpr);
+	IMPLEMENT_NODE(BoolExpr);
 	void Dump(OutStream& out, int) const override;
 
 	bool value = false;
@@ -364,9 +411,8 @@ struct BoolExpr : ConstExpr
 
 struct Int32Expr : ConstExpr
 {
-	Int32Expr() {}
 	Int32Expr(int32_t v, ASTType* rt) : value(v) { SetReturnType(rt); }
-	IMPLEMENT_CLONE(Int32Expr);
+	IMPLEMENT_NODE(Int32Expr);
 	void Dump(OutStream& out, int) const override;
 
 	int32_t value = 0;
@@ -374,9 +420,8 @@ struct Int32Expr : ConstExpr
 
 struct Float32Expr : ConstExpr
 {
-	Float32Expr() {}
 	Float32Expr(double v, ASTType* rt) : value(v) { SetReturnType(rt); }
-	IMPLEMENT_CLONE(Float32Expr);
+	IMPLEMENT_NODE(Float32Expr);
 	void Dump(OutStream& out, int) const override;
 
 	double value = 0;
@@ -384,7 +429,7 @@ struct Float32Expr : ConstExpr
 
 struct CastExpr : Expr
 {
-	IMPLEMENT_CLONE(CastExpr);
+	IMPLEMENT_NODE(CastExpr);
 	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetSource(Expr* e) { SetFirst(e); }
 	void Dump(OutStream& out, int level) const override;
@@ -392,7 +437,7 @@ struct CastExpr : Expr
 
 struct FCallExpr : Expr
 {
-	IMPLEMENT_CLONE(FCallExpr);
+	IMPLEMENT_NODE(FCallExpr);
 	Expr* GetFunc() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	ASTNode* GetFirstArg() const { return childCount >= 1 ? firstChild->next : nullptr; }
 	int GetArgCount() const { return childCount >= 1 ? childCount - 1 : 0; }
@@ -404,13 +449,13 @@ struct FCallExpr : Expr
 
 struct InitListExpr : Expr
 {
-	IMPLEMENT_CLONE(InitListExpr);
+	IMPLEMENT_NODE(InitListExpr);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct IncDecOpExpr : Expr
 {
-	IMPLEMENT_CLONE(IncDecOpExpr);
+	IMPLEMENT_NODE(IncDecOpExpr);
 	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetSource(Expr* e) { SetFirst(e); }
 
@@ -422,7 +467,7 @@ struct IncDecOpExpr : Expr
 
 struct UnaryOpExpr : Expr
 {
-	IMPLEMENT_CLONE(UnaryOpExpr);
+	IMPLEMENT_NODE(UnaryOpExpr);
 	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetSource(Expr* e) { SetFirst(e); }
 
@@ -433,7 +478,7 @@ struct UnaryOpExpr : Expr
 
 struct BinaryOpExpr : Expr
 {
-	IMPLEMENT_CLONE(BinaryOpExpr);
+	IMPLEMENT_NODE(BinaryOpExpr);
 	Expr* GetLft() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	Expr* GetRgt() const { return firstChild != lastChild ? lastChild->ToExpr() : nullptr; }
 
@@ -444,7 +489,7 @@ struct BinaryOpExpr : Expr
 
 struct TernaryOpExpr : Expr
 {
-	IMPLEMENT_CLONE(TernaryOpExpr);
+	IMPLEMENT_NODE(TernaryOpExpr);
 	Expr* GetCond() const { return childCount >= 1 ? firstChild->ToExpr() : nullptr; }
 	Expr* GetTrueExpr() const { return childCount >= 2 ? firstChild->next->ToExpr() : nullptr; }
 	Expr* GetFalseExpr() const { return childCount >= 3 ? firstChild->next->next->ToExpr() : nullptr; }
@@ -460,7 +505,7 @@ struct SubValExpr : Expr
 
 struct MemberExpr : SubValExpr
 {
-	IMPLEMENT_CLONE(MemberExpr);
+	IMPLEMENT_NODE(MemberExpr);
 	void Dump(OutStream& out, int level) const override;
 
 	std::string memberName;
@@ -470,7 +515,7 @@ struct MemberExpr : SubValExpr
 
 struct IndexExpr : SubValExpr
 {
-	IMPLEMENT_CLONE(IndexExpr);
+	IMPLEMENT_NODE(IndexExpr);
 	Expr* GetIndex() const { return childCount >= 2 ? firstChild->next->ToExpr() : nullptr; }
 
 	void Dump(OutStream& out, int level) const override;
@@ -478,7 +523,7 @@ struct IndexExpr : SubValExpr
 
 struct ExprStmt : Stmt
 {
-	IMPLEMENT_CLONE(ExprStmt);
+	IMPLEMENT_NODE(ExprStmt);
 	Expr* GetExpr() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetExpr(Expr* e) { SetFirst(e); }
 
@@ -489,14 +534,14 @@ struct BlockStmt : Stmt
 {
 	// all children must be Stmt
 
-	IMPLEMENT_CLONE(BlockStmt);
+	IMPLEMENT_NODE(BlockStmt);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct ReturnStmt : Stmt
 {
 	~ReturnStmt() { RemoveFromFunction(); }
-	IMPLEMENT_CLONE(ReturnStmt);
+	IMPLEMENT_NODE(ReturnStmt);
 
 	void AddToFunction(ASTFunction* fn);
 	void RemoveFromFunction();
@@ -513,25 +558,25 @@ struct ReturnStmt : Stmt
 
 struct DiscardStmt : Stmt
 {
-	IMPLEMENT_CLONE(DiscardStmt);
+	IMPLEMENT_NODE(DiscardStmt);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct BreakStmt : Stmt
 {
-	IMPLEMENT_CLONE(BreakStmt);
+	IMPLEMENT_NODE(BreakStmt);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct ContinueStmt : Stmt
 {
-	IMPLEMENT_CLONE(ContinueStmt);
+	IMPLEMENT_NODE(ContinueStmt);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct IfElseStmt : Stmt
 {
-	IMPLEMENT_CLONE(IfElseStmt);
+	IMPLEMENT_NODE(IfElseStmt);
 	Expr* GetCond() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	Stmt* GetTrueBr() const { return childCount >= 2 ? firstChild->next->ToStmt() : nullptr; }
 	Stmt* GetFalseBr() const { return childCount >= 3 ? firstChild->next->next->ToStmt() : nullptr; }
@@ -541,7 +586,7 @@ struct IfElseStmt : Stmt
 
 struct WhileStmt : Stmt
 {
-	IMPLEMENT_CLONE(WhileStmt);
+	IMPLEMENT_NODE(WhileStmt);
 	Expr* GetCond() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	Stmt* GetBody() const { return childCount >= 2 ? firstChild->next->ToStmt() : nullptr; }
 
@@ -550,7 +595,7 @@ struct WhileStmt : Stmt
 
 struct DoWhileStmt : Stmt
 {
-	IMPLEMENT_CLONE(DoWhileStmt);
+	IMPLEMENT_NODE(DoWhileStmt);
 	Expr* GetCond() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	Stmt* GetBody() const { return childCount >= 2 ? firstChild->next->ToStmt() : nullptr; }
 
@@ -559,7 +604,7 @@ struct DoWhileStmt : Stmt
 
 struct ForStmt : Stmt
 {
-	IMPLEMENT_CLONE(ForStmt);
+	IMPLEMENT_NODE(ForStmt);
 	Stmt* GetInit() const { return childCount >= 1 ? firstChild->ToStmt() : nullptr; }
 	Expr* GetCond() const { return childCount >= 2 ? firstChild->next->ToExpr() : nullptr; }
 	Expr* GetIncr() const { return childCount >= 3 ? firstChild->next->next->ToExpr() : nullptr; }
@@ -572,14 +617,14 @@ struct VarDeclStmt : Stmt
 {
 	// all children must be VarDecl
 
-	IMPLEMENT_CLONE(VarDeclStmt);
+	IMPLEMENT_NODE(VarDeclStmt);
 	void Dump(OutStream& out, int level) const override;
 };
 
 struct ASTFunction : ASTNode
 {
 	~ASTFunction();
-	IMPLEMENT_CLONE(ASTFunction);
+	IMPLEMENT_NODE(ASTFunction);
 	Stmt* GetCode() const { return firstChild ? firstChild->ToStmt() : nullptr; }
 	// VarDecl:
 	ASTNode* GetFirstArg() const { return childCount >= 1 ? firstChild->next : nullptr; }
