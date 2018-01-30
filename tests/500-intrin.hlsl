@@ -364,6 +364,16 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `step`
+source `
+float4 main(float4 p : POSITION) : POSITION
+{
+	return step(0, p.x) + step(true, p.xy).xyxy + step(p.xyz, true).xyzx + step(p, p.x);
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `tex1D`
 source `
 sampler1D Sampler;

@@ -193,9 +193,14 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 			outCol = float4(frac(v1), 1);
 			return;
 		}
-		else if (coord.x < 20)
+		/*else*/ if (coord.x < 20)
 		{
 			outCol = float4(v1 % 2, 1);
+			return;
+		}
+		if (coord.x < 30)
+		{
+			outCol = float4(step(0, float3(0.5, 0, -0.5)), 1);
 			return;
 		}
 	}

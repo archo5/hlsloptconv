@@ -1373,7 +1373,12 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, FCallExpr* fcall,
 		return nullptr;
 	}
 
+	auto arg = fcall->GetFirstArg();
 	ASTType* rt0 = fcall->GetFirstArg()->ToExpr()->GetReturnType();
+	if (args >= 2)
+		rt0 = parser->Promote(rt0, arg->next->ToExpr()->GetReturnType());
+	if (args >= 3)
+		rt0 = parser->Promote(rt0, arg->next->next->ToExpr()->GetReturnType());
 	ASTType* reqty = rt0;
 	if (alsoInt)
 	{
