@@ -1876,7 +1876,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 {
 	if (Expr* func = fcall->GetFunc())
 	{
-		if (auto ie = dynamic_cast<DeclRefExpr*>(func))
+		if (auto ie = dyn_cast<DeclRefExpr>(func))
 		{
 			auto bit = g_BuiltinIntrinsics.find(ie->name);
 			if (bit != g_BuiltinIntrinsics.end())

@@ -136,7 +136,7 @@ void SLGenerator::EmitVarDecl(const VarDecl* vd)
 	if (supportsPacking && vd->regID >= 0)
 	{
 		out << " : ";
-		if (dynamic_cast<const CBufferDecl*>(vd->parent))
+		if (dyn_cast<const CBufferDecl>(vd->parent))
 		{
 			out << "packoffset(c" << (vd->regID / 4);
 			if (vd->regID % 4)
@@ -158,17 +158,17 @@ void SLGenerator::EmitVarDecl(const VarDecl* vd)
 
 void SLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
+	if (auto* bexpr = dyn_cast<const BoolExpr>(node))
 	{
 		out << (bexpr->value ? "true" : "false");
 		return;
 	}
-	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
+	else if (auto* i32expr = dyn_cast<const Int32Expr>(node))
 	{
 		out << i32expr->value;
 		return;
 	}
-	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
+	else if (auto* f32expr = dyn_cast<const Float32Expr>(node))
 	{
 		char bfr[32];
 		sprintf(bfr, "%.18g", f32expr->value);
@@ -181,7 +181,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 			out << "f";
 		return;
 	}
-	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	else if (auto* idop = dyn_cast<const IncDecOpExpr>(node))
 	{
 		out << "(";
 		const char* opstr = idop->dec ? "--" : "++";
@@ -191,7 +191,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	else if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
 	{
 		out << "(";
 		const char* opstr = "[UNIMPL 1op]";
@@ -206,7 +206,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	else if (auto* binop = dyn_cast<const BinaryOpExpr>(node))
 	{
 		out << "(";
 		EmitExpr(binop->GetLft());
@@ -254,7 +254,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* tnop = dynamic_cast<const TernaryOpExpr*>(node))
+	else if (auto* tnop = dyn_cast<const TernaryOpExpr>(node))
 	{
 		out << "(";
 		EmitExpr(tnop->GetCond());
@@ -265,7 +265,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
+	else if (auto* fce = dyn_cast<const FCallExpr>(node))
 	{
 		if (fce->resolvedFunc)
 		{
@@ -285,7 +285,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* mbe = dynamic_cast<const MemberExpr*>(node))
+	else if (auto* mbe = dyn_cast<const MemberExpr>(node))
 	{
 		if (!supportsScalarSwizzle && mbe->GetSource()->GetReturnType()->IsNumeric())
 		{
@@ -302,7 +302,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* ide = dynamic_cast<const IndexExpr*>(node))
+	else if (auto* ide = dyn_cast<const IndexExpr>(node))
 	{
 		EmitExpr(ide->GetSource());
 		out << "[";
@@ -310,7 +310,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << "]";
 		return;
 	}
-	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 	{
 		if (dre->decl)
 			out << dre->decl->name;
@@ -318,7 +318,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 			out << dre->name;
 		return;
 	}
-	else if (dynamic_cast<const VoidExpr*>(node))
+	else if (dyn_cast<const VoidExpr>(node))
 	{
 		out << "/*--*/";
 		return;
@@ -329,54 +329,54 @@ void SLGenerator::EmitExpr(const Expr* node)
 
 void SLGenerator::EmitStmt(const Stmt* node, int level)
 {
-	if (auto* blkstmt = dynamic_cast<const BlockStmt*>(node))
+	if (auto* blkstmt = dyn_cast<const BlockStmt>(node))
 	{
 		out << "\n"; LVL(level); out << "{"; level++;
 		for (ASTNode* ch = blkstmt->firstChild; ch; ch = ch->next)
 		{
 			EmitStmt(ch->ToStmt(), level);
 			// optimization - do not generate code after first return statement
-			if (dynamic_cast<const ReturnStmt*>(ch->ToStmt()))
+			if (dyn_cast<const ReturnStmt>(ch->ToStmt()))
 				break;
 		}
 		out << "\n"; level--; LVL(level); out << "}";
 		return;
 	}
-	else if (auto* ifelsestmt = dynamic_cast<const IfElseStmt*>(node))
+	else if (auto* ifelsestmt = dyn_cast<const IfElseStmt>(node))
 	{
 		out << "\n"; LVL(level); out << "if(";
 		EmitExpr(ifelsestmt->GetCond());
 		out << ")";
 		EmitStmt(ifelsestmt->GetTrueBr(), level
-			+ !dynamic_cast<const BlockStmt*>(ifelsestmt->GetTrueBr()));
+			+ !dyn_cast<const BlockStmt>(ifelsestmt->GetTrueBr()));
 		if (ifelsestmt->GetFalseBr())
 		{
 			out << "\n"; LVL(level); out << "else";
 			EmitStmt(ifelsestmt->GetFalseBr(), level
-				+ !dynamic_cast<const BlockStmt*>(ifelsestmt->GetFalseBr()));
+				+ !dyn_cast<const BlockStmt>(ifelsestmt->GetFalseBr()));
 		}
 		return;
 	}
-	else if (auto* whilestmt = dynamic_cast<const WhileStmt*>(node))
+	else if (auto* whilestmt = dyn_cast<const WhileStmt>(node))
 	{
 		out << "\n"; LVL(level); out << "while(";
 		EmitExpr(whilestmt->GetCond());
 		out << ")";
 		EmitStmt(whilestmt->GetBody(), level
-			+ !dynamic_cast<const BlockStmt*>(whilestmt->GetBody()));
+			+ !dyn_cast<const BlockStmt>(whilestmt->GetBody()));
 		return;
 	}
-	else if (auto* dowhilestmt = dynamic_cast<const DoWhileStmt*>(node))
+	else if (auto* dowhilestmt = dyn_cast<const DoWhileStmt>(node))
 	{
 		out << "\n"; LVL(level); out << "do";
 		EmitStmt(dowhilestmt->GetBody(), level
-			+ !dynamic_cast<const BlockStmt*>(dowhilestmt->GetBody()));
+			+ !dyn_cast<const BlockStmt>(dowhilestmt->GetBody()));
 		out << "\n"; LVL(level); out << "while(";
 		EmitExpr(dowhilestmt->GetCond());
 		out << ");";
 		return;
 	}
-	else if (auto* forstmt = dynamic_cast<const ForStmt*>(node))
+	else if (auto* forstmt = dyn_cast<const ForStmt>(node))
 	{
 		out << "\n"; LVL(level); out << "for(";
 		EmitStmt(forstmt->GetInit(), level + 1);
@@ -385,17 +385,17 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 		EmitExpr(forstmt->GetIncr());
 		out << ")";
 		EmitStmt(forstmt->GetBody(), level
-			+ !dynamic_cast<const BlockStmt*>(forstmt->GetBody()));
+			+ !dyn_cast<const BlockStmt>(forstmt->GetBody()));
 		return;
 	}
-	else if (auto* exprstmt = dynamic_cast<const ExprStmt*>(node))
+	else if (auto* exprstmt = dyn_cast<const ExprStmt>(node))
 	{
 		out << "\n"; LVL(level);
 		EmitExpr(exprstmt->GetExpr());
 		out << ";";
 		return;
 	}
-	else if (auto* retstmt = dynamic_cast<const ReturnStmt*>(node))
+	else if (auto* retstmt = dyn_cast<const ReturnStmt>(node))
 	{
 		out << "\n"; LVL(level);
 		out << "return ";
@@ -404,25 +404,25 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 		out << ";";
 		return;
 	}
-	else if (dynamic_cast<const DiscardStmt*>(node))
+	else if (dyn_cast<const DiscardStmt>(node))
 	{
 		out << "\n"; LVL(level);
 		out << "discard;";
 		return;
 	}
-	else if (dynamic_cast<const BreakStmt*>(node))
+	else if (dyn_cast<const BreakStmt>(node))
 	{
 		out << "\n"; LVL(level);
 		out << "break;";
 		return;
 	}
-	else if (dynamic_cast<const ContinueStmt*>(node))
+	else if (dyn_cast<const ContinueStmt>(node))
 	{
 		out << "\n"; LVL(level);
 		out << "continue;";
 		return;
 	}
-	else if (auto* vdstmt = dynamic_cast<const VarDeclStmt*>(node))
+	else if (auto* vdstmt = dyn_cast<const VarDeclStmt>(node))
 	{
 		for (ASTNode* ch = vdstmt->firstChild; ch; ch = ch->next)
 		{
@@ -433,7 +433,7 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 		}
 		return;
 	}
-	else if (dynamic_cast<const EmptyStmt*>(node))
+	else if (dyn_cast<const EmptyStmt>(node))
 	{
 		out << ";";
 		return;
@@ -526,7 +526,7 @@ void HLSLGenerator::EmitTypeRef(const ASTType* type)
 
 void HLSLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
+	if (auto* castexpr = dyn_cast<const CastExpr>(node))
 	{
 		out << "((";
 		EmitTypeRef(castexpr->GetReturnType());
@@ -535,7 +535,7 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
+	else if (auto* ile = dyn_cast<const InitListExpr>(node))
 	{
 		if (ile->GetReturnType()->kind == ASTType::Array ||
 			ile->GetReturnType()->kind == ASTType::Structure)
@@ -573,7 +573,7 @@ void HLSLGenerator::Generate()
 
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 	{
-		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
+		if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 		{
 			out << "cbuffer " << cbuf->name;
 			if (cbuf->bufRegID >= 0)
@@ -656,7 +656,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 
 void GLSLGenerator::EmitExpr(const Expr* node)
 {
-	if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
+	if (auto* castexpr = dyn_cast<const CastExpr>(node))
 	{
 		EmitTypeRef(castexpr->GetReturnType());
 		out << "(";
@@ -664,7 +664,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
+	else if (auto* ile = dyn_cast<const InitListExpr>(node))
 	{
 		EmitTypeRef(ile->GetReturnType());
 		out << "(";
@@ -697,7 +697,7 @@ void GLSLGenerator::Generate()
 
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 	{
-		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
+		if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 		{
 			if (version >= 140)
 			{

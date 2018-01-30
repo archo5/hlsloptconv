@@ -5,15 +5,15 @@
 
 void ConstantPropagation::PostVisit(ASTNode* node)
 {
-	if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
 	{
-		if (auto* src = dynamic_cast<const ConstExpr*>(unop->GetSource()))
+		if (auto* src = dyn_cast<const ConstExpr>(unop->GetSource()))
 		{
 			switch (src->GetReturnType()->kind)
 			{
 			case ASTType::Bool:
 			{
-				bool sv = dynamic_cast<const BoolExpr*>(src)->value;
+				bool sv = dyn_cast<const BoolExpr>(src)->value;
 				bool out = false;
 				switch (unop->opType)
 				{
@@ -27,7 +27,7 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			}
 			case ASTType::Int32:
 			{
-				int32_t sv = dynamic_cast<const Int32Expr*>(src)->value;
+				int32_t sv = dyn_cast<const Int32Expr>(src)->value;
 				int32_t out = 0;
 				switch (unop->opType)
 				{
@@ -43,7 +43,7 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			case ASTType::Float16:
 			case ASTType::Float32:
 			{
-				double sv = dynamic_cast<const Float32Expr*>(src)->value;
+				double sv = dyn_cast<const Float32Expr>(src)->value;
 				double out = 0;
 				switch (unop->opType)
 				{
@@ -58,10 +58,10 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			}
 		}
 	}
-	else if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	else if (auto* binop = dyn_cast<const BinaryOpExpr>(node))
 	{
-		auto* lft = dynamic_cast<const ConstExpr*>(binop->GetLft());
-		auto* rgt = dynamic_cast<const ConstExpr*>(binop->GetRgt());
+		auto* lft = dyn_cast<const ConstExpr>(binop->GetLft());
+		auto* rgt = dyn_cast<const ConstExpr>(binop->GetRgt());
 		if (lft && rgt &&
 			binop->GetReturnType() == lft->GetReturnType() &&
 			binop->GetReturnType() == rgt->GetReturnType())
@@ -70,8 +70,8 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			{
 			case ASTType::Int32:
 			{
-				int32_t lv = dynamic_cast<const Int32Expr*>(lft)->value;
-				int32_t rv = dynamic_cast<const Int32Expr*>(rgt)->value;
+				int32_t lv = dyn_cast<const Int32Expr>(lft)->value;
+				int32_t rv = dyn_cast<const Int32Expr>(rgt)->value;
 				int32_t out = 0;
 				switch (binop->opType)
 				{
@@ -90,8 +90,8 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			case ASTType::Float16:
 			case ASTType::Float32:
 			{
-				double lv = dynamic_cast<const Float32Expr*>(lft)->value;
-				double rv = dynamic_cast<const Float32Expr*>(rgt)->value;
+				double lv = dyn_cast<const Float32Expr>(lft)->value;
+				double rv = dyn_cast<const Float32Expr>(rgt)->value;
 				double out = 0;
 				switch (binop->opType)
 				{
@@ -110,9 +110,9 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 			}
 		}
 	}
-	else if (auto* cast = dynamic_cast<const CastExpr*>(node))
+	else if (auto* cast = dyn_cast<const CastExpr>(node))
 	{
-		if (auto* src = dynamic_cast<const ConstExpr*>(cast->GetSource()))
+		if (auto* src = dyn_cast<const ConstExpr>(cast->GetSource()))
 		{
 			if (cast->GetReturnType()->kind == ASTType::Bool)
 			{
@@ -180,9 +180,9 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 		}
 	}
 
-	else if (auto* ifelse = dynamic_cast<IfElseStmt*>(node))
+	else if (auto* ifelse = dyn_cast<IfElseStmt>(node))
 	{
-		if (auto* cond = dynamic_cast<const BoolExpr*>(ifelse->GetCond()))
+		if (auto* cond = dyn_cast<const BoolExpr>(ifelse->GetCond()))
 		{
 			if (cond->value)
 			{
@@ -220,12 +220,12 @@ void RemoveUnusedFunctions::RunOnAST(AST& ast)
 
 void MarkUnusedVariables::PreVisit(ASTNode* node)
 {
-	if (auto* dre = dynamic_cast<DeclRefExpr*>(node))
+	if (auto* dre = dyn_cast<DeclRefExpr>(node))
 	{
 		if (dre->decl)
 			dre->decl->used = true;
 	}
-	else if (auto* vds = dynamic_cast<VarDeclStmt*>(node))
+	else if (auto* vds = dyn_cast<VarDeclStmt>(node))
 	{
 		for (ASTNode* ch = vds->firstChild; ch; ch = ch->next)
 			ch->ToVarDecl()->used = true;
@@ -243,7 +243,7 @@ void MarkUnusedVariables::RunOnAST(AST& ast)
 {
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 	{
-		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
+		if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 		{
 			for (ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
 				cbv->ToVarDecl()->used = false;
@@ -259,7 +259,7 @@ void RemoveUnusedVariables::RunOnAST(AST& ast)
 {
 	for (ASTNode* g = ast.globalVars.firstChild; g; )
 	{
-		if (auto* cbuf = dynamic_cast<CBufferDecl*>(g))
+		if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 		{
 			g = g->next;
 #if 0

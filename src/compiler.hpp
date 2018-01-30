@@ -220,6 +220,16 @@ struct ASTStructType : ASTType
 };
 
 
+template<class To, class From> FINLINE To* dyn_cast(From* from)
+{
+	return To::IsThisType(from) ? static_cast<To*>(from) : nullptr;
+}
+
+template<class To, class From> FINLINE const To* dyn_cast(const From* from)
+{
+	return To::IsThisType(from) ? static_cast<To*>(from) : nullptr;
+}
+
 struct ASTNode
 {
 	enum Kind
@@ -243,7 +253,9 @@ struct ASTNode
 		Kind_BinaryOpExpr,
 		Kind_TernaryOpExpr,
 		Kind_MemberExpr,
+		KindBegin_SubValExpr = Kind_MemberExpr,
 		Kind_IndexExpr,
+		KindEnd_SubValExpr = Kind_IndexExpr,
 		KindEnd_Expr = Kind_IndexExpr,
 		Kind_EmptyStmt,
 		KindBegin_Stmt = Kind_EmptyStmt,
@@ -263,17 +275,17 @@ struct ASTNode
 	};
 
 	FINLINE ASTNode() {}
-	FINLINE ASTNode(const ASTNode&) {}
+	FINLINE ASTNode(const ASTNode& node) : kind(node.kind) {}
 	virtual ~ASTNode();
 	virtual void Dump(OutStream& out, int level = 0) const = 0;
 	ASTNode* DeepClone() const;
 	virtual ASTNode* Clone() const = 0;
 #define IMPLEMENT_NODE(cls) \
-	FINLINE static bool IsThisType(ASTNode* node) { return node->kind == Kind_##cls; } \
+	FINLINE static bool IsThisType(const ASTNode* node) { return node->kind == Kind_##cls; } \
 	FINLINE cls() { kind = Kind_##cls; } \
 	ASTNode* Clone() const override { return new cls(*this); }
 #define IMPLEMENT_ISTHISTYPE_RANGE(cls) \
-	FINLINE static bool IsThisType(ASTNode* node) { return \
+	FINLINE static bool IsThisType(const ASTNode* node) { return \
 		node->kind >= KindBegin_##cls && node->kind <= KindEnd_##cls; }
 
 	void Unlink();
@@ -402,7 +414,7 @@ struct ConstExpr : Expr
 
 struct BoolExpr : ConstExpr
 {
-	BoolExpr(bool v, ASTType* rt) : value(v) { SetReturnType(rt); }
+	BoolExpr(bool v, ASTType* rt) : value(v) { kind = Kind_BoolExpr; SetReturnType(rt); }
 	IMPLEMENT_NODE(BoolExpr);
 	void Dump(OutStream& out, int) const override;
 
@@ -411,7 +423,7 @@ struct BoolExpr : ConstExpr
 
 struct Int32Expr : ConstExpr
 {
-	Int32Expr(int32_t v, ASTType* rt) : value(v) { SetReturnType(rt); }
+	Int32Expr(int32_t v, ASTType* rt) : value(v) { kind = Kind_Int32Expr; SetReturnType(rt); }
 	IMPLEMENT_NODE(Int32Expr);
 	void Dump(OutStream& out, int) const override;
 
@@ -420,7 +432,7 @@ struct Int32Expr : ConstExpr
 
 struct Float32Expr : ConstExpr
 {
-	Float32Expr(double v, ASTType* rt) : value(v) { SetReturnType(rt); }
+	Float32Expr(double v, ASTType* rt) : value(v) { kind = Kind_Float32Expr; SetReturnType(rt); }
 	IMPLEMENT_NODE(Float32Expr);
 	void Dump(OutStream& out, int) const override;
 
@@ -499,6 +511,7 @@ struct TernaryOpExpr : Expr
 
 struct SubValExpr : Expr
 {
+	IMPLEMENT_ISTHISTYPE_RANGE(SubValExpr);
 	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetSource(Expr* e) { SetFirst(e); }
 };

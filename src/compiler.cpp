@@ -427,22 +427,22 @@ void ASTNode::SetFirst(ASTNode* ch)
 
 Expr* ASTNode::ToExpr()
 {
-	return dynamic_cast<Expr*>(this);
+	return dyn_cast<Expr>(this);
 }
 
 Stmt* ASTNode::ToStmt()
 {
-	return dynamic_cast<Stmt*>(this);
+	return dyn_cast<Stmt>(this);
 }
 
 VarDecl* ASTNode::ToVarDecl()
 {
-	return dynamic_cast<VarDecl*>(this);
+	return dyn_cast<VarDecl>(this);
 }
 
 ASTFunction* ASTNode::ToFunction()
 {
-	return dynamic_cast<ASTFunction*>(this);
+	return dyn_cast<ASTFunction>(this);
 }
 
 void ASTNode::ChangeAssocType(ASTType* t)
@@ -520,6 +520,7 @@ void VoidExpr::Dump(OutStream& out, int) const
 
 VarDecl::VarDecl(const VarDecl& o) : ASTNode(o)
 {
+	kind = Kind_VarDecl;
 	SetType(o.GetType());
 }
 
@@ -564,7 +565,7 @@ void VarDecl::Dump(OutStream& out, int level) const
 	if (regID >= 0)
 	{
 		out << " : ";
-		if (dynamic_cast<const CBufferDecl*>(parent))
+		if (dyn_cast<const CBufferDecl>(parent))
 		{
 			out << "packoffset(c" << (regID / 4);
 			if (regID % 4)
@@ -1195,7 +1196,7 @@ struct UsedFuncMarker : ASTVisitor<UsedFuncMarker>
 	}
 	void PreVisit(ASTNode* node)
 	{
-		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
+		if (auto* fcall = dyn_cast<FCallExpr>(node))
 		{
 			if (fcall->isBuiltinFunc == false && fcall->resolvedFunc->used == false)
 			{
@@ -1331,30 +1332,30 @@ void VariableAccessValidator::RunOnAST(const AST& ast)
 
 void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 {
-	if (auto* bexpr = dynamic_cast<const BoolExpr*>(node))
+	if (auto* bexpr = dyn_cast<const BoolExpr>(node))
 	{
 		return;
 	}
-	else if (auto* i32expr = dynamic_cast<const Int32Expr*>(node))
+	else if (auto* i32expr = dyn_cast<const Int32Expr>(node))
 	{
 		return;
 	}
-	else if (auto* f32expr = dynamic_cast<const Float32Expr*>(node))
+	else if (auto* f32expr = dyn_cast<const Float32Expr>(node))
 	{
 		return;
 	}
-	else if (auto* idop = dynamic_cast<const IncDecOpExpr*>(node))
+	else if (auto* idop = dyn_cast<const IncDecOpExpr>(node))
 	{
 		ProcessReadExpr(idop->GetSource());
 		ProcessWriteExpr(idop->GetSource());
 		return;
 	}
-	else if (auto* unop = dynamic_cast<const UnaryOpExpr*>(node))
+	else if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
 	{
 		ProcessReadExpr(unop->GetSource());
 		return;
 	}
-	else if (auto* binop = dynamic_cast<const BinaryOpExpr*>(node))
+	else if (auto* binop = dyn_cast<const BinaryOpExpr>(node))
 	{
 		if (binop->opType == STT_OP_Assign)
 		{
@@ -1369,21 +1370,21 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* tnop = dynamic_cast<const TernaryOpExpr*>(node))
+	else if (auto* tnop = dyn_cast<const TernaryOpExpr>(node))
 	{
 		ProcessReadExpr(tnop->GetCond());
 		ProcessReadExpr(tnop->GetTrueExpr());
 		ProcessReadExpr(tnop->GetFalseExpr());
 		return;
 	}
-	else if (auto* castexpr = dynamic_cast<const CastExpr*>(node))
+	else if (auto* castexpr = dyn_cast<const CastExpr>(node))
 	{
 		ProcessReadExpr(castexpr->GetSource());
 		return;
 	}
-	else if (auto* fce = dynamic_cast<const FCallExpr*>(node))
+	else if (auto* fce = dyn_cast<const FCallExpr>(node))
 	{
-		if (auto* name = dynamic_cast<const DeclRefExpr*>(fce->GetFunc()))
+		if (auto* name = dyn_cast<const DeclRefExpr>(fce->GetFunc()))
 		{
 			if (fce->isBuiltinFunc)
 			{
@@ -1415,7 +1416,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 			}
 		}
 	}
-	else if (auto* ile = dynamic_cast<const InitListExpr*>(node))
+	else if (auto* ile = dyn_cast<const InitListExpr>(node))
 	{
 		for (ASTNode* ch = ile->firstChild; ch; ch = ch->next)
 		{
@@ -1423,21 +1424,21 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* sve = dynamic_cast<const SubValExpr*>(node))
+	else if (auto* sve = dyn_cast<const SubValExpr>(node))
 	{
 		std::vector<const SubValExpr*> revTrail { sve };
 		Expr* exprIt = sve->GetSource();
-		while (auto* ssve = dynamic_cast<const SubValExpr*>(exprIt))
+		while (auto* ssve = dyn_cast<const SubValExpr>(exprIt))
 		{
 			revTrail.push_back(ssve);
 			exprIt = ssve->GetSource();
 		}
 
 		for (auto* sve : revTrail)
-			if (auto* idxe = dynamic_cast<const IndexExpr*>(sve))
+			if (auto* idxe = dyn_cast<const IndexExpr>(sve))
 				ProcessReadExpr(idxe->GetIndex());
 
-		if (auto* dre = dynamic_cast<const DeclRefExpr*>(exprIt))
+		if (auto* dre = dyn_cast<const DeclRefExpr>(exprIt))
 		{
 			// check if variable part is written
 			int rf = dre->decl->APRangeFrom;
@@ -1457,7 +1458,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 						auto* sve = revTrail[i];
 						int32_t index = -1;
 						bool isMmbSwizzle = false;
-						if (auto* mmb = dynamic_cast<const MemberExpr*>(sve))
+						if (auto* mmb = dyn_cast<const MemberExpr>(sve))
 						{
 							if (mmb->swizzleComp == 0)
 								index = mmb->memberID;
@@ -1469,9 +1470,9 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 								isMatrixSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
 							}
 						}
-						else if (auto* idx = dynamic_cast<const IndexExpr*>(sve))
+						else if (auto* idx = dyn_cast<const IndexExpr>(sve))
 						{
-							if (auto* ci = dynamic_cast<const Int32Expr*>(idx->GetIndex()))
+							if (auto* ci = dyn_cast<const Int32Expr>(idx->GetIndex()))
 							{
 								index = ci->value;
 							}
@@ -1517,12 +1518,12 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		}
 		return;
 	}
-	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 	{
 		ValidateCheckVariableInitialized(dre);
 		return;
 	}
-	else if (dynamic_cast<const VoidExpr*>(node))
+	else if (dyn_cast<const VoidExpr>(node))
 	{
 		return;
 	}
@@ -1532,17 +1533,17 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 
 void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 {
-	if (auto* sve = dynamic_cast<const SubValExpr*>(node))
+	if (auto* sve = dyn_cast<const SubValExpr>(node))
 	{
 		std::vector<const SubValExpr*> revTrail { sve };
 		Expr* exprIt = sve->GetSource();
-		while (auto* ssve = dynamic_cast<const SubValExpr*>(exprIt))
+		while (auto* ssve = dyn_cast<const SubValExpr>(exprIt))
 		{
 			revTrail.push_back(ssve);
 			exprIt = ssve->GetSource();
 		}
 
-		if (auto* dre = dynamic_cast<const DeclRefExpr*>(exprIt))
+		if (auto* dre = dyn_cast<const DeclRefExpr>(exprIt))
 		{
 			if (dre->decl->flags & VarDecl::ATTR_Const)
 			{
@@ -1566,7 +1567,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 					{
 						--i;
 						auto* sve = revTrail[i];
-						if (auto* mmb = dynamic_cast<const MemberExpr*>(sve))
+						if (auto* mmb = dyn_cast<const MemberExpr>(sve))
 						{
 							sizeExpr = sve;
 							if (mmb->swizzleComp == 0)
@@ -1583,10 +1584,10 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 								isMatrixSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
 							}
 						}
-						else if (auto* idx = dynamic_cast<const IndexExpr*>(sve))
+						else if (auto* idx = dyn_cast<const IndexExpr>(sve))
 						{
 							// array
-							if (auto* ci = dynamic_cast<const Int32Expr*>(idx->GetIndex()))
+							if (auto* ci = dyn_cast<const Int32Expr>(idx->GetIndex()))
 							{
 								sizeExpr = sve;
 								rf += sve->GetReturnType()->GetAccessPointCount() * ci->value;
@@ -1621,7 +1622,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 			diag.EmitFatalError("cannot write to temporary value", exprIt->loc);
 		}
 	}
-	else if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 	{
 		if (dre->decl->flags & VarDecl::ATTR_Const)
 		{
@@ -1640,7 +1641,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 
 bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 {
-	if (auto* blkstmt = dynamic_cast<const BlockStmt*>(node))
+	if (auto* blkstmt = dyn_cast<const BlockStmt>(node))
 	{
 		for (ASTNode* ch = blkstmt->firstChild; ch; ch = ch->next)
 		{
@@ -1650,25 +1651,25 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		}
 		return false;
 	}
-	else if (auto* ifelsestmt = dynamic_cast<const IfElseStmt*>(node))
+	else if (auto* ifelsestmt = dyn_cast<const IfElseStmt>(node))
 	{
 		ProcessReadExpr(ifelsestmt->GetCond());
 		bool rif = ProcessStmt(ifelsestmt->GetTrueBr());
 		bool relse = ifelsestmt->GetFalseBr() && ProcessStmt(ifelsestmt->GetFalseBr());
 		return rif && relse;
 	}
-	else if (auto* whilestmt = dynamic_cast<const WhileStmt*>(node))
+	else if (auto* whilestmt = dyn_cast<const WhileStmt>(node))
 	{
 		ProcessReadExpr(whilestmt->GetCond());
 		return ProcessStmt(whilestmt->GetBody());
 	}
-	else if (auto* dowhilestmt = dynamic_cast<const DoWhileStmt*>(node))
+	else if (auto* dowhilestmt = dyn_cast<const DoWhileStmt>(node))
 	{
 		bool rb = ProcessStmt(dowhilestmt->GetBody());
 		ProcessReadExpr(dowhilestmt->GetCond());
 		return rb;
 	}
-	else if (auto* forstmt = dynamic_cast<const ForStmt*>(node))
+	else if (auto* forstmt = dyn_cast<const ForStmt>(node))
 	{
 		ProcessStmt(forstmt->GetInit()); // cannot return
 		ProcessReadExpr(forstmt->GetCond());
@@ -1676,10 +1677,10 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		ProcessReadExpr(forstmt->GetIncr());
 		return rb;
 	}
-	else if (auto* exprstmt = dynamic_cast<const ExprStmt*>(node))
+	else if (auto* exprstmt = dyn_cast<const ExprStmt>(node))
 	{
 		// easy special cases for root that don't need the value
-		if (auto* binop = dynamic_cast<const BinaryOpExpr*>(exprstmt->GetExpr()))
+		if (auto* binop = dyn_cast<const BinaryOpExpr>(exprstmt->GetExpr()))
 		{
 			if (binop->opType == STT_OP_Assign)
 			{
@@ -1692,7 +1693,7 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		ProcessReadExpr(exprstmt->GetExpr());
 		return false;
 	}
-	else if (auto* retstmt = dynamic_cast<const ReturnStmt*>(node))
+	else if (auto* retstmt = dyn_cast<const ReturnStmt>(node))
 	{
 		if (curASTFunction->GetReturnType()->IsVoid() == false)
 		{
@@ -1702,20 +1703,20 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		ValidateCheckOutputElementsWritten(retstmt->loc);
 		return true;
 	}
-	else if (auto* dscstmt = dynamic_cast<const DiscardStmt*>(node))
+	else if (auto* dscstmt = dyn_cast<const DiscardStmt>(node))
 	{
 		// still need to return something somewhere, otherwise shader is somewhat pointless
 		return false;
 	}
-	else if (auto* brkstmt = dynamic_cast<const BreakStmt*>(node))
+	else if (auto* brkstmt = dyn_cast<const BreakStmt>(node))
 	{
 		return false;
 	}
-	else if (auto* cntstmt = dynamic_cast<const ContinueStmt*>(node))
+	else if (auto* cntstmt = dyn_cast<const ContinueStmt>(node))
 	{
 		return false;
 	}
-	else if (auto* vdstmt = dynamic_cast<const VarDeclStmt*>(node))
+	else if (auto* vdstmt = dyn_cast<const VarDeclStmt>(node))
 	{
 		for (ASTNode* ch = vdstmt->firstChild; ch; ch = ch->next)
 		{
@@ -1731,7 +1732,7 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		}
 		return false;
 	}
-	else if (dynamic_cast<const EmptyStmt*>(node))
+	else if (dyn_cast<const EmptyStmt>(node))
 	{
 		return false;
 	}
@@ -2011,7 +2012,7 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 		{
 			for (ReturnStmt* ret = F->firstRetStmt; ret; ret = ret->nextRetStmt)
 			{
-				if (dynamic_cast<BlockStmt*>(ret->parent) == nullptr)
+				if (dyn_cast<BlockStmt>(ret->parent) == nullptr)
 				{
 					BlockStmt* blk = new BlockStmt;
 					ret->ReplaceWith(blk);
@@ -2087,7 +2088,7 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat
 
 					for (ReturnStmt* ret = F->firstRetStmt; ret; ret = ret->nextRetStmt)
 					{
-						if (dynamic_cast<BlockStmt*>(ret->parent) == nullptr)
+						if (dyn_cast<BlockStmt>(ret->parent) == nullptr)
 						{
 							BlockStmt* blk = new BlockStmt;
 							ret->ReplaceWith(blk);
@@ -2132,7 +2133,7 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat
 						uint32_t flags = argvd->flags;
 						argvd->flags &= ~(VarDecl::ATTR_In | VarDecl::ATTR_Out);
 
-						auto* vds = dynamic_cast<VarDeclStmt*>(F->GetCode()->firstChild);
+						auto* vds = dyn_cast<VarDeclStmt>(F->GetCode()->firstChild);
 						if (vds == nullptr)
 						{
 							vds = new VarDeclStmt;
@@ -2168,12 +2169,12 @@ static bool IsExprInPreCondLoop(Expr* expr)
 	ASTNode* n = expr;
 	while (n->parent->ToStmt() == nullptr)
 		n = n->parent;
-	if (auto* whilestmt = dynamic_cast<WhileStmt*>(n->parent))
+	if (auto* whilestmt = dyn_cast<WhileStmt>(n->parent))
 	{
 		if (whilestmt->GetCond() == n)
 			return true;
 	}
-	else if (auto* forstmt = dynamic_cast<ForStmt*>(n->parent))
+	else if (auto* forstmt = dyn_cast<ForStmt>(n->parent))
 	{
 		if (forstmt->GetCond() == n)
 			return true;
@@ -2186,22 +2187,22 @@ static Stmt* GetStmtOfForcedExpr(Expr* expr)
 	ASTNode* n = expr;
 	while (n->parent->ToStmt() == nullptr)
 		n = n->parent;
-	if (auto* ifelsestmt = dynamic_cast<IfElseStmt*>(n->parent))
+	if (auto* ifelsestmt = dyn_cast<IfElseStmt>(n->parent))
 	{
 		if (ifelsestmt->GetCond() == n)
 			return ifelsestmt;
 	}
-	else if (auto* whilestmt = dynamic_cast<WhileStmt*>(n->parent))
+	else if (auto* whilestmt = dyn_cast<WhileStmt>(n->parent))
 	{
 		if (whilestmt->GetCond() == n)
 			return whilestmt;
 	}
-	else if (auto* dowhilestmt = dynamic_cast<DoWhileStmt*>(n->parent))
+	else if (auto* dowhilestmt = dyn_cast<DoWhileStmt>(n->parent))
 	{
 		if (dowhilestmt->GetCond() == n)
 			return dowhilestmt;
 	}
-	else if (auto* forstmt = dynamic_cast<ForStmt*>(n->parent))
+	else if (auto* forstmt = dyn_cast<ForStmt>(n->parent))
 	{
 		if (forstmt->GetCond() == n)
 			return forstmt;
@@ -2212,12 +2213,12 @@ static Stmt* GetStmtOfForcedExpr(Expr* expr)
 static int DistanceToSingleDeclRefExpr(Expr* expr)
 {
 	int dist = 0;
-	while (auto* mmbexpr = dynamic_cast<MemberExpr*>(expr))
+	while (auto* mmbexpr = dyn_cast<MemberExpr>(expr))
 	{
 		expr = mmbexpr->GetSource();
 		dist++;
 	}
-	if (dynamic_cast<DeclRefExpr*>(expr))
+	if (dyn_cast<DeclRefExpr>(expr))
 		return dist;
 	else
 		return -1;
@@ -2225,7 +2226,7 @@ static int DistanceToSingleDeclRefExpr(Expr* expr)
 
 static void ExpandBlock(Stmt* stmt)
 {
-	if (dynamic_cast<BlockStmt*>(stmt->parent) == nullptr)
+	if (dyn_cast<BlockStmt>(stmt->parent) == nullptr)
 	{
 		auto* bs = new BlockStmt;
 		stmt->ReplaceWith(bs);
@@ -2248,7 +2249,9 @@ static Stmt* FindParentStatement(Expr* expr)
 static void FoldInLoopCond(Expr* expr)
 {
 	Stmt* feStmt = GetStmtOfForcedExpr(expr);
-	if (auto* whilestmt = dynamic_cast<WhileStmt*>(feStmt))
+	if (!feStmt)
+		return;
+	if (auto* whilestmt = dyn_cast<WhileStmt>(feStmt))
 	{
 		// while( <cond> )
 		//  ->
@@ -2271,7 +2274,7 @@ static void FoldInLoopCond(Expr* expr)
 		notexpr->opType = STT_OP_Not;
 		whilestmt->GetBody()->PrependChild(ifstmt);
 	}
-	else if (auto* dowhilestmt = dynamic_cast<DoWhileStmt*>(feStmt))
+	else if (auto* dowhilestmt = dyn_cast<DoWhileStmt>(feStmt))
 	{
 		// do ... while( <cond> )
 		//  ->
@@ -2328,12 +2331,12 @@ static ASTNode* GetWriteContext(Expr* expr)
 {
 	while (expr)
 	{
-		if (auto* binop = dynamic_cast<BinaryOpExpr*>(expr->parent))
+		if (auto* binop = dyn_cast<BinaryOpExpr>(expr->parent))
 		{
 			if (TokenIsOpAssign(binop->opType) && binop->GetLft() == expr)
 				return binop;
 		}
-		else if (auto* fcall = dynamic_cast<FCallExpr*>(expr->parent))
+		else if (auto* fcall = dyn_cast<FCallExpr>(expr->parent))
 		{
 			// TODO
 		}
@@ -2347,7 +2350,7 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 	MatrixSwizzleUnpacker(AST& a) : ast(a) {}
 	void PostVisit(ASTNode* node)
 	{
-		if (auto* mmbexpr = dynamic_cast<MemberExpr*>(node))
+		if (auto* mmbexpr = dyn_cast<MemberExpr>(node))
 		{
 			if (mmbexpr->swizzleComp && mmbexpr->GetSource()->GetReturnType()->kind == ASTType::Matrix)
 			{
@@ -2413,7 +2416,7 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 						// func( TMP )
 						// out.MTXSWZ = TMP
 						//---------------
-						if (auto* binop = dynamic_cast<BinaryOpExpr*>(writeCtx)) // assignment
+						if (auto* binop = dyn_cast<BinaryOpExpr>(writeCtx)) // assignment
 						{
 							ASTNode* insertPos;
 							assert(binop->GetLft() == mmbexpr);
@@ -2430,8 +2433,8 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 								delNode = binop->parent;
 							}
 							// validate statement insert position
-							assert(dynamic_cast<ExprStmt*>(insertPos)
-								|| dynamic_cast<VarDeclStmt*>(insertPos));
+							assert(dyn_cast<ExprStmt>(insertPos)
+								|| dyn_cast<VarDeclStmt>(insertPos));
 							ExpandBlock(insertPos->ToStmt());
 
 							Expr* dst = mmbexpr->GetSource();
@@ -2479,7 +2482,7 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 						//	insertPos->parent->Dump(std::cout);
 							return;
 						}
-						else if (auto* fcall = dynamic_cast<FCallExpr*>(writeCtx)) // 'out' argument
+						else if (auto* fcall = dyn_cast<FCallExpr>(writeCtx)) // 'out' argument
 						{
 							// TODO
 						}
@@ -2617,7 +2620,7 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 	int origInputs = ile_or_cast->childCount;
 
 	VarDecl* vd;
-	if (VarDecl* pvd = dynamic_cast<VarDecl*>(ile_or_cast->parent))
+	if (VarDecl* pvd = dyn_cast<VarDecl>(ile_or_cast->parent))
 	{
 		vd = pvd;
 	}
@@ -2627,7 +2630,7 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 		vd = src->decl;
 	}
 	ASTNode* insertPos = vd->parent;
-	assert(dynamic_cast<VarDeclStmt*>(insertPos));
+	assert(dyn_cast<VarDeclStmt>(insertPos));
 
 	Expr* sourceNode = ile_or_cast->firstChild->ToExpr();
 	bool isSource1 = ile_or_cast->childCount == 1
@@ -2696,10 +2699,10 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		}
 		for(int i = 1; i < numCols; ++i)
 		{
-			auto* fcx = dynamic_cast<FCallExpr*>(fcintrin->DeepClone());
+			auto* fcx = dyn_cast<FCallExpr>(fcintrin->DeepClone());
 			for (auto* arg = fcx->GetFirstArg(); arg; arg = arg->next)
 			{
-				dynamic_cast<Int32Expr*>(dynamic_cast<IndexExpr*>(arg)->GetIndex())->value = i;
+				dyn_cast<Int32Expr>(dyn_cast<IndexExpr>(arg)->GetIndex())->value = i;
 			}
 			ile->AppendChild(fcx);
 		}
@@ -2732,11 +2735,11 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PostVisit(ASTNode* node)
 	{
-		if (auto* fcall = dynamic_cast<FCallExpr*>(node))
+		if (auto* fcall = dyn_cast<FCallExpr>(node))
 		{
 			if (fcall->isBuiltinFunc)
 			{
-				if (auto* dre = dynamic_cast<DeclRefExpr*>(fcall->GetFunc()))
+				if (auto* dre = dyn_cast<DeclRefExpr>(fcall->GetFunc()))
 				{
 					if (dre->name == "abs") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
 					if (dre->name == "acos") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
@@ -2845,7 +2848,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-		if (auto* binop = dynamic_cast<BinaryOpExpr*>(node))
+		if (auto* binop = dyn_cast<BinaryOpExpr>(node))
 		{
 			bool mtxUnpack = false;
 			const char* funcName = nullptr;
@@ -2880,7 +2883,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-		if (auto* idxe = dynamic_cast<IndexExpr*>(node))
+		if (auto* idxe = dyn_cast<IndexExpr>(node))
 		{
 			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())
 			{
@@ -2888,7 +2891,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-		if (auto* ile = dynamic_cast<InitListExpr*>(node))
+		if (auto* ile = dyn_cast<InitListExpr>(node))
 		{
 			if (ile->GetReturnType()->kind == ASTType::Structure ||
 				ile->GetReturnType()->kind == ASTType::Array)
@@ -2897,7 +2900,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-		if (auto* cast = dynamic_cast<CastExpr*>(node))
+		if (auto* cast = dyn_cast<CastExpr>(node))
 		{
 			if ((cast->GetReturnType()->kind == ASTType::Structure &&
 				cast->GetSource()->GetReturnType()->IsNumericBased()) ||
@@ -2908,7 +2911,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-		if (auto* exprStmt = dynamic_cast<ExprStmt*>(node))
+		if (auto* exprStmt = dyn_cast<ExprStmt>(node))
 		{
 			if (!exprStmt->GetExpr())
 			{
@@ -2996,9 +2999,9 @@ struct ArrayOfArrayRemover : ASTWalker<ArrayOfArrayRemover>
 	void PostVisit(ASTNode* node)
 	{
 		// tree: .. IndexExpr[2] { IndexExpr[1] { DeclRefExpr?, <index> }, <index> }
-		if (auto* idxe = dynamic_cast<IndexExpr*>(node))
+		if (auto* idxe = dyn_cast<IndexExpr>(node))
 		{
-			if (auto* srcidxe = dynamic_cast<IndexExpr*>(idxe->GetSource()))
+			if (auto* srcidxe = dyn_cast<IndexExpr>(idxe->GetSource()))
 			{
 				if (idxe->GetSource()->GetReturnType()->kind == ASTType::Array &&
 					srcidxe->GetSource()->GetReturnType()->kind == ASTType::Array)
@@ -3057,7 +3060,7 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 {
 	void PreVisit(ASTNode* node)
 	{
-		if (auto* dre = dynamic_cast<const DeclRefExpr*>(node))
+		if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 		{
 			if (dre->decl && dre->decl->name.empty())
 			{
