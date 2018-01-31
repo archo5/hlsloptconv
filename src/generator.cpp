@@ -191,6 +191,20 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
+	else if (auto* op = dyn_cast<const OpExpr>(node))
+	{
+		const char* fnstr = "[UNIMPL op]";
+		const char* opstr = ",";
+		out << fnstr << "(";
+		for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
+		{
+			EmitExpr(ch->ToExpr());
+			if (ch->next)
+				out << opstr;
+		}
+		out << ")";
+		return;
+	}
 	else if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
 	{
 		out << "(";
@@ -563,6 +577,31 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		}
 		return;
 	}
+	else if (auto* op = dyn_cast<const OpExpr>(node))
+	{
+		const char* fnstr = nullptr;
+		const char* opstr = ",";
+		switch (op->opKind)
+		{
+		case Op_Tex2D:     fnstr = "tex2D";     break;
+		case Op_Tex2DBias: fnstr = "tex2Dbias"; break;
+		case Op_Tex2DGrad: fnstr = "tex2Dgrad"; break;
+		case Op_Tex2DLOD:  fnstr = "tex2Dlod";  break;
+		case Op_Tex2DProj: fnstr = "tex2Dproj"; break;
+		}
+		if (fnstr)
+		{
+			out << fnstr << "(";
+			for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
+			{
+				EmitExpr(ch->ToExpr());
+				if (ch->next)
+					out << opstr;
+			}
+			out << ")";
+			return;
+		}
+	}
 
 	SLGenerator::EmitExpr(node);
 }
@@ -676,6 +715,31 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		}
 		out << ")";
 		return;
+	}
+	else if (auto* op = dyn_cast<const OpExpr>(node))
+	{
+		const char* fnstr = nullptr;
+		const char* opstr = ",";
+		switch (op->opKind)
+		{
+		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"     : "texture";     break;
+		case Op_Tex2DBias: fnstr = version < 140 ? "texture2DBias" : "textureBias"; break;
+		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGrad" : "textureGrad"; break;
+		case Op_Tex2DLOD:  fnstr = version < 140 ? "texture2DLod"  : "textureLod";  break;
+		case Op_Tex2DProj: fnstr = version < 140 ? "texture2DProj" : "textureProj"; break;
+		}
+		if (fnstr)
+		{
+			out << fnstr << "(";
+			for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
+			{
+				EmitExpr(ch->ToExpr());
+				if (ch->next)
+					out << opstr;
+			}
+			out << ")";
+			return;
+		}
 	}
 
 	SLGenerator::EmitExpr(node);

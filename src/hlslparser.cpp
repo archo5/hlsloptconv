@@ -1527,6 +1527,56 @@ static ASTType* TexSampleIntrin(Parser* parser, FCallExpr* fcall,
 	return parser->ast.GetFloat32VecType(4);
 }
 
+static ASTType* TexSampleIntrin(Parser* parser, OpExpr* op,
+	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
+{
+	if (op->childCount != numArgs)
+	{
+		parser->EmitError("'" + std::string(name) + "' requires " + std::to_string(numArgs) + " arguments");
+		return nullptr;
+	}
+	ASTType* rt0 = op->firstChild->ToExpr()->GetReturnType();
+	bool notMatch = rt0->kind != smpType;
+	if (!notMatch)
+	{
+		for (ASTNode* arg = op->firstChild->next; arg; arg = arg->next)
+		{
+			ASTType* rtN = arg->ToExpr()->GetReturnType();
+			if (rtN->IsNumericBased() == false || rtN->kind == ASTType::Matrix)
+			{
+				notMatch = true;
+				break;
+			}
+			if (vecSize == 1)
+			{
+				if (rtN->IsNumeric() == false)
+				{
+					notMatch = true;
+					break;
+				}
+			}
+			else if (rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize))
+			{
+				notMatch = true;
+				break;
+			}
+
+			ASTType* reqty = parser->ast.CastToFloat(rtN);
+			if (vecSize > 1)
+				reqty = parser->ast.CastToVector(reqty, vecSize);
+			CastExprTo(arg->ToExpr(), reqty);
+		}
+	}
+
+	if (notMatch)
+	{
+		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+		return nullptr;
+	}
+
+	return parser->ast.GetFloat32VecType(4);
+}
+
 typedef ASTType* (*IntrinsicValidatorFP)(Parser*, FCallExpr*);
 std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 {
@@ -2188,13 +2238,46 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			}
 		}
 
+		curToken = start;
+		Expr* funcName = ParseExpr(endTokenType, bestSplit);
+
+		// intrinsics
+		if (auto* dre = dyn_cast<DeclRefExpr>(funcName))
+		{
+			ASTType* retTy = nullptr;
+			OpKind kind = Op_NONE;
+			if (dre->name == "tex2D") { kind = Op_Tex2D; }
+			if (dre->name == "tex2Dbias") { kind = Op_Tex2DBias; }
+			if (dre->name == "tex2Dgrad") { kind = Op_Tex2DGrad; }
+			if (dre->name == "tex2Dlod") { kind = Op_Tex2DLOD; }
+			if (dre->name == "tex2Dproj") { kind = Op_Tex2DProj; }
+			if (kind != Op_NONE)
+			{
+				auto* op = new OpExpr;
+				ast.unassignedNodes.AppendChild(op);
+				op->SetReturnType(ast.GetFloat32VecType(4));
+				op->loc = tokens[bestSplit].loc;
+				op->opKind = kind;
+
+				curToken = bestSplit + 1;
+				ParseExprList(op, STT_RParen, endPos);
+				curToken = bkCur;
+
+				int vecSize = dre->name == "tex2D" || dre->name == "tex2Dgrad" ? 2 : 4;
+				int numArgs = dre->name == "tex2Dgrad" ? 4 : 2;
+				TexSampleIntrin(this, op, dre->name.c_str(), ASTType::Sampler2D, vecSize, numArgs);
+
+				delete dre;
+				return op;
+			}
+		}
+
 		auto* fcall = new FCallExpr;
 		ast.unassignedNodes.AppendChild(fcall);
 		fcall->SetReturnType(ast.GetVoidType());
 		fcall->loc = tokens[bestSplit].loc;
 
-		curToken = start;
-		fcall->AppendChild(ParseExpr(endTokenType, bestSplit));
+		fcall->AppendChild(funcName);
 
 		curToken = bestSplit + 1;
 		ParseExprList(fcall, STT_RParen, endPos);

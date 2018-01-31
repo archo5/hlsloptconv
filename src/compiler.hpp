@@ -249,6 +249,7 @@ struct ASTNode
 		Kind_FCallExpr,
 		Kind_InitListExpr,
 		Kind_IncDecOpExpr,
+		Kind_OpExpr,
 		Kind_UnaryOpExpr,
 		Kind_BinaryOpExpr,
 		Kind_TernaryOpExpr,
@@ -478,6 +479,33 @@ struct IncDecOpExpr : Expr
 
 	bool dec = false;
 	bool post = false;
+};
+
+enum OpKind
+{
+	Op_Tex2D,
+	Op_Tex2DBias,
+	Op_Tex2DGrad,
+	Op_Tex2DLOD,
+	Op_Tex2DProj,
+	Op_COUNT,
+	Op_NONE = Op_COUNT,
+};
+
+const char* OpKindToString(OpKind kind);
+
+struct OpExpr : Expr
+{
+	IMPLEMENT_NODE(OpExpr);
+	// 1 arg
+	Expr* GetSource() const { return firstChild ? firstChild->ToExpr() : nullptr; }
+	// 2 args
+	Expr* GetLft() const { return firstChild ? firstChild->ToExpr() : nullptr; }
+	Expr* GetRgt() const { return firstChild != lastChild ? lastChild->ToExpr() : nullptr; }
+
+	void Dump(OutStream& out, int level) const override;
+
+	OpKind opKind = Op_COUNT;
 };
 
 struct UnaryOpExpr : Expr

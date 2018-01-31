@@ -366,6 +366,7 @@ static const char* g_NodeTypeNames[] =
 	"FCallExpr",
 	"InitListExpr",
 	"IncDecOpExpr",
+	"OpExpr",
 	"UnaryOpExpr",
 	"BinaryOpExpr",
 	"TernaryOpExpr",
@@ -722,6 +723,39 @@ void IncDecOpExpr::Dump(OutStream& out, int level) const
 	out << "]\n";
 	LVL(out, level); out << "{\n"; level++;
 	LVL(out, level); GetSource()->Dump(out, level);
+	level--; LVL(out, level); out << "}\n";
+}
+
+static const char* g_OpKindNames[] =
+{
+	"Tex2D",
+	"Tex2DBias",
+	"Tex2DGrad",
+	"Tex2DLOD",
+	"Tex2DProj",
+};
+static_assert(
+	sizeof(g_OpKindNames) / sizeof(g_OpKindNames[0]) == Op_COUNT,
+	"op kind name count != op kind count"
+);
+const char* OpKindToString(OpKind kind)
+{
+	if (kind >= 0 && kind < Op_COUNT)
+		return g_OpKindNames[kind];
+	return "UNKNOWN";
+}
+
+void OpExpr::Dump(OutStream& out, int level) const
+{
+	out << "op(" << OpKindToString(opKind) << ") [";
+	GetReturnType()->Dump(out);
+	out << "]\n";
+	LVL(out, level); out << "{\n"; level++;
+	for (ASTNode* ch = firstChild; ch; ch = ch->next)
+	{
+		LVL(out, level);
+		ch->Dump(out, level);
+	}
 	level--; LVL(out, level); out << "}\n";
 }
 
@@ -1393,6 +1427,14 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	{
 		ProcessReadExpr(idop->GetSource());
 		ProcessWriteExpr(idop->GetSource());
+		return;
+	}
+	else if (auto* op = dyn_cast<const OpExpr>(node))
+	{
+		for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
+		{
+			ProcessReadExpr(ch->ToExpr());
+		}
 		return;
 	}
 	else if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
