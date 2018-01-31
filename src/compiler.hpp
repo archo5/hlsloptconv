@@ -272,6 +272,8 @@ struct ASTNode
 		Kind_VarDeclStmt,
 		KindEnd_Stmt = Kind_VarDeclStmt,
 		Kind_ASTFunction,
+
+		Kind__COUNT,
 	};
 
 	FINLINE ASTNode() {}
@@ -288,6 +290,7 @@ struct ASTNode
 	FINLINE static bool IsThisType(const ASTNode* node) { return \
 		node->kind >= KindBegin_##cls && node->kind <= KindEnd_##cls; }
 
+	const char* GetNodeTypeName() const;
 	void Unlink();
 	void InsertBefore(ASTNode* ch, ASTNode* before);
 	void AppendChild(ASTNode* ch);
@@ -801,46 +804,46 @@ template< class V > struct ASTWalker
 	void VisitFunction(ASTFunction* fn)
 	{
 		curPos = endPos = fn->GetCode();
-		//std::cout << "PREVISIT:" << typeid(*curPos).name() << "\n";
+		//std::cout << "PREVISIT:" << curPos->GetNodeTypeName() << "\n";
 		static_cast<V*>(this)->PreVisit(curPos);
 		do
 		{
 			if (curPos->firstChild)
 			{
 				curPos = curPos->firstChild;
-				//std::cout << "PREVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "PREVISIT:" << curPos->GetNodeTypeName() << "\n";
 				static_cast<V*>(this)->PreVisit(curPos);
 				continue;
 			}
 			if (curPos->next)
 			{
-				//std::cout << "POSTVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "POSTVISIT:" << curPos->GetNodeTypeName() << "\n";
 				ASTNode* n = curPos->next;
 				static_cast<V*>(this)->PostVisit(curPos);
 				curPos = n;
-				//std::cout << "PREVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "PREVISIT:" << curPos->GetNodeTypeName() << "\n";
 				static_cast<V*>(this)->PreVisit(curPos);
 				continue;
 			}
 			while (curPos && curPos != endPos && curPos->parent->lastChild == curPos)
 			{
-				//std::cout << "POSTVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "POSTVISIT:" << curPos->GetNodeTypeName() << "\n";
 				ASTNode* n = curPos->parent;
 				static_cast<V*>(this)->PostVisit(curPos);
 				curPos = n;
 			}
 			if (curPos != endPos)
 			{
-				//std::cout << "POSTVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "POSTVISIT:" << curPos->GetNodeTypeName() << "\n";
 				ASTNode* n = curPos->next;
 				static_cast<V*>(this)->PostVisit(curPos);
 				curPos = n;
-				//std::cout << "PREVISIT:" << typeid(*curPos).name() << "\n";
+				//std::cout << "PREVISIT:" << curPos->GetNodeTypeName() << "\n";
 				static_cast<V*>(this)->PreVisit(curPos);
 			}
 		}
 		while (curPos && curPos != endPos);
-		//std::cout << "POSTVISIT:" << typeid(*curPos).name() << "\n";
+		//std::cout << "POSTVISIT:" << curPos->GetNodeTypeName() << "\n";
 		static_cast<V*>(this)->PostVisit(curPos);
 	}
 	void VisitAST(AST& ast)

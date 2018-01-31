@@ -40,6 +40,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 * C API
 * possibility to predetermine and export location of uniform data
-* removal of RTTI and exceptions
+* removal of exceptions
 * removal of STL to improve compile times
 * improved optimization capabilities

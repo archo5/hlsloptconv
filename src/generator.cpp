@@ -324,7 +324,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		return;
 	}
 
-	out << "[UNIMPL " << typeid(*node).name() << "]";
+	out << "[UNIMPL " << node->GetNodeTypeName() << "]";
 }
 
 void SLGenerator::EmitStmt(const Stmt* node, int level)
@@ -440,7 +440,7 @@ void SLGenerator::EmitStmt(const Stmt* node, int level)
 	}
 
 	out << "\n"; LVL(level);
-	out << "[UNIMPL " << typeid(*node).name() << "]";
+	out << "[UNIMPL " << node->GetNodeTypeName() << "]";
 }
 
 void SLGenerator::GenerateStructs()

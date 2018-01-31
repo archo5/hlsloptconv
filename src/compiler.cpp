@@ -351,6 +351,51 @@ ASTNode* ASTNode::DeepClone() const
 	return nn;
 }
 
+
+static const char* g_NodeTypeNames[] =
+{
+	"None (?)",
+	"VarDecl",
+	"CBufferDecl",
+	"VoidExpr",
+	"DeclRefExpr",
+	"BoolExpr",
+	"Int32Expr",
+	"Float32Expr",
+	"CastExpr",
+	"FCallExpr",
+	"InitListExpr",
+	"IncDecOpExpr",
+	"UnaryOpExpr",
+	"BinaryOpExpr",
+	"TernaryOpExpr",
+	"MemberExpr",
+	"IndexExpr",
+	"EmptyStmt",
+	"ExprStmt",
+	"BlockStmt",
+	"ReturnStmt",
+	"DiscardStmt",
+	"BreakStmt",
+	"ContinueStmt",
+	"IfElseStmt",
+	"WhileStmt",
+	"DoWhileStmt",
+	"ForStmt",
+	"VarDeclStmt",
+	"ASTFunction",
+};
+static_assert(
+	sizeof(g_NodeTypeNames) / sizeof(g_NodeTypeNames[0]) == ASTNode::Kind__COUNT,
+	"node type name count != node type count"
+);
+const char* ASTNode::GetNodeTypeName() const
+{
+	if (kind > Kind_None && kind < Kind__COUNT)
+		return g_NodeTypeNames[kind];
+	return "ASTNode(?)";
+}
+
 void ASTNode::Unlink()
 {
 	if (!parent)
@@ -1528,7 +1573,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		return;
 	}
 
-	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + typeid(*node).name(), node->loc);
+	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + node->GetNodeTypeName(), node->loc);
 }
 
 void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
@@ -1738,7 +1783,7 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 	}
 
 	diag.EmitFatalError("(internal) statement "
-		+ std::string(typeid(*node).name()) + " not processed", node->loc);
+		+ std::string(node->GetNodeTypeName()) + " not processed", node->loc);
 	return false;
 }
 
