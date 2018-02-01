@@ -1314,7 +1314,7 @@ static bool EffectivelyEqual(ASTType* a, ASTType* b)
 }
 
 #define MAX_OVERLOAD 0x7fffffff
-int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, FCallExpr* fcall, ASTType** equalArgs, bool err)
+int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTType** equalArgs, bool err)
 {
 	if (func->GetArgCount() != fcall->GetArgCount())
 	{
@@ -1361,8 +1361,8 @@ static void CastExprTo(Expr* val, ASTType* to)
 	}
 }
 
-static ASTType* ScalableSymmetricIntrin(Parser* parser, FCallExpr* fcall,
-	const char* name, bool alsoInt, int args = 1)
+static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
+	OpKind opKind, const char* name, bool alsoInt, int args = 1)
 {
 	if (fcall->GetArgCount() != args)
 	{
@@ -1410,15 +1410,16 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, FCallExpr* fcall,
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
 		CastExprTo(arg->ToExpr(), reqty);
+	fcall->opKind = opKind;
 	return reqty;
 }
 
-#define DEF_INTRIN_SSF(name) \
-	{ #name, [](Parser* parser, FCallExpr* fcall) -> ASTType* \
-	{ return ScalableSymmetricIntrin(parser, fcall, #name, false); }}
+#define DEF_INTRIN_SSF(opKind, name) \
+	{ #name, [](Parser* parser, OpExpr* fcall) -> ASTType* \
+	{ return ScalableSymmetricIntrin(parser, fcall, opKind, #name, false); }}
 
-static ASTType* VectorIntrin(Parser* parser, FCallExpr* fcall,
-	const char* name, bool alsoInt, bool returnScalar, int args = 1)
+static ASTType* VectorIntrin(Parser* parser, OpExpr* fcall,
+	OpKind opKind, const char* name, bool alsoInt, bool returnScalar, int args = 1)
 {
 	if (fcall->GetArgCount() != args)
 	{
@@ -1474,10 +1475,11 @@ unmatched:
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
 		CastExprTo(arg->ToExpr(), reqty);
+	fcall->opKind = opKind;
 	return returnScalar ? parser->ast.CastToScalar(reqty) : reqty;
 }
 
-static ASTType* TexSampleIntrin(Parser* parser, FCallExpr* fcall,
+static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall,
 	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
 {
 	if (fcall->GetArgCount() != numArgs)
@@ -1527,7 +1529,7 @@ static ASTType* TexSampleIntrin(Parser* parser, FCallExpr* fcall,
 	return parser->ast.GetFloat32VecType(4);
 }
 
-static ASTType* TexSampleIntrin(Parser* parser, OpExpr* op,
+static ASTType* TexSampleIntrinBP(Parser* parser, OpExpr* op,
 	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
 {
 	if (op->childCount != numArgs)
@@ -1577,13 +1579,13 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* op,
 	return parser->ast.GetFloat32VecType(4);
 }
 
-typedef ASTType* (*IntrinsicValidatorFP)(Parser*, FCallExpr*);
+typedef ASTType* (*IntrinsicValidatorFP)(Parser*, OpExpr*);
 std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 {
-	{ "abs", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "abs", true); }},
-	DEF_INTRIN_SSF(acos),
-	{ "all", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "abs", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Abs, "abs", true); }},
+	DEF_INTRIN_SSF(Op_ACos, acos),
+	{ "all", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 1)
 		{
@@ -1596,9 +1598,10 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			parser->EmitError("none of 'all' overloads matched the argument list");
 			return nullptr;
 		}
+		fcall->opKind = Op_All;
 		return parser->ast.GetBoolType();
 	}},
-	{ "any", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "any", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 1)
 		{
@@ -1611,23 +1614,24 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			parser->EmitError("none of 'any' overloads matched the argument list");
 			return nullptr;
 		}
+		fcall->opKind = Op_Any;
 		return parser->ast.GetBoolType();
 	}},
-	DEF_INTRIN_SSF(asin),
-	DEF_INTRIN_SSF(atan),
-	{ "atan2", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "atan2", false, 2); }},
-	DEF_INTRIN_SSF(ceil),
-	{ "clamp", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "clamp", true, 3); }},
-	{ "clip", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	DEF_INTRIN_SSF(Op_ASin, asin),
+	DEF_INTRIN_SSF(Op_ATan, atan),
+	{ "atan2", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_ATan2, "atan2", false, 2); }},
+	DEF_INTRIN_SSF(Op_Ceil, ceil),
+	{ "clamp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Clamp, "clamp", true, 3); }},
+	{ "clip", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
-		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "clip", false, 1);
+		ASTType* t = ScalableSymmetricIntrin(parser, fcall, Op_Clip, "clip", false, 1);
 		return t ? parser->ast.GetVoidType() : t;
 	}},
-	DEF_INTRIN_SSF(cos),
-	DEF_INTRIN_SSF(cosh),
-	{ "cross", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	DEF_INTRIN_SSF(Op_Cos, cos),
+	DEF_INTRIN_SSF(Op_CosH, cosh),
+	{ "cross", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 2)
 		{
@@ -1645,12 +1649,13 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		ASTType* reqty = parser->ast.CastToVector(parser->ast.CastToFloat(rt0), 3);
 		CastExprTo(fcall->GetFirstArg()->ToExpr(), reqty);
 		CastExprTo(fcall->GetFirstArg()->next->ToExpr(), reqty);
+		fcall->opKind = Op_Cross;
 		return reqty;
 	}},
-	DEF_INTRIN_SSF(ddx),
-	DEF_INTRIN_SSF(ddy),
-	DEF_INTRIN_SSF(degrees),
-	{ "determinant", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	DEF_INTRIN_SSF(Op_DDX, ddx),
+	DEF_INTRIN_SSF(Op_DDY, ddy),
+	DEF_INTRIN_SSF(Op_Degrees, degrees),
+	{ "determinant", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 1)
 		{
@@ -1667,52 +1672,53 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		}
 		ASTType* reqty = parser->ast.CastToFloat(rt0);
 		CastExprTo(fcall->GetFirstArg()->ToExpr(), reqty);
+		fcall->opKind = Op_Determinant;
 		return parser->ast.CastToScalar(reqty);
 	}},
-	{ "distance", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "distance", false, true, 2); }},
-	{ "dot", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "dot", true, true, 2); }},
-	DEF_INTRIN_SSF(exp),
-	DEF_INTRIN_SSF(exp2),
-	{ "faceforward", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "faceforward", false, false, 3); }},
-	DEF_INTRIN_SSF(floor),
-	{ "fmod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "fmod", false, 2); }},
-	DEF_INTRIN_SSF(frac),
+	{ "distance", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_Distance, "distance", false, true, 2); }},
+	{ "dot", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_Dot, "dot", true, true, 2); }},
+	DEF_INTRIN_SSF(Op_Exp, exp),
+	DEF_INTRIN_SSF(Op_Exp2, exp2),
+	{ "faceforward", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_FaceForward, "faceforward", false, false, 3); }},
+	DEF_INTRIN_SSF(Op_Floor, floor),
+	{ "fmod", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_FMod, "fmod", false, 2); }},
+	DEF_INTRIN_SSF(Op_Frac, frac),
 	/// frexp
-	DEF_INTRIN_SSF(fwidth),
-	{ "isfinite", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	DEF_INTRIN_SSF(Op_FWidth, fwidth),
+	{ "isfinite", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
-		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "isfinite", false);
+		ASTType* t = ScalableSymmetricIntrin(parser, fcall, Op_IsFinite, "isfinite", false);
 		return t ? parser->ast.CastToBool(t) : t;
 	}},
-	{ "isinf", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "isinf", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
-		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "isinf", false);
+		ASTType* t = ScalableSymmetricIntrin(parser, fcall, Op_IsInf, "isinf", false);
 		return t ? parser->ast.CastToBool(t) : t;
 	}},
-	{ "isnan", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "isnan", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
-		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "isnan", false);
+		ASTType* t = ScalableSymmetricIntrin(parser, fcall, Op_IsNaN, "isnan", false);
 		return t ? parser->ast.CastToBool(t) : t;
 	}},
-	{ "ldexp", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "ldexp", false, 2); }},
-	{ "length", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "length", false, true, 1); }},
-	{ "lerp", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "lerp", false, 3); }},
-	DEF_INTRIN_SSF(log),
-	DEF_INTRIN_SSF(log10),
-	DEF_INTRIN_SSF(log2),
-	{ "max", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "max", true, 2); }},
-	{ "min", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "min", true, 2); }},
+	{ "ldexp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_LdExp, "ldexp", false, 2); }},
+	{ "length", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_Length, "length", false, true, 1); }},
+	{ "lerp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Lerp, "lerp", false, 3); }},
+	DEF_INTRIN_SSF(Op_Log, log),
+	DEF_INTRIN_SSF(Op_Log10, log10),
+	DEF_INTRIN_SSF(Op_Log2, log2),
+	{ "max", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Max, "max", true, 2); }},
+	{ "min", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Min, "min", true, 2); }},
 	/// modf
-	{ "mul", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "mul", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 2)
 		{
@@ -1807,14 +1813,14 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		assert(retTy);
 		return retTy;
 	} },
-	{ "normalize", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "normalize", false, false); } },
-	{ "pow", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "pow", false, 2); } },
-		DEF_INTRIN_SSF(radians),
-	{ "reflect", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return VectorIntrin(parser, fcall, "reflect", false, false, 2); } },
-	{ "refract", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "normalize", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_Normalize, "normalize", false, false); } },
+	{ "pow", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Pow, "pow", false, 2); } },
+	DEF_INTRIN_SSF(Op_Radians, radians),
+	{ "reflect", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return VectorIntrin(parser, fcall, Op_Reflect, "reflect", false, false, 2); } },
+	{ "refract", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
 		if (fcall->GetArgCount() != 3)
 		{
@@ -1853,80 +1859,81 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 		}
 		for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
 			CastExprTo(arg->ToExpr(), arg->next ? reqty : parser->ast.GetFloat32Type());
+		fcall->opKind = Op_Refract;
 		return reqty;
 	} },
-	DEF_INTRIN_SSF(round),
-	DEF_INTRIN_SSF(rsqrt),
-	{ "saturate", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "saturate", false, 1); } },
-	{ "sign", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	DEF_INTRIN_SSF(Op_Round, round),
+	DEF_INTRIN_SSF(Op_RSqrt, rsqrt),
+	{ "saturate", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Saturate, "saturate", false, 1); } },
+	{ "sign", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
-		ASTType* t = ScalableSymmetricIntrin(parser, fcall, "sign", true, 1);
+		ASTType* t = ScalableSymmetricIntrin(parser, fcall, Op_Sign, "sign", true, 1);
 		return t ? parser->ast.CastToInt(t) : t;
 	} },
-	DEF_INTRIN_SSF(sin),
+	DEF_INTRIN_SSF(Op_Sin, sin),
 	/// sincos
-	DEF_INTRIN_SSF(sinh),
-	{ "smoothstep", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "smoothstep", false, 2); } },
-		DEF_INTRIN_SSF(sqrt),
-	{ "step", [](Parser* parser, FCallExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, "step", false, 2); } },
-		DEF_INTRIN_SSF(tan),
-		DEF_INTRIN_SSF(tanh),
+	DEF_INTRIN_SSF(Op_SinH, sinh),
+	{ "smoothstep", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_SmoothStep, "smoothstep", false, 2); } },
+	DEF_INTRIN_SSF(Op_Sqrt, sqrt),
+	{ "step", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_Step, "step", false, 2); } },
+	DEF_INTRIN_SSF(Op_Tan, tan),
+	DEF_INTRIN_SSF(Op_TanH, tanh),
 
-	{ "tex1D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex1D", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex1D", ASTType::Sampler1D, 1, 2); } },
-	{ "tex1Dbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex1Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex1Dbias", ASTType::Sampler1D, 4, 2); } },
-	{ "tex1Dgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex1Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex1Dgrad", ASTType::Sampler1D, 1, 4); } },
-	{ "tex1Dlod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex1Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex1Dlod", ASTType::Sampler1D, 4, 2); } },
-	{ "tex1Dproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex1Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex1Dproj", ASTType::Sampler1D, 4, 2); } },
 
-	{ "tex2D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex2D", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2D", ASTType::Sampler2D, 2, 2); } },
-	{ "tex2Dbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex2Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2Dbias", ASTType::Sampler2D, 4, 2); } },
-	{ "tex2Dgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex2Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2Dgrad", ASTType::Sampler2D, 2, 4); } },
-	{ "tex2Dlod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex2Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2Dlod", ASTType::Sampler2D, 4, 2); } },
-	{ "tex2Dproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex2Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex2Dproj", ASTType::Sampler2D, 4, 2); } },
 
-	{ "tex3D", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex3D", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex3D", ASTType::Sampler3D, 3, 2); } },
-	{ "tex3Dbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex3Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex3Dbias", ASTType::Sampler3D, 4, 2); } },
-	{ "tex3Dgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex3Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex3Dgrad", ASTType::Sampler3D, 3, 4); } },
-	{ "tex3Dlod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex3Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex3Dlod", ASTType::Sampler3D, 4, 2); } },
-	{ "tex3Dproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "tex3Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "tex3Dproj", ASTType::Sampler3D, 4, 2); } },
 
-	{ "texCUBE", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "texCUBE", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "texCUBE", ASTType::SamplerCUBE, 3, 2); } },
-	{ "texCUBEbias", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "texCUBEbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "texCUBEbias", ASTType::SamplerCUBE, 4, 2); } },
-	{ "texCUBEgrad", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "texCUBEgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "texCUBEgrad", ASTType::SamplerCUBE, 3, 4); } },
-	{ "texCUBElod", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "texCUBElod", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "texCUBElod", ASTType::SamplerCUBE, 4, 2); } },
-	{ "texCUBEproj", [](Parser* parser, FCallExpr* fcall) -> ASTType*
+	{ "texCUBEproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return TexSampleIntrin(parser, fcall, "texCUBEproj", ASTType::SamplerCUBE, 4, 2); } },
 
 	/// transpose
-	DEF_INTRIN_SSF( trunc ),
+	DEF_INTRIN_SSF(Op_Trunc, trunc),
 };
-void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
+void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 {
-	if (Expr* func = fcall->GetFunc())
+	if (fnexpr)
 	{
-		if (auto ie = dyn_cast<DeclRefExpr>(func))
+		if (auto ie = dyn_cast<DeclRefExpr>(fnexpr))
 		{
 			auto bit = g_BuiltinIntrinsics.find(ie->name);
 			if (bit != g_BuiltinIntrinsics.end())
@@ -1935,7 +1942,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 				if (retType)
 				{
 					fcall->SetReturnType(retType);
-					fcall->isBuiltinFunc = true;
+				//	fcall->isBuiltinFunc = true;
 					if (ie->name == "ddx" ||
 						ie->name == "ddy" ||
 						ie->name == "fwidth")
@@ -1957,6 +1964,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 					if (CalcOverloadMatchFactor(fn, fcall, nullptr, true) != MAX_OVERLOAD)
 					{
 						fcall->resolvedFunc = fn;
+						fcall->opKind = Op_FCall;
 						fcall->SetReturnType(fn->GetReturnType());
 					}
 				}
@@ -2010,6 +2018,7 @@ void Parser::FindFunction(FCallExpr* fcall, const Location& loc)
 					else
 					{
 						fcall->resolvedFunc = lastMF;
+						fcall->opKind = Op_FCall;
 						fcall->SetReturnType(lastMF->GetReturnType());
 					}
 				}
@@ -2265,25 +2274,23 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				int vecSize = dre->name == "tex2D" || dre->name == "tex2Dgrad" ? 2 : 4;
 				int numArgs = dre->name == "tex2Dgrad" ? 4 : 2;
-				TexSampleIntrin(this, op, dre->name.c_str(), ASTType::Sampler2D, vecSize, numArgs);
+				TexSampleIntrinBP(this, op, dre->name.c_str(), ASTType::Sampler2D, vecSize, numArgs);
 
 				delete dre;
 				return op;
 			}
 		}
 
-		auto* fcall = new FCallExpr;
+		auto* fcall = new OpExpr;
 		ast.unassignedNodes.AppendChild(fcall);
 		fcall->SetReturnType(ast.GetVoidType());
 		fcall->loc = tokens[bestSplit].loc;
-
-		fcall->AppendChild(funcName);
 
 		curToken = bestSplit + 1;
 		ParseExprList(fcall, STT_RParen, endPos);
 
 		curToken = bkCur;
-		FindFunction(fcall, tokens[start].loc);
+		FindFunction(fcall, funcName, tokens[start].loc);
 
 		return fcall;
 	}

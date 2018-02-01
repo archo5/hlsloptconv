@@ -195,6 +195,31 @@ void SLGenerator::EmitExpr(const Expr* node)
 	{
 		const char* fnstr = "[UNIMPL op]";
 		const char* opstr = ",";
+		switch (op->opKind)
+		{
+		case Op_FCall:     fnstr = op->resolvedFunc->mangledName.c_str(); break;
+		case Op_Abs:       fnstr = "abs";       break;
+		case Op_ACos:      fnstr = "acos";      break;
+		case Op_All:       fnstr = "all";       break;
+		case Op_Any:       fnstr = "any";       break;
+		case Op_ASin:      fnstr = "asin";      break;
+		case Op_ATan:      fnstr = "atan";      break;
+		case Op_Clamp:     fnstr = "clamp";     break;
+		case Op_Cos:       fnstr = "cos";       break;
+		case Op_CosH:      fnstr = "cosh";      break;
+		case Op_Cross:     fnstr = "cross";     break;
+		case Op_Distance:  fnstr = "distance";  break;
+		case Op_Dot:       fnstr = "dot";       break;
+		case Op_FWidth:    fnstr = "fwidth";    break;
+		case Op_Length:    fnstr = "length";    break;
+		case Op_Normalize: fnstr = "normalize"; break;
+		case Op_Reflect:   fnstr = "reflect";   break;
+		case Op_Refract:   fnstr = "refract";   break;
+		case Op_Sin:       fnstr = "sin";       break;
+		case Op_SinH:      fnstr = "sinh";      break;
+		case Op_Tan:       fnstr = "tan";       break;
+		case Op_TanH:      fnstr = "tanh";      break;
+		}
 		out << fnstr << "(";
 		for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
 		{
@@ -279,6 +304,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
+#if 0+TODO
 	else if (auto* fce = dyn_cast<const FCallExpr>(node))
 	{
 		if (fce->resolvedFunc)
@@ -299,6 +325,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
+#endif
 	else if (auto* mbe = dyn_cast<const MemberExpr>(node))
 	{
 		if (!supportsScalarSwizzle && mbe->GetSource()->GetReturnType()->IsNumeric())
@@ -583,6 +610,13 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		const char* opstr = ",";
 		switch (op->opKind)
 		{
+		case Op_ATan2:     fnstr = "atan2";     break;
+		case Op_DDX:       fnstr = "ddx";       break;
+		case Op_DDY:       fnstr = "ddy";       break;
+		case Op_Frac:      fnstr = "frac";      break;
+		case Op_Lerp:      fnstr = "lerp";      break;
+		case Op_RSqrt:     fnstr = "rsqrt";     break;
+		case Op_Saturate:  fnstr = "saturate";  break;
 		case Op_Tex2D:     fnstr = "tex2D";     break;
 		case Op_Tex2DBias: fnstr = "tex2Dbias"; break;
 		case Op_Tex2DGrad: fnstr = "tex2Dgrad"; break;
@@ -722,6 +756,12 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		const char* opstr = ",";
 		switch (op->opKind)
 		{
+		case Op_ATan2:     fnstr = "atan";  break;
+		case Op_DDX:       fnstr = "dFdx";  break;
+		case Op_DDY:       fnstr = "dFdy";  break;
+		case Op_Frac:      fnstr = "fract"; break;
+		case Op_Lerp:      fnstr = "mix";   break;
+		case Op_RSqrt:     fnstr = "inversesqrt"; break;
 		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"     : "texture";     break;
 		case Op_Tex2DBias: fnstr = version < 140 ? "texture2DBias" : "textureBias"; break;
 		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGrad" : "textureGrad"; break;

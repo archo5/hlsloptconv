@@ -451,6 +451,7 @@ struct CastExpr : Expr
 	void Dump(OutStream& out, int level) const override;
 };
 
+#if 0
 struct FCallExpr : Expr
 {
 	IMPLEMENT_NODE(FCallExpr);
@@ -462,6 +463,7 @@ struct FCallExpr : Expr
 	ASTFunction* resolvedFunc = nullptr;
 	bool isBuiltinFunc = false;
 };
+#endif
 
 struct InitListExpr : Expr
 {
@@ -483,11 +485,85 @@ struct IncDecOpExpr : Expr
 
 enum OpKind
 {
+	Op_FCall,
+
+	Op_Abs,
+	Op_ACos,
+	Op_All,
+	Op_Any,
+	Op_ASin,
+	Op_ATan,
+	Op_ATan2,
+	Op_Ceil,
+	Op_Clamp,
+	Op_Clip,
+	Op_Cos,
+	Op_CosH,
+	Op_Cross,
+	Op_DDX,
+	Op_DDY,
+	Op_Degrees,
+	Op_Determinant,
+	Op_Distance,
+	Op_Dot,
+	Op_Exp,
+	Op_Exp2,
+	Op_FaceForward,
+	Op_Floor,
+	Op_FMod,
+	Op_Frac,
+	Op_FWidth,
+	Op_IsFinite,
+	Op_IsInf,
+	Op_IsNaN,
+	Op_LdExp,
+	Op_Length,
+	Op_Lerp,
+	Op_Log,
+	Op_Log10,
+	Op_Log2,
+	Op_Max,
+	Op_Min,
+	Op_Normalize,
+	Op_Pow,
+	Op_Radians,
+	Op_Reflect,
+	Op_Refract,
+	Op_Round,
+	Op_RSqrt,
+	Op_Saturate,
+	Op_Sign,
+	Op_Sin,
+	Op_SinH,
+	Op_SmoothStep,
+	Op_Sqrt,
+	Op_Step,
+	Op_Tan,
+	Op_TanH,
+	Op_Transpose,
+	Op_Trunc,
+
+	Op_Tex1D,
+	Op_Tex1DBias,
+	Op_Tex1DGrad,
+	Op_Tex1DLOD,
+	Op_Tex1DProj,
 	Op_Tex2D,
 	Op_Tex2DBias,
 	Op_Tex2DGrad,
 	Op_Tex2DLOD,
 	Op_Tex2DProj,
+	Op_Tex3D,
+	Op_Tex3DBias,
+	Op_Tex3DGrad,
+	Op_Tex3DLOD,
+	Op_Tex3DProj,
+	Op_TexCube,
+	Op_TexCubeBias,
+	Op_TexCubeGrad,
+	Op_TexCubeLOD,
+	Op_TexCubeProj,
+
 	Op_COUNT,
 	Op_NONE = Op_COUNT,
 };
@@ -502,9 +578,13 @@ struct OpExpr : Expr
 	// 2 args
 	Expr* GetLft() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	Expr* GetRgt() const { return firstChild != lastChild ? lastChild->ToExpr() : nullptr; }
+	// fcall
+	ASTNode* GetFirstArg() const { return firstChild; }
+	int GetArgCount() const { return childCount; }
 
 	void Dump(OutStream& out, int level) const override;
 
+	ASTFunction* resolvedFunc = nullptr; // Op_FCall only
 	OpKind opKind = Op_COUNT;
 };
 

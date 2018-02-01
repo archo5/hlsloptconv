@@ -677,6 +677,7 @@ void CastExpr::Dump(OutStream& out, int level) const
 	GetSource()->Dump(out, level);
 }
 
+#if 0
 void FCallExpr::Dump(OutStream& out, int level) const
 {
 	out << "fcall [";
@@ -697,6 +698,7 @@ void FCallExpr::Dump(OutStream& out, int level) const
 	}
 	level--; LVL(out, level); out << "}\n";
 }
+#endif
 
 void InitListExpr::Dump(OutStream& out, int level) const
 {
@@ -728,11 +730,84 @@ void IncDecOpExpr::Dump(OutStream& out, int level) const
 
 static const char* g_OpKindNames[] =
 {
+	"FCall",
+
+	"Abs",
+	"ACos",
+	"All",
+	"Any",
+	"ASin",
+	"ATan",
+	"ATan2",
+	"Ceil",
+	"Clamp",
+	"Clip",
+	"Cos",
+	"CosH",
+	"Cross",
+	"DDX",
+	"DDY",
+	"Degrees",
+	"Determinant",
+	"Distance",
+	"Dot",
+	"Exp",
+	"Exp2",
+	"FaceForward",
+	"Floor",
+	"FMod",
+	"Frac",
+	"FWidth",
+	"IsFinite",
+	"IsInf",
+	"IsNaN",
+	"LdExp",
+	"Length",
+	"Lerp",
+	"Log",
+	"Log10",
+	"Log2",
+	"Max",
+	"Min",
+	"Normalize",
+	"Pow",
+	"Radians",
+	"Reflect",
+	"Refract",
+	"Round",
+	"RSqrt",
+	"Saturate",
+	"Sign",
+	"Sin",
+	"SinH",
+	"SmoothStep",
+	"Sqrt",
+	"Step",
+	"Tan",
+	"TanH",
+	"Transpose",
+	"Trunc",
+
+	"Tex1D",
+	"Tex1DBias",
+	"Tex1DGrad",
+	"Tex1DLOD",
+	"Tex1DProj",
 	"Tex2D",
 	"Tex2DBias",
 	"Tex2DGrad",
 	"Tex2DLOD",
 	"Tex2DProj",
+	"Tex3D",
+	"Tex3DBias",
+	"Tex3DGrad",
+	"Tex3DLOD",
+	"Tex3DProj",
+	"TexCube",
+	"TexCubeBias",
+	"TexCubeGrad",
+	"TexCubeLOD",
+	"TexCubeProj",
 };
 static_assert(
 	sizeof(g_OpKindNames) / sizeof(g_OpKindNames[0]) == Op_COUNT,
@@ -742,12 +817,15 @@ const char* OpKindToString(OpKind kind)
 {
 	if (kind >= 0 && kind < Op_COUNT)
 		return g_OpKindNames[kind];
-	return "UNKNOWN";
+	return "op(UNKNOWN)";
 }
 
 void OpExpr::Dump(OutStream& out, int level) const
 {
-	out << "op(" << OpKindToString(opKind) << ") [";
+	out << OpKindToString(opKind);
+	if (resolvedFunc)
+		out << " (" << resolvedFunc->mangledName << ")";
+	out << " [";
 	GetReturnType()->Dump(out);
 	out << "]\n";
 	LVL(out, level); out << "{\n"; level++;
@@ -1275,9 +1353,9 @@ struct UsedFuncMarker : ASTVisitor<UsedFuncMarker>
 	}
 	void PreVisit(ASTNode* node)
 	{
-		if (auto* fcall = dyn_cast<FCallExpr>(node))
+		if (auto* fcall = dyn_cast<OpExpr>(node))
 		{
-			if (fcall->isBuiltinFunc == false && fcall->resolvedFunc->used == false)
+			if (fcall->resolvedFunc && fcall->resolvedFunc->used == false)
 			{
 				fcall->resolvedFunc->used = true;
 				functionsToProcess.push_back(fcall->resolvedFunc);
@@ -1431,11 +1509,32 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	}
 	else if (auto* op = dyn_cast<const OpExpr>(node))
 	{
-		for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
+		if (auto* rf = op->resolvedFunc)
 		{
-			ProcessReadExpr(ch->ToExpr());
+			for (ASTNode *arg = op->GetFirstArg(), *argdecl = rf->GetFirstArg();
+				arg && argdecl;
+				arg = arg->next, argdecl = argdecl->next)
+			{
+				if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_In)
+					ProcessReadExpr(arg->ToExpr());
+			}
+
+			for (ASTNode *arg = op->GetFirstArg(), *argdecl = rf->GetFirstArg();
+				arg && argdecl;
+				arg = arg->next, argdecl = argdecl->next)
+			{
+				if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_Out)
+					ProcessWriteExpr(arg->ToExpr());
+			}
+			return;
 		}
-		return;
+		else
+		{
+			// TODO write-out intrinsics
+			for (ASTNode* arg = op->firstChild; arg; arg = arg->next)
+				ProcessReadExpr(arg->ToExpr());
+			return;
+		}
 	}
 	else if (auto* unop = dyn_cast<const UnaryOpExpr>(node))
 	{
@@ -1468,40 +1567,6 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	{
 		ProcessReadExpr(castexpr->GetSource());
 		return;
-	}
-	else if (auto* fce = dyn_cast<const FCallExpr>(node))
-	{
-		if (auto* name = dyn_cast<const DeclRefExpr>(fce->GetFunc()))
-		{
-			if (fce->isBuiltinFunc)
-			{
-				// TODO write-out intrinsics
-				for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
-					ProcessReadExpr(arg->ToExpr());
-				return;
-			}
-			else
-			{
-				auto* rf = fce->resolvedFunc;
-
-				for (ASTNode *arg = fce->GetFirstArg(), *argdecl = rf->GetFirstArg();
-					arg && argdecl;
-					arg = arg->next, argdecl = argdecl->next)
-				{
-					if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_In)
-						ProcessReadExpr(arg->ToExpr());
-				}
-
-				for (ASTNode *arg = fce->GetFirstArg(), *argdecl = rf->GetFirstArg();
-					arg && argdecl;
-					arg = arg->next, argdecl = argdecl->next)
-				{
-					if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_Out)
-						ProcessWriteExpr(arg->ToExpr());
-				}
-				return;
-			}
-		}
 	}
 	else if (auto* ile = dyn_cast<const InitListExpr>(node))
 	{
@@ -2423,10 +2488,12 @@ static ASTNode* GetWriteContext(Expr* expr)
 			if (TokenIsOpAssign(binop->opType) && binop->GetLft() == expr)
 				return binop;
 		}
+#if 0
 		else if (auto* fcall = dyn_cast<FCallExpr>(expr->parent))
 		{
 			// TODO
 		}
+#endif
 		expr = expr->parent->ToExpr();
 	}
 	return nullptr;
@@ -2569,10 +2636,12 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 						//	insertPos->parent->Dump(std::cout);
 							return;
 						}
+#if 0
 						else if (auto* fcall = dyn_cast<FCallExpr>(writeCtx)) // 'out' argument
 						{
 							// TODO
 						}
+#endif
 					}
 					else
 					{
@@ -2759,7 +2828,7 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
-	void MatrixUnpack(FCallExpr* fcintrin)
+	void MatrixUnpack(OpExpr* fcintrin)
 	{
 		auto* mtxTy = fcintrin->GetReturnType();
 		if (mtxTy->kind != ASTType::Matrix)
@@ -2786,7 +2855,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		}
 		for(int i = 1; i < numCols; ++i)
 		{
-			auto* fcx = dyn_cast<FCallExpr>(fcintrin->DeepClone());
+			auto* fcx = dyn_cast<OpExpr>(fcintrin->DeepClone());
 			for (auto* arg = fcx->GetFirstArg(); arg; arg = arg->next)
 			{
 				dyn_cast<Int32Expr>(dyn_cast<IndexExpr>(arg)->GetIndex())->value = i;
@@ -2795,7 +2864,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		}
 	//	ile->Dump(FILEStream(stderr),0);
 	}
-	void CastArgsToFloat(FCallExpr* fcintrin, bool preserveInts)
+	void CastArgsToFloat(OpExpr* fcintrin, bool preserveInts)
 	{
 		int numInts = 0;
 		for (ASTNode* arg = fcintrin->GetFirstArg(); arg; )
@@ -2809,12 +2878,12 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			if (rt->IsFloatBased() == false)
 				CastExprTo(curArg, ast.CastToFloat(rt));
 		}
-		if (preserveInts && fcintrin->childCount - 1 == numInts)
+		if (preserveInts && fcintrin->childCount == numInts)
 		{
 			CastExprTo(fcintrin, ast.CastToInt(fcintrin->GetReturnType()));
 		}
 	}
-	void CastArgsES100(FCallExpr* fcintrin)
+	void CastArgsES100(OpExpr* fcintrin)
 	{
 		if (outputFmt == OSF_GLSL_ES_100)
 			CastArgsToFloat(fcintrin, true);
@@ -2822,65 +2891,66 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PostVisit(ASTNode* node)
 	{
-		if (auto* fcall = dyn_cast<FCallExpr>(node))
+		if (auto* op = dyn_cast<OpExpr>(node))
 		{
-			if (fcall->isBuiltinFunc)
+			switch (op->opKind)
 			{
-				if (auto* dre = dyn_cast<DeclRefExpr>(fcall->GetFunc()))
+			case Op_Abs:
+			case Op_ACos:
+			case Op_ASin:
+			case Op_ATan:
+			case Op_ATan2:
+				CastArgsES100(op);
+				MatrixUnpack(op);
+				break;
+			case Op_Clip:
 				{
-					if (dre->name == "abs") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
-					if (dre->name == "acos") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
-					if (dre->name == "asin") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
-					if (dre->name == "atan") { CastArgsES100(fcall); MatrixUnpack(fcall); return; }
-					if (dre->name == "atan2") { dre->name = "atan";
-						CastArgsToFloat(fcall, true); MatrixUnpack(fcall); return; }
-					if (dre->name == "clip")
+					// clip return type is 'void' so parent should be ExprStmt
+					assert(op->parent->ToStmt());
+
+					// convert to `if (<x> < 0) discard;` for each access point
+					Expr* arg = op->GetFirstArg()->ToExpr();
+
+					int numAPs = arg->GetReturnType()->GetAccessPointCount();
+					for (int i = 0; i < numAPs; ++i)
 					{
-						// clip return type is 'void' so parent should be ExprStmt
-						assert(fcall->parent->ToStmt());
+						auto* ifstmt = new IfElseStmt;
+						auto* binop = new BinaryOpExpr;
+						auto* discard = new DiscardStmt;
 
-						// convert to `if (<x> < 0) discard;` for each access point
-						Expr* arg = fcall->GetFirstArg()->ToExpr();
-
-						int numAPs = arg->GetReturnType()->GetAccessPointCount();
-						for (int i = 0; i < numAPs; ++i)
+						ifstmt->AppendChild(binop);
+						ifstmt->AppendChild(discard);
+						binop->opType = STT_OP_Less;
+						binop->SetReturnType(ast.GetBoolType());
+						binop->AppendChild(GetReferenceToElement(ast, arg->DeepClone()->ToExpr(), i));
+						Expr* cnst = nullptr;
+						auto* srcTy = binop->GetLft()->GetReturnType();
+						switch (srcTy->kind)
 						{
-							auto* ifstmt = new IfElseStmt;
-							auto* binop = new BinaryOpExpr;
-							auto* discard = new DiscardStmt;
-
-							ifstmt->AppendChild(binop);
-							ifstmt->AppendChild(discard);
-							binop->opType = STT_OP_Less;
-							binop->SetReturnType(ast.GetBoolType());
-							binop->AppendChild(GetReferenceToElement(ast, arg->DeepClone()->ToExpr(), i));
-							Expr* cnst = nullptr;
-							auto* srcTy = binop->GetLft()->GetReturnType();
-							switch (srcTy->kind)
-							{
-							case ASTType::Bool: CastExprTo(binop->GetLft(), ast.GetInt32Type()); // ...
-							case ASTType::Int32:
-							case ASTType::UInt32: cnst = new Int32Expr(0, srcTy); break;
-							case ASTType::Float16:
-							case ASTType::Float32: cnst = new Float32Expr(0, srcTy); break;
-							}
-							binop->AppendChild(cnst);
-							fcall->parent->InsertBeforeMe(ifstmt);
+						case ASTType::Bool: CastExprTo(binop->GetLft(), ast.GetInt32Type()); // ...
+						case ASTType::Int32:
+						case ASTType::UInt32: cnst = new Int32Expr(0, srcTy); break;
+						case ASTType::Float16:
+						case ASTType::Float32: cnst = new Float32Expr(0, srcTy); break;
 						}
-
-						delete fcall; // leaves unused ExprStmt
-						return;
+						binop->AppendChild(cnst);
+						op->parent->InsertBeforeMe(ifstmt);
 					}
-					if (dre->name == "ddx") { dre->name = "dFdx"; return; }
-					if (dre->name == "ddy") { dre->name = "dFdy"; return; }
-					if (dre->name == "distance") { CastArgsToFloat(fcall, false); return; }
-					if (dre->name == "dot") { CastArgsToFloat(fcall, true); return; }
-					if (dre->name == "frac") { dre->name = "fract"; return; }
-					if (dre->name == "lerp") { dre->name = "mix"; return; }
+
+					delete op; // leaves unused ExprStmt
+					break;
+				}
+			case Op_Distance:
+				CastArgsToFloat(op, false);
+				break;
+			case Op_Dot:
+				CastArgsToFloat(op, true);
+				break;
+#if 0+TODO
 					if (dre->name == "mul")
 					{
-						auto* arg1 = fcall->GetFirstArg()->ToExpr();
-						auto* arg2 = fcall->GetFirstArg()->next->ToExpr();
+						auto* arg1 = op->GetFirstArg()->ToExpr();
+						auto* arg2 = op->GetFirstArg()->next->ToExpr();
 						auto rt1k = arg1->GetReturnType()->kind;
 						auto rt2k = arg2->GetReturnType()->kind;
 						if (rt1k == ASTType::Vector && rt2k == ASTType::Vector)
@@ -2893,48 +2963,35 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 						{
 							auto* binop = new BinaryOpExpr;
 							binop->opType = STT_OP_Mul;
-							binop->SetReturnType(fcall->GetReturnType());
+							binop->SetReturnType(op->GetReturnType());
 							binop->AppendChild(arg1);
 							binop->AppendChild(arg2);
-							delete fcall->ReplaceWith(binop);
+							delete op->ReplaceWith(binop);
 							return;
 						}
 					}
-					if (dre->name == "rsqrt") { dre->name = "inversesqrt"; return; }
-					if (dre->name == "saturate")
-					{
-						dre->name = "clamp";
-						fcall->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
-						fcall->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
-						return;
-					}
-					if (IsNewSamplingAPI())
-					{
-						if (dre->name == "tex1D" ||
-							dre->name == "tex2D" ||
-							dre->name == "tex3D" ||
-							dre->name == "texCUBE") { dre->name = "texture"; return; }
-					}
-					else
-					{
-						if (dre->name == "tex1D")
-						{
-							dre->name = "texture2D";
-							CastExprTo(fcall->GetFirstArg()->next->ToExpr(), ast.GetFloat32VecType(2));
-							return;
-						}
-						if (dre->name == "tex2D") { dre->name = "texture2D"; return; }
-						if (dre->name == "tex3D")
-						{
-							diag.EmitFatalError("tex3D is not supported with GLSL 1.0", dre->loc);
-							return;
-						}
-						if (dre->name == "texCUBE") { dre->name = "textureCube"; return; }
-					}
+#endif
+			case Op_Saturate:
+				op->opKind = Op_Clamp;
+				op->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
+				op->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
+				break;
+			case Op_Tex1D:
+				if (!IsNewSamplingAPI())
+				{
+					op->opKind = Op_Tex2D;
+					CastExprTo(op->GetFirstArg()->next->ToExpr(), ast.GetFloat32VecType(2));
+					return;
 				}
+				break;
+			case Op_Tex3D:
+				if (!IsNewSamplingAPI())
+					diag.EmitFatalError("tex3D is not supported with GLSL 1.0", op->loc);
+				break;
 			}
 			return;
 		}
+#if 0+TODO
 		if (auto* binop = dyn_cast<BinaryOpExpr>(node))
 		{
 			bool mtxUnpack = false;
@@ -2970,6 +3027,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
+#endif
 		if (auto* idxe = dyn_cast<IndexExpr>(node))
 		{
 			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())
