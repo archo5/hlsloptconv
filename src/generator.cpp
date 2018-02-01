@@ -198,25 +198,42 @@ void SLGenerator::EmitExpr(const Expr* node)
 		switch (op->opKind)
 		{
 		case Op_FCall:     fnstr = op->resolvedFunc->mangledName.c_str(); break;
+		case Op_Multiply:  fnstr = ""; opstr = "*"; break;
+		case Op_Divide:    fnstr = ""; opstr = "/"; break;
+		case Op_Modulus:   fnstr = ""; opstr = "%"; break;
 		case Op_Abs:       fnstr = "abs";       break;
 		case Op_ACos:      fnstr = "acos";      break;
 		case Op_All:       fnstr = "all";       break;
 		case Op_Any:       fnstr = "any";       break;
 		case Op_ASin:      fnstr = "asin";      break;
 		case Op_ATan:      fnstr = "atan";      break;
+		case Op_Ceil:      fnstr = "ceil";      break;
 		case Op_Clamp:     fnstr = "clamp";     break;
 		case Op_Cos:       fnstr = "cos";       break;
 		case Op_CosH:      fnstr = "cosh";      break;
 		case Op_Cross:     fnstr = "cross";     break;
+		case Op_Degrees:   fnstr = "degrees";   break;
 		case Op_Distance:  fnstr = "distance";  break;
 		case Op_Dot:       fnstr = "dot";       break;
+		case Op_Exp:       fnstr = "exp";       break;
+		case Op_Exp2:      fnstr = "exp2";      break;
+		case Op_Floor:     fnstr = "floor";     break;
 		case Op_FWidth:    fnstr = "fwidth";    break;
 		case Op_Length:    fnstr = "length";    break;
+		case Op_Log:       fnstr = "log";       break;
+		case Op_Log10:     fnstr = "log10";     break;
+		case Op_Log2:      fnstr = "log2";      break;
+		case Op_Max:       fnstr = "max";       break;
+		case Op_Min:       fnstr = "min";       break;
 		case Op_Normalize: fnstr = "normalize"; break;
+		case Op_Pow:       fnstr = "pow";       break;
+		case Op_Radians:   fnstr = "radians";   break;
 		case Op_Reflect:   fnstr = "reflect";   break;
 		case Op_Refract:   fnstr = "refract";   break;
 		case Op_Sin:       fnstr = "sin";       break;
 		case Op_SinH:      fnstr = "sinh";      break;
+		case Op_Sqrt:      fnstr = "sqrt";      break;
+		case Op_Step:      fnstr = "step";      break;
 		case Op_Tan:       fnstr = "tan";       break;
 		case Op_TanH:      fnstr = "tanh";      break;
 		}
@@ -304,28 +321,6 @@ void SLGenerator::EmitExpr(const Expr* node)
 		out << ")";
 		return;
 	}
-#if 0+TODO
-	else if (auto* fce = dyn_cast<const FCallExpr>(node))
-	{
-		if (fce->resolvedFunc)
-		{
-			out << fce->resolvedFunc->mangledName;
-		}
-		else
-		{
-			EmitExpr(fce->GetFunc());
-		}
-		out << "(";
-		for (ASTNode* arg = fce->GetFirstArg(); arg; arg = arg->next)
-		{
-			EmitExpr(arg->ToExpr());
-			if (arg->next)
-				out << ", ";
-		}
-		out << ")";
-		return;
-	}
-#endif
 	else if (auto* mbe = dyn_cast<const MemberExpr>(node))
 	{
 		if (!supportsScalarSwizzle && mbe->GetSource()->GetReturnType()->IsNumeric())
@@ -611,17 +606,36 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		switch (op->opKind)
 		{
 		case Op_ATan2:     fnstr = "atan2";     break;
+		case Op_Clip:      fnstr = "clip";      break;
 		case Op_DDX:       fnstr = "ddx";       break;
 		case Op_DDY:       fnstr = "ddy";       break;
 		case Op_Frac:      fnstr = "frac";      break;
 		case Op_Lerp:      fnstr = "lerp";      break;
+		case Op_MulMM:
+		case Op_MulMV:
+		case Op_MulVM:     fnstr = "mul";       break;
 		case Op_RSqrt:     fnstr = "rsqrt";     break;
 		case Op_Saturate:  fnstr = "saturate";  break;
+		case Op_Tex1D:     fnstr = "tex1D";     break;
+		case Op_Tex1DBias: fnstr = "tex1Dbias"; break;
+		case Op_Tex1DGrad: fnstr = "tex1Dgrad"; break;
+		case Op_Tex1DLOD:  fnstr = "tex1Dlod";  break;
+		case Op_Tex1DProj: fnstr = "tex1Dproj"; break;
 		case Op_Tex2D:     fnstr = "tex2D";     break;
 		case Op_Tex2DBias: fnstr = "tex2Dbias"; break;
 		case Op_Tex2DGrad: fnstr = "tex2Dgrad"; break;
 		case Op_Tex2DLOD:  fnstr = "tex2Dlod";  break;
 		case Op_Tex2DProj: fnstr = "tex2Dproj"; break;
+		case Op_Tex3D:     fnstr = "tex3D";     break;
+		case Op_Tex3DBias: fnstr = "tex3Dbias"; break;
+		case Op_Tex3DGrad: fnstr = "tex3Dgrad"; break;
+		case Op_Tex3DLOD:  fnstr = "tex3Dlod";  break;
+		case Op_Tex3DProj: fnstr = "tex3Dproj"; break;
+		case Op_TexCube:     fnstr = "texCUBE";     break;
+		case Op_TexCubeBias: fnstr = "texCUBEbias"; break;
+		case Op_TexCubeGrad: fnstr = "texCUBEgrad"; break;
+		case Op_TexCubeLOD:  fnstr = "texCUBElod";  break;
+		case Op_TexCubeProj: fnstr = "texCUBEproj"; break;
 		}
 		if (fnstr)
 		{
@@ -756,17 +770,46 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		const char* opstr = ",";
 		switch (op->opKind)
 		{
+		case Op_Multiply:
+			if (op->GetLft()->GetReturnType()->kind == ASTType::Matrix &&
+				op->GetRgt()->GetReturnType()->kind == ASTType::Matrix)
+				fnstr = "matrixCompMult";
+			break;
+		case Op_Modulus:
+			if (op->GetLft()->GetReturnType()->IsFloatBased() ||
+				op->GetRgt()->GetReturnType()->IsFloatBased())
+				fnstr = "mod";
+			break;
 		case Op_ATan2:     fnstr = "atan";  break;
+		case Op_Clip:      assert( false ); break;
 		case Op_DDX:       fnstr = "dFdx";  break;
 		case Op_DDY:       fnstr = "dFdy";  break;
 		case Op_Frac:      fnstr = "fract"; break;
 		case Op_Lerp:      fnstr = "mix";   break;
+		case Op_MulMM:
+		case Op_MulMV:
+		case Op_MulVM:     fnstr = ""; opstr = "*"; break;
 		case Op_RSqrt:     fnstr = "inversesqrt"; break;
+		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE_texture2D"     : "texture";     break;
+		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE_texture2DBias" : "textureBias"; break;
+		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture2DGrad" : "textureGrad"; break;
+		case Op_Tex1DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture2DLod"  : "textureLod";  break;
+		case Op_Tex1DProj: fnstr = version < 140 ? "UNAVAILABLE_texture2DProj" : "textureProj"; break;
 		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"     : "texture";     break;
 		case Op_Tex2DBias: fnstr = version < 140 ? "texture2DBias" : "textureBias"; break;
 		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGrad" : "textureGrad"; break;
 		case Op_Tex2DLOD:  fnstr = version < 140 ? "texture2DLod"  : "textureLod";  break;
 		case Op_Tex2DProj: fnstr = version < 140 ? "texture2DProj" : "textureProj"; break;
+		case Op_Tex3D:     fnstr = version < 140 ? "UNAVAILABLE_texture2D"     : "texture";     break;
+		case Op_Tex3DBias: fnstr = version < 140 ? "UNAVAILABLE_texture2DBias" : "textureBias"; break;
+		case Op_Tex3DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture2DGrad" : "textureGrad"; break;
+		case Op_Tex3DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture2DLod"  : "textureLod";  break;
+		case Op_Tex3DProj: fnstr = version < 140 ? "UNAVAILABLE_texture2DProj" : "textureProj"; break;
+		case Op_TexCube:     fnstr = version < 140 ? "textureCube"     : "texture";     break;
+		case Op_TexCubeBias: fnstr = version < 140 ? "textureCubeBias" : "textureBias"; break;
+		case Op_TexCubeGrad: fnstr = version < 140 ? "textureCubeGrad" : "textureGrad"; break;
+		case Op_TexCubeLOD:  fnstr = version < 140 ? "textureCubeLod"  : "textureLod";  break;
+		case Op_TexCubeProj: fnstr = version < 140 ? "textureCubeProj" : "textureProj"; break;
 		}
 		if (fnstr)
 		{

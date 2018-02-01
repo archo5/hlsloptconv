@@ -363,7 +363,6 @@ static const char* g_NodeTypeNames[] =
 	"Int32Expr",
 	"Float32Expr",
 	"CastExpr",
-	"FCallExpr",
 	"InitListExpr",
 	"IncDecOpExpr",
 	"OpExpr",
@@ -677,29 +676,6 @@ void CastExpr::Dump(OutStream& out, int level) const
 	GetSource()->Dump(out, level);
 }
 
-#if 0
-void FCallExpr::Dump(OutStream& out, int level) const
-{
-	out << "fcall [";
-	GetReturnType()->Dump(out);
-	out << "]";
-	if (isBuiltinFunc)
-		out << " builtin";
-	out << "\n";
-	LVL(out, level); out << "{\n"; level++;
-	LVL(out, level); out << "func = ";
-	GetFunc()->Dump(out, level + 1);
-	int i = 0;
-	for (ASTNode* arg = GetFirstArg(); arg; arg = arg->next)
-	{
-		LVL(out, level);
-		out << "arg[" << i++ << "] = ";
-		arg->Dump(out, level);
-	}
-	level--; LVL(out, level); out << "}\n";
-}
-#endif
-
 void InitListExpr::Dump(OutStream& out, int level) const
 {
 	out << "initlist [";
@@ -731,6 +707,10 @@ void IncDecOpExpr::Dump(OutStream& out, int level) const
 static const char* g_OpKindNames[] =
 {
 	"FCall",
+
+	"Multiply",
+	"Divide",
+	"Modulus",
 
 	"Abs",
 	"ACos",
@@ -769,6 +749,9 @@ static const char* g_OpKindNames[] =
 	"Log2",
 	"Max",
 	"Min",
+	"MulMM",
+	"MulMV",
+	"MulVM",
 	"Normalize",
 	"Pow",
 	"Radians",
@@ -2883,24 +2866,58 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			CastExprTo(fcintrin, ast.CastToInt(fcintrin->GetReturnType()));
 		}
 	}
-	void CastArgsES100(OpExpr* fcintrin)
+	void CastArgsES100(OpExpr* fcintrin, bool preserveInts)
 	{
 		if (outputFmt == OSF_GLSL_ES_100)
-			CastArgsToFloat(fcintrin, true);
+			CastArgsToFloat(fcintrin, preserveInts);
 	}
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
+	void PreVisit(ASTNode* node)
+	{
+		if (auto* op = dyn_cast<OpExpr>(node))
+		{
+			switch (op->opKind)
+			{
+			case Op_Log10:
+				// log10(x) -> log(x) / log(10)
+				{
+					op->opKind = Op_Log;
+					auto* div = new OpExpr;
+					div->opKind = Op_Divide;
+					div->SetReturnType(op->GetReturnType());
+					op->ReplaceWith(div);
+					div->AppendChild(op);
+					div->AppendChild(new Float32Expr(log(10), ast.GetFloat32Type()));
+					CastExprTo(div->GetRgt(), op->GetReturnType());
+					CastArgsES100(div, false);
+					MatrixUnpack(div);
+				}
+				// PostVisit will do matrix expansion/argument casting as needed on Op_Log
+				break;
+			}
+		}
+	}
 	void PostVisit(ASTNode* node)
 	{
 		if (auto* op = dyn_cast<OpExpr>(node))
 		{
 			switch (op->opKind)
 			{
+			case Op_Modulus:
+				MatrixUnpack(op);
+				break;
 			case Op_Abs:
 			case Op_ACos:
 			case Op_ASin:
 			case Op_ATan:
 			case Op_ATan2:
-				CastArgsES100(op);
+			case Op_Ceil:
+			case Op_Exp:
+			case Op_Exp2:
+			case Op_Floor:
+			case Op_Log:
+			case Op_Log2:
+				CastArgsES100(op, false);
 				MatrixUnpack(op);
 				break;
 			case Op_Clip:
@@ -2946,31 +2963,17 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			case Op_Dot:
 				CastArgsToFloat(op, true);
 				break;
-#if 0+TODO
-					if (dre->name == "mul")
-					{
-						auto* arg1 = op->GetFirstArg()->ToExpr();
-						auto* arg2 = op->GetFirstArg()->next->ToExpr();
-						auto rt1k = arg1->GetReturnType()->kind;
-						auto rt2k = arg2->GetReturnType()->kind;
-						if (rt1k == ASTType::Vector && rt2k == ASTType::Vector)
-						{
-							// overload 5 (v,v) - dot product
-							dre->name = "dot";
-							return;
-						}
-						else // overloads 1-4,6-9
-						{
-							auto* binop = new BinaryOpExpr;
-							binop->opType = STT_OP_Mul;
-							binop->SetReturnType(op->GetReturnType());
-							binop->AppendChild(arg1);
-							binop->AppendChild(arg2);
-							delete op->ReplaceWith(binop);
-							return;
-						}
-					}
-#endif
+			case Op_Log10:
+				assert(false);
+				break;
+			case Op_Max:
+			case Op_Min:
+				CastArgsES100(op, true);
+				MatrixUnpack(op);
+				break;
+			case Op_Pow:
+				MatrixUnpack(op);
+				break;
 			case Op_Saturate:
 				op->opKind = Op_Clamp;
 				op->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
@@ -2991,43 +2994,6 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			}
 			return;
 		}
-#if 0+TODO
-		if (auto* binop = dyn_cast<BinaryOpExpr>(node))
-		{
-			bool mtxUnpack = false;
-			const char* funcName = nullptr;
-			switch (binop->opType)
-			{
-			case STT_OP_Mul:
-				if (binop->GetReturnType()->kind == ASTType::Matrix)
-				{
-					funcName = "matrixCompMult";
-				}
-				break;
-			case STT_OP_Mod:
-				funcName = "mod";
-				mtxUnpack = true;
-				break;
-			default:
-				break;
-			}
-			if (funcName)
-			{
-				auto* dre = new DeclRefExpr;
-				dre->name = funcName;
-				dre->SetReturnType(ast.GetFunctionType());
-				auto* fcall = new FCallExpr;
-				fcall->SetReturnType(binop->GetReturnType());
-				fcall->AppendChild(dre);
-				fcall->AppendChild(binop->firstChild);
-				fcall->AppendChild(binop->firstChild);
-				delete binop->ReplaceWith(fcall);
-				if (mtxUnpack)
-					MatrixUnpack(fcall);
-			}
-			return;
-		}
-#endif
 		if (auto* idxe = dyn_cast<IndexExpr>(node))
 		{
 			if (!idxe->GetIndex()->GetReturnType()->IsIntBased())

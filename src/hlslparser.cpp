@@ -1348,7 +1348,8 @@ int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTTyp
 	return val;
 }
 
-static void CastExprTo(Expr* val, ASTType* to)
+// returns new 'val' (for iteration, to avoid stopping after first cast because 'next' is now null)
+static Expr* CastExprTo(Expr* val, ASTType* to)
 {
 	assert(to);
 	if (to != val->GetReturnType())
@@ -1358,7 +1359,9 @@ static void CastExprTo(Expr* val, ASTType* to)
 		cast->SetReturnType(to);
 		val->ReplaceWith(cast);
 		cast->SetSource(val);
+		return cast;
 	}
+	return val;
 }
 
 static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
@@ -1409,7 +1412,7 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
-		CastExprTo(arg->ToExpr(), reqty);
+		arg = CastExprTo(arg->ToExpr(), reqty);
 	fcall->opKind = opKind;
 	return reqty;
 }
@@ -1474,12 +1477,12 @@ unmatched:
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
-		CastExprTo(arg->ToExpr(), reqty);
+		arg = CastExprTo(arg->ToExpr(), reqty);
 	fcall->opKind = opKind;
 	return returnScalar ? parser->ast.CastToScalar(reqty) : reqty;
 }
 
-static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall,
+static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
 {
 	if (fcall->GetArgCount() != numArgs)
@@ -1516,7 +1519,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall,
 			ASTType* reqty = parser->ast.CastToFloat(rtN);
 			if (vecSize > 1)
 				reqty = parser->ast.CastToVector(reqty, vecSize);
-			CastExprTo(arg->ToExpr(), reqty);
+			arg = CastExprTo(arg->ToExpr(), reqty);
 		}
 	}
 
@@ -1526,56 +1529,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall,
 		return nullptr;
 	}
 
-	return parser->ast.GetFloat32VecType(4);
-}
-
-static ASTType* TexSampleIntrinBP(Parser* parser, OpExpr* op,
-	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
-{
-	if (op->childCount != numArgs)
-	{
-		parser->EmitError("'" + std::string(name) + "' requires " + std::to_string(numArgs) + " arguments");
-		return nullptr;
-	}
-	ASTType* rt0 = op->firstChild->ToExpr()->GetReturnType();
-	bool notMatch = rt0->kind != smpType;
-	if (!notMatch)
-	{
-		for (ASTNode* arg = op->firstChild->next; arg; arg = arg->next)
-		{
-			ASTType* rtN = arg->ToExpr()->GetReturnType();
-			if (rtN->IsNumericBased() == false || rtN->kind == ASTType::Matrix)
-			{
-				notMatch = true;
-				break;
-			}
-			if (vecSize == 1)
-			{
-				if (rtN->IsNumeric() == false)
-				{
-					notMatch = true;
-					break;
-				}
-			}
-			else if (rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize))
-			{
-				notMatch = true;
-				break;
-			}
-
-			ASTType* reqty = parser->ast.CastToFloat(rtN);
-			if (vecSize > 1)
-				reqty = parser->ast.CastToVector(reqty, vecSize);
-			CastExprTo(arg->ToExpr(), reqty);
-		}
-	}
-
-	if (notMatch)
-	{
-		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
-		return nullptr;
-	}
-
+	fcall->opKind = opKind;
 	return parser->ast.GetFloat32VecType(4);
 }
 
@@ -1737,6 +1691,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				fcall->opKind = Op_Multiply;
 				break;
 			}
 			// overload 2
@@ -1745,6 +1700,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), parser->ast.CastToScalar(retTy));
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				fcall->opKind = Op_Multiply;
 				break;
 			}
 			// overload 3
@@ -1753,6 +1709,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), parser->ast.CastToScalar(retTy));
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), retTy);
+				fcall->opKind = Op_Multiply;
 				break;
 			}
 			// overload 4
@@ -1761,6 +1718,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), parser->ast.CastToScalar(retTy));
+				fcall->opKind = Op_Multiply;
 				break;
 			}
 			// overload 5
@@ -1770,6 +1728,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), commonType);
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), commonType);
 				retTy = parser->ast.CastToScalar(commonType);
+				fcall->opKind = Op_Dot;
 				break;
 			}
 			// overload 6
@@ -1779,6 +1738,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			{
 				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
 				retTy = parser->ast.GetVectorType(commonType, rt1->sizeY);
+				fcall->opKind = Op_MulVM;
 				break;
 			}
 			// overload 7
@@ -1787,6 +1747,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 				retTy = parser->Promote(rt0, rt1);
 				CastExprTo(fcall->GetFirstArg()->ToExpr(), retTy);
 				CastExprTo(fcall->GetFirstArg()->next->ToExpr(), parser->ast.CastToScalar(retTy));
+				fcall->opKind = Op_Multiply;
 				break;
 			}
 			// overload 8
@@ -1796,6 +1757,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			{
 				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
 				retTy = parser->ast.GetVectorType(commonType, rt0->sizeX);
+				fcall->opKind = Op_MulMV;
 				break;
 			}
 			// overload 9
@@ -1805,6 +1767,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			{
 				ASTType* commonType = parser->Promote(rt0->subType, rt1->subType);
 				retTy = parser->ast.GetMatrixType(commonType, rt0->sizeX, rt1->sizeY);
+				fcall->opKind = Op_MulMM;
 				break;
 			}
 			parser->EmitError("none of 'mul' overloads matched the argument list");
@@ -1858,7 +1821,7 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 			return nullptr;
 		}
 		for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
-			CastExprTo(arg->ToExpr(), arg->next ? reqty : parser->ast.GetFloat32Type());
+			arg = CastExprTo(arg->ToExpr(), arg->next ? reqty : parser->ast.GetFloat32Type());
 		fcall->opKind = Op_Refract;
 		return reqty;
 	} },
@@ -1883,48 +1846,48 @@ std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
 	DEF_INTRIN_SSF(Op_TanH, tanh),
 
 	{ "tex1D", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1D", ASTType::Sampler1D, 1, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex1D, "tex1D", ASTType::Sampler1D, 1, 2); } },
 	{ "tex1Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dbias", ASTType::Sampler1D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex1DBias, "tex1Dbias", ASTType::Sampler1D, 4, 2); } },
 	{ "tex1Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dgrad", ASTType::Sampler1D, 1, 4); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex1DGrad, "tex1Dgrad", ASTType::Sampler1D, 1, 4); } },
 	{ "tex1Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dlod", ASTType::Sampler1D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex1DLOD, "tex1Dlod", ASTType::Sampler1D, 4, 2); } },
 	{ "tex1Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex1Dproj", ASTType::Sampler1D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex1DProj, "tex1Dproj", ASTType::Sampler1D, 4, 2); } },
 
 	{ "tex2D", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex2D", ASTType::Sampler2D, 2, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex2D, "tex2D", ASTType::Sampler2D, 2, 2); } },
 	{ "tex2Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex2Dbias", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex2DBias, "tex2Dbias", ASTType::Sampler2D, 4, 2); } },
 	{ "tex2Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex2Dgrad", ASTType::Sampler2D, 2, 4); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex2DGrad, "tex2Dgrad", ASTType::Sampler2D, 2, 4); } },
 	{ "tex2Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex2Dlod", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex2DLOD, "tex2Dlod", ASTType::Sampler2D, 4, 2); } },
 	{ "tex2Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex2Dproj", ASTType::Sampler2D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex2DProj, "tex2Dproj", ASTType::Sampler2D, 4, 2); } },
 
 	{ "tex3D", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3D", ASTType::Sampler3D, 3, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex3D, "tex3D", ASTType::Sampler3D, 3, 2); } },
 	{ "tex3Dbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dbias", ASTType::Sampler3D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex3DBias, "tex3Dbias", ASTType::Sampler3D, 4, 2); } },
 	{ "tex3Dgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dgrad", ASTType::Sampler3D, 3, 4); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex3DGrad, "tex3Dgrad", ASTType::Sampler3D, 3, 4); } },
 	{ "tex3Dlod", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dlod", ASTType::Sampler3D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex3DLOD, "tex3Dlod", ASTType::Sampler3D, 4, 2); } },
 	{ "tex3Dproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "tex3Dproj", ASTType::Sampler3D, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_Tex3DProj, "tex3Dproj", ASTType::Sampler3D, 4, 2); } },
 
 	{ "texCUBE", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBE", ASTType::SamplerCUBE, 3, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCube, "texCUBE", ASTType::SamplerCUBE, 3, 2); } },
 	{ "texCUBEbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEbias", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeBias, "texCUBEbias", ASTType::SamplerCUBE, 4, 2); } },
 	{ "texCUBEgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEgrad", ASTType::SamplerCUBE, 3, 4); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeGrad, "texCUBEgrad", ASTType::SamplerCUBE, 3, 4); } },
 	{ "texCUBElod", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBElod", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeLOD, "texCUBElod", ASTType::SamplerCUBE, 4, 2); } },
 	{ "texCUBEproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, "texCUBEproj", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeProj, "texCUBEproj", ASTType::SamplerCUBE, 4, 2); } },
 
 	/// transpose
 	DEF_INTRIN_SSF(Op_Trunc, trunc),
@@ -2029,13 +1992,8 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 					int i = 0;
 					for (ASTNode *arg = fcall->GetFirstArg(), *argdecl = fn->GetFirstArg();
 						arg && argdecl;
-						argdecl = argdecl->next)
-					{
-
-						auto* curArg = arg;
-						arg = arg->next;
-						CastExprTo(curArg->ToExpr(), argdecl->ToVarDecl()->GetType());
-					}
+						arg = arg->next, argdecl = argdecl->next)
+						arg = CastExprTo(arg->ToExpr(), argdecl->ToVarDecl()->GetType());
 				}
 			}
 			else
@@ -2249,37 +2207,6 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 		curToken = start;
 		Expr* funcName = ParseExpr(endTokenType, bestSplit);
-
-		// intrinsics
-		if (auto* dre = dyn_cast<DeclRefExpr>(funcName))
-		{
-			ASTType* retTy = nullptr;
-			OpKind kind = Op_NONE;
-			if (dre->name == "tex2D") { kind = Op_Tex2D; }
-			if (dre->name == "tex2Dbias") { kind = Op_Tex2DBias; }
-			if (dre->name == "tex2Dgrad") { kind = Op_Tex2DGrad; }
-			if (dre->name == "tex2Dlod") { kind = Op_Tex2DLOD; }
-			if (dre->name == "tex2Dproj") { kind = Op_Tex2DProj; }
-			if (kind != Op_NONE)
-			{
-				auto* op = new OpExpr;
-				ast.unassignedNodes.AppendChild(op);
-				op->SetReturnType(ast.GetFloat32VecType(4));
-				op->loc = tokens[bestSplit].loc;
-				op->opKind = kind;
-
-				curToken = bestSplit + 1;
-				ParseExprList(op, STT_RParen, endPos);
-				curToken = bkCur;
-
-				int vecSize = dre->name == "tex2D" || dre->name == "tex2Dgrad" ? 2 : 4;
-				int numArgs = dre->name == "tex2Dgrad" ? 4 : 2;
-				TexSampleIntrinBP(this, op, dre->name.c_str(), ASTType::Sampler2D, vecSize, numArgs);
-
-				delete dre;
-				return op;
-			}
-		}
 
 		auto* fcall = new OpExpr;
 		ast.unassignedNodes.AppendChild(fcall);
@@ -2568,6 +2495,19 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			binop->SetReturnType(TokenIsOpCompare(ttSplit) ? ast.CastToBool(commonType) : commonType);
 			CastExprTo(binop->GetLft(), commonType);
 			CastExprTo(binop->GetRgt(), commonType);
+
+			if (ttSplit == STT_OP_Mul || ttSplit == STT_OP_Mod)
+			{
+				auto* op = new OpExpr;
+				ast.unassignedNodes.AppendChild(op);
+				op->loc = tokens[bestSplit].loc;
+				op->SetReturnType(binop->GetReturnType());
+				op->AppendChild(binop->GetLft());
+				op->AppendChild(binop->GetLft());
+				op->opKind = ttSplit == STT_OP_Mul ? Op_Multiply : Op_Modulus;
+				delete binop;
+				return op;
+			}
 
 			curToken = bkCur;
 			return binop;

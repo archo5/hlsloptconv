@@ -35,6 +35,7 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * `pow` intrinsic has different (reduced) output guarantees when converted to GLSL (do not use with `x < 0`).
 * [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures)
 * `tex3D` is not supported for GLSL ES 1.0 (there are no 3D textures)
+* floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds
 
 #### Other planned improvements:
 

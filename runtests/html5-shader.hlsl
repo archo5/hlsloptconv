@@ -188,21 +188,16 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 	if (coord.y > iResolution.y - 10)
 	{
 		float3 v1 = { -0.9, 0.3, 1.6 };
-		if (coord.x < 10)
-		{
-			outCol = float4(frac(v1), 1);
-			return;
-		}
-		/*else*/ if (coord.x < 20)
-		{
-			outCol = float4(v1 % 2, 1);
-			return;
-		}
-		if (coord.x < 30)
-		{
-			outCol = float4(step(0, float3(0.5, 0, -0.5)), 1);
-			return;
-		}
+		float y = (iResolution.y - coord.y) / 10;
+		float3 y3 = y;
+		if (coord.x < 10){ outCol = float4(frac(v1 + y), 1); return; }
+		/*else*/ if (coord.x < 20){ outCol = float4((v1 + y) % 2, 1); return; }
+		if (coord.x < 30){ outCol = float4(step(0, float3(0.5, 0, -0.5) - y), 1); return; }
+		if (coord.x < 40){ outCol = float4(exp(y3) / 3, 1); return; }
+		if (coord.x < 50){ outCol = float4(exp2(y3) / 3, 1); return; }
+		if (coord.x < 60){ outCol = float4(log(y3 * 4), 1); return; }
+		if (coord.x < 70){ outCol = float4(log10(y3 * 12), 1); return; }
+		if (coord.x < 80){ outCol = float4(log2(y3 * 3), 1); return; }
 	}
 	float3 dir = mul(float4(rayDir(fov, iResolution, coord),0), viewMatrix);
 	//float3 dir = rayDir(fov, iResolution, coord);

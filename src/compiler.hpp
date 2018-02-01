@@ -246,7 +246,6 @@ struct ASTNode
 		Kind_Float32Expr,
 		KindEnd_ConstExpr = Kind_Float32Expr,
 		Kind_CastExpr,
-		Kind_FCallExpr,
 		Kind_InitListExpr,
 		Kind_IncDecOpExpr,
 		Kind_OpExpr,
@@ -451,20 +450,6 @@ struct CastExpr : Expr
 	void Dump(OutStream& out, int level) const override;
 };
 
-#if 0
-struct FCallExpr : Expr
-{
-	IMPLEMENT_NODE(FCallExpr);
-	Expr* GetFunc() const { return firstChild ? firstChild->ToExpr() : nullptr; }
-	ASTNode* GetFirstArg() const { return childCount >= 1 ? firstChild->next : nullptr; }
-	int GetArgCount() const { return childCount >= 1 ? childCount - 1 : 0; }
-	void Dump(OutStream& out, int level) const override;
-
-	ASTFunction* resolvedFunc = nullptr;
-	bool isBuiltinFunc = false;
-};
-#endif
-
 struct InitListExpr : Expr
 {
 	IMPLEMENT_NODE(InitListExpr);
@@ -486,6 +471,10 @@ struct IncDecOpExpr : Expr
 enum OpKind
 {
 	Op_FCall,
+
+	Op_Multiply,
+	Op_Divide,
+	Op_Modulus,
 
 	Op_Abs,
 	Op_ACos,
@@ -524,6 +513,9 @@ enum OpKind
 	Op_Log2,
 	Op_Max,
 	Op_Min,
+	Op_MulMM,
+	Op_MulMV,
+	Op_MulVM,
 	Op_Normalize,
 	Op_Pow,
 	Op_Radians,

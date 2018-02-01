@@ -83,6 +83,20 @@ float4 main( float4 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+in_shader `atan(`
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+in_shader `atan(`
+
+// `ceil`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return ceil(p.x) + ceil(p.xy).xyxy + ceil(p.xyz).xyzx + ceil(p) + ceil(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
@@ -157,6 +171,42 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `exp`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return exp(p.x) + exp(p.xy).xyxy + exp(p.xyz).xyzx + exp(p) + exp(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `exp2`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return exp2(p.x) + exp2(p.xy).xyxy + exp2(p.xyz).xyzx + exp2(p) + exp2(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `floor`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return floor(p.x) + floor(p.xy).xyxy + floor(p.xyz).xyzx + floor(p) + floor(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `frac`
 source `
 float4 main(float4 p : POSITION) : POSITION
@@ -179,6 +229,42 @@ compile_hlsl_before_after `/T ps_3_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
 
+// `log`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return log(p.x) + log(p.xy).xyxy + log(p.xyz).xyzx + log(p) + log(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `log10`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return log10(p.x) + log10(p.xy).xyxy + log10(p.xyz).xyzx + log10(p) + log10(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `log2`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return log2(p.x) + log2(p.xy).xyxy + log2(p.xyz).xyzx + log2(p) + log2(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `matrixCompMult (GLSL)`
 source `
 float2x3 MTX1;
@@ -193,6 +279,40 @@ in_shader `matrixCompMult`
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 in_shader `matrixCompMult`
+
+// `max`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	float q = max(0, true);
+	float a = max(true, 1);
+	float b = max(0.5, -0.5);
+	float4 c = max(p, 0.5);
+	return q + a + b + c
+		+ max(MTX, 1.5)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `min`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	float q = min(0, true);
+	float a = min(true, 1);
+	float b = min(0.5, -0.5);
+	float4 c = min(p, 0.5);
+	return q + a + b + c
+		+ min(MTX, 1.5)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `mul (overload 1)`
 source `
@@ -324,6 +444,23 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `pow`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	float q = pow(0, true);
+	float a = pow(true, 1);
+	float b = pow(0.5, -0.5);
+	float4 c = pow(p, 0.5);
+	return q + a + b + c
+		+ pow(MTX, 1.5)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `reflect`
 source `
 float4 main(float4 p : POSITION, float4 c : COLOR) : POSITION
@@ -352,7 +489,9 @@ float4 main( float4 p : POSITION ) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_glsl ``
+in_shader `inversesqrt`
 compile_glsl_es100 ``
+in_shader `inversesqrt`
 
 // `sqrt`
 source `
