@@ -824,6 +824,31 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			return;
 		}
 	}
+	else if (auto* binop = dyn_cast<const BinaryOpExpr>(node))
+	{
+		if (binop->GetLft()->GetReturnType()->kind == ASTType::Vector ||
+			binop->GetLft()->GetReturnType()->kind == ASTType::Vector)
+		{
+			const char* opstr = nullptr;
+			switch (binop->opType)
+			{
+			case STT_OP_Eq: opstr = "equal"; goto vcmp;
+			case STT_OP_NEq: opstr = "notEqual"; goto vcmp;
+			case STT_OP_Less: opstr = "lessThan"; goto vcmp;
+			case STT_OP_LEq: opstr = "lessThanEqual"; goto vcmp;
+			case STT_OP_Greater: opstr = "greaterThan"; goto vcmp;
+			case STT_OP_GEq: opstr = "greaterThanEqual"; goto vcmp;
+			default: break;
+			vcmp:
+				out << opstr << "(";
+				EmitExpr(binop->GetLft());
+				out << ",";
+				EmitExpr(binop->GetRgt());
+				out << ")";
+				return;
+			}
+		}
+	}
 
 	SLGenerator::EmitExpr(node);
 }

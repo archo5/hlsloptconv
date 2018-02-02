@@ -3324,7 +3324,7 @@ void Parser::ParseDecl()
 			gvardef->SetType(type);
 			gvardef->name = name;
 
-			if ((flags & VarDecl::ATTR_Const) && (flags & VarDecl::ATTR_Static))
+			if (flags & VarDecl::ATTR_Static)
 			{
 				if (TT() != STT_OP_Assign)
 				{

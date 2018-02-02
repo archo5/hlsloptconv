@@ -45,6 +45,23 @@ compile_hlsl_before_after ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `vector comparison operators (noopt)`
+source `
+float4 vals;
+float4 vals2;
+float4 main() : POSITION { return (vals == vals2) + (vals != vals2) +
+	(vals < vals2) + (vals <= vals2) + (vals > vals2) + (vals >= vals2)
+	+
+	(vals == 5) + (vals != 5) +
+	(vals < 5) + (vals <= 5) + (vals > 5) + (vals >= 5)
+	+
+	(true == vals2) + (true != vals2) +
+	(true < vals2) + (true <= vals2) + (true > vals2) + (true >= vals2); }
+`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `logical operators`
 source `
 float4 vals;

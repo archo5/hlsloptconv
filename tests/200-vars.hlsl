@@ -264,6 +264,14 @@ static const float4 outval1 = {1,2,3,4};
 float4 main() : POSITION { outval1.y = 2; return outval1; }`
 compile_fail ``
 
+// `static variable`
+source `
+static float4 outval1 = {1,2,3,4};
+float4 main() : POSITION { outval1 = 0.5; return outval1; }`
+compile_hlsl_before_after ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `basic cbuffer`
 source `
 cbuffer mybuf
