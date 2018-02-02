@@ -4,6 +4,7 @@ source `
 float4 main() : POSITION { return 0.0; }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -15,6 +16,7 @@ THIS */
 float4 main() : POSITION { return 0.0; }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -23,6 +25,7 @@ source `
 float4 main() : POSITION { return 1.0 + 2.0 * 3.0 / 4.0 - 0.5 % 1.0; }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -32,6 +35,7 @@ float4 vals;
 float4 main() : POSITION { return vals.x + vals.y * vals.z / vals.w - vals.y % vals.x; }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -42,6 +46,7 @@ float4 main() : POSITION { return (vals.x == vals.y) + (vals.y != vals.z) +
 	(vals.z < vals.w) + (vals.w <= vals.x) + (vals.x > vals.z) + (vals.y >= vals.w); }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -59,6 +64,7 @@ float4 main() : POSITION { return (vals == vals2) + (vals != vals2) +
 	(true < vals2) + (true <= vals2) + (true > vals2) + (true >= vals2); }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -75,6 +81,7 @@ source `
 float4 main() : POSITION { return (+0) + (-0.1) + (~~0) + (!0) + (!!false); }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -83,30 +90,35 @@ source `
 float4 main() : POSITION { return ( 1.0 + 2.0 ) * 3.0 / ( 4.0 - 2.5 ) % 1.0; }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
 // `basic ternary op`
 source `float4 main() : POSITION { return 1 ? 2 : 3; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
 // `complex ternary op`
 source `float4 main() : POSITION { return 0 ? 1 ? 2 : 3 : 4 ? 5 : 6; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
 // `multi-type ternary op`
 source `float4 main(float4 p : POSITION) : POSITION { return (1 ? 2 : p) + (0 ? 1 : p); }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
 // `extra semicolon parsing`
 source `float4 main() : POSITION { ;; return 0; ;;;; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 
 // `nothing returned 1`
 source `float4 main() : POSITION {}`
@@ -127,5 +139,6 @@ compile_fail ``
 // `bool constant`
 source `float4 main() : POSITION { return true; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``

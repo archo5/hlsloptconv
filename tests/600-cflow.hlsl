@@ -13,6 +13,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 		return 2.0;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -26,6 +27,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 	return tcc.xyxy;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -45,6 +47,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 	return tcc.xyxy;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -60,6 +63,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 	return outval;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -79,6 +83,7 @@ float4 main( float2 tc : TEXCOORD ) : POSITION
 	return tcc.xyxy;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -95,6 +100,7 @@ float4 main(float2 tc : TEXCOORD) : POSITION
 	return tcc.xyxy;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -106,6 +112,7 @@ float4 main( float2 tc : TEXCOORD ) : COLOR
 	return 1;
 }`
 compile_hlsl_before_after `/T ps_3_0`
+compile_hlsl4 `/T ps_4_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
 

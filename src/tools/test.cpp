@@ -590,15 +590,6 @@ static void exec_test(const char* fname, const char* nameonly)
 					}
 				}
 			}
-		//	else if( ident == "compile" )
-		//	{
-		//		Source( decoded_value );
-		//		Compile( OSF_HLSL_SM3 );
-		//	}
-		//	else if( ident == "result" )
-		//	{
-		//		Result( decoded_value.c_str() );
-		//	}
 			else if (ident == "compile_fail")
 			{
 				Compile(decoded_value == "pixel" ? ShaderStage_Pixel : ShaderStage_Vertex, OSF_HLSL_SM3);
@@ -625,6 +616,18 @@ static void exec_test(const char* fname, const char* nameonly)
 				Compile(GetShaderStage(decoded_value), OSF_HLSL_SM3);
 				if (Result("true"))
 					HLSLBeforeAfter(decoded_value);
+			}
+			else if (ident == "compile_hlsl4")
+			{
+				Compile(GetShaderStage(decoded_value), OSF_HLSL_SM4);
+				if (Result("true"))
+					HLSL(decoded_value.size() ? decoded_value : "/T vs_4_0");
+			}
+			else if (ident == "compile_hlsl4_before_after")
+			{
+				Compile(GetShaderStage(decoded_value), OSF_HLSL_SM4);
+				if (Result("true"))
+					HLSLBeforeAfter(decoded_value.size() ? decoded_value : "/T vs_4_0");
 			}
 			else if (ident == "compile_glsl" || ident == "compile_glsl_140")
 			{
@@ -670,6 +673,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				/* debug helper */
 				static int which = 0;
 				printf("[BEEP %d]", ++which);
+			}
+			else
+			{
+				printf("[%s] ERROR: unknown command '%s'\n", testName, ident.c_str());
+				hasErrors = true;
 			}
 		}
 	}

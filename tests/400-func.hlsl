@@ -4,6 +4,7 @@ source `
 float4 passthru( float x ){ return x; }
 float4 main() : POSITION { return passthru( 0.0 ); }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -17,6 +18,7 @@ float4 main() : POSITION
 	return v;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -37,6 +39,7 @@ float a(float a, int b){ return 10.0; }
 float4 main():POSITION { return a(0,0) + a(0.0,0) + a(0,0.0) + a(0.0,0.0); }
 `
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -63,6 +66,7 @@ float4 main():POSITION {
 	a(hv+fv)*5*5*5*5*5*5*5*5 +
 	a(fv+fv)*5*5*5*5*5*5*5*5*5; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -83,6 +87,7 @@ float4 main(float4 p : POSITION):POSITION {
 	a(p.xxx)*5*5*5*5*5*5 +
 	a(p.xxxx)*5*5*5*5*5*5*5; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -101,6 +106,7 @@ compile_fail_with_hlsl ``
 // `explicit cast`
 source `float4 main():POSITION { return (float4) 0.0f; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -132,6 +138,7 @@ float4 main():POSITION {
 	return vv4;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -227,6 +234,7 @@ float4 main():POSITION {
 	return vv4;
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -281,6 +289,7 @@ float4 main():POSITION {
 	+ m44(vs) + m44(vv1) /*+ m44(vv4)*/ + m44(vm11) /*+ m44(vm14)*/ /*+ m44(vm41)*/ + m44(vm44)
 	; }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 

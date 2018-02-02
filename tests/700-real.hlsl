@@ -9,6 +9,7 @@ void main( in a2v IN, out v2p OUT )
 	OUT.Position = mul( IN.Position, ModelViewMatrix );
 }`
 compile_hlsl_before_after ``
+compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -41,6 +42,7 @@ void main(float2 itex : TEXCOORD0, out float4 RT0 : COLOR)
 	RT0 = float4(ocol, 1);
 }`
 compile_hlsl_before_after `/T ps_3_0`
+compile_hlsl4 `/T ps_4_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
 
@@ -86,6 +88,7 @@ void main(VS2PS_c i, out float4 RT0 : COLOR0, out float4 RT1 : COLOR1)
 #endif
 }`
 compile_hlsl_before_after `/T ps_3_0`
+compile_hlsl4 `/T ps_4_0`
 in_shader `clip`
 compile_glsl `-S frag`
 in_shader `discard`
@@ -134,5 +137,6 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 	outCol = float4(coord.x % 2, coord.y % 2,1,1);
 }`
 compile_hlsl_before_after `/T ps_3_0`
+compile_hlsl4 `/T ps_4_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
