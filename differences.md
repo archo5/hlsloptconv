@@ -25,6 +25,15 @@
 |      matrix-vector product: | `mul(mtx, vec)` | `mtx * vec` | `mtx * vec` |
 |    fractional part intrin.: | `frac` | `fract` | `fract` |
 
+#### Linkage
+
+|                             | HLSL 3.0 | HLSL 4.0 | GLSL 1.40 | GLSL ES 1.0 |
+| --------------------------: | -------- | -------- | --------- | ----------- |
+|      vertex data -> shader: | semantic name & index | byte offset, validated by semantic name, index and order | attribute (assigned by name outside shader) | attribute (assigned by name outside shader) |
+|  vertex shader -> position: | `POSITION` semantic | `SV_Position` semantic | `gl_Position` built-in var. | `gl_Position` built-in var. |
+|           shader -> shader: | semantic name & index | byte offset, validated by semantic name, index and order | name, validated by type | name, validated by type |
+|    pixel shader -> color #: | `COLOR` semantic (#=index) | `SV_Target` semantic (#=index) | `out` variable (# assigned outside shader, default=0) | `gl_FragColor` (#=0, MRT feature is not supported) |
+
 #### Matrices
 
 |            | HLSL 3.0 | GLSL 1.40 | GLSL ES 1.0 |

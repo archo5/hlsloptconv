@@ -235,6 +235,17 @@ void Parser::ParseCode(const char* text)
 	while (curToken < tokens.size())
 		ParseDecl();
 	diag.CheckNonFatalErrors();
+
+	if (entryPointCount == 0)
+	{
+		diag.EmitFatalError("entry point '" + entryPointName + "' was not found",
+			Location::BAD());
+	}
+	if (entryPointCount > 1)
+	{
+		diag.EmitFatalError("too many functions named '" + entryPointName + "', expected one entry point",
+			Location::BAD());
+	}
 }
 
 void Parser::ParseTokens(const char* text, uint32_t source)
@@ -318,7 +329,8 @@ void Parser::ParseTokens(const char* text, uint32_t source)
 				else tokenData.push_back(*text);
 				text++;
 			}
-			uint32_t realSize = tokenData.size() - dataOff - 4;
+			tokenData.push_back(0);
+			uint32_t realSize = tokenData.size() - dataOff - 4 - 1;
 			memcpy(&tokenData[dataOff], &realSize, 4);
 			tokens.push_back({ STT_StrLit, TLOC(slStart), dataOff });
 			continue;
@@ -400,6 +412,7 @@ void Parser::ParseTokens(const char* text, uint32_t source)
 				reinterpret_cast<char*>(&length),
 				reinterpret_cast<char*>(&length + 1));
 			tokenData.insert(tokenData.end(), idStart, text);
+			tokenData.push_back(0);
 			continue;
 		}
 
@@ -1533,8 +1546,30 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 	return parser->ast.GetFloat32VecType(4);
 }
 
+struct ConstCharEqual
+{
+	bool operator () (const char* a, const char* b) const
+	{
+		return !strcmp(a, b);
+	}
+};
+
+struct ConstCharHash
+{
+	size_t operator () (const char* s) const
+	{
+		uint32_t hash = 2166136261U;
+		while (*s)
+		{
+			hash ^= *s++;
+			hash *= 16777619U;
+		}
+		return hash;
+	}
+};
+
 typedef ASTType* (*IntrinsicValidatorFP)(Parser*, OpExpr*);
-std::unordered_map<std::string, IntrinsicValidatorFP> g_BuiltinIntrinsics
+std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEqual> g_BuiltinIntrinsics
 {
 	{ "abs", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, Op_Abs, "abs", true); }},
@@ -1898,7 +1933,7 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 	{
 		if (auto ie = dyn_cast<DeclRefExpr>(fnexpr))
 		{
-			auto bit = g_BuiltinIntrinsics.find(ie->name);
+			auto bit = g_BuiltinIntrinsics.find(ie->name.c_str());
 			if (bit != g_BuiltinIntrinsics.end())
 			{
 				ASTType* retType = bit->second(this, fcall);
@@ -1917,13 +1952,13 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 				return;
 			}
 
-			auto it = ast.functions.find(ie->name);
-			if (it != ast.functions.end())
+			auto it = functions.find(ie->name);
+			if (it != functions.end())
 			{
 				// find the right function
 				if (it->second.size() == 1)
 				{
-					ASTFunction* fn = it->second.begin()->second;
+					ASTFunction* fn = *it->second.begin();
 					if (CalcOverloadMatchFactor(fn, fcall, nullptr, true) != MAX_OVERLOAD)
 					{
 						fcall->resolvedFunc = fn;
@@ -1937,9 +1972,8 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 					std::vector<ASTType*> equalArgs;
 					equalArgs.resize(fcall->GetArgCount(), voidTy);
 
-					for (auto& fdef : it->second)
+					for (ASTFunction* fn : it->second)
 					{
-						ASTFunction* fn = fdef.second;
 						size_t i = 0;
 						for (ASTNode* arg = fn->GetFirstArg(); arg; ++i, arg = arg->next)
 						{
@@ -1954,9 +1988,8 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 					int32_t bestOMF = MAX_OVERLOAD;
 					int numOverloads = 0;
 
-					for (auto& fdef : it->second)
+					for (ASTFunction* fn : it->second)
 					{
-						ASTFunction* fn = fdef.second;
 						int32_t curOMF = CalcOverloadMatchFactor(fn, fcall, equalArgs.data(), false);
 						if (curOMF < bestOMF)
 						{
@@ -2109,8 +2142,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				}
 				if (!expr->GetReturnType())
 				{
-					if (ast.functions.find(expr->name) != ast.functions.end() ||
-						g_BuiltinIntrinsics.find(expr->name) != g_BuiltinIntrinsics.end())
+					if (functions.find(expr->name) != functions.end() ||
+						g_BuiltinIntrinsics.find(expr->name.c_str()) != g_BuiltinIntrinsics.end())
 					{
 						expr->SetReturnType(ast.GetFunctionType());
 					}
@@ -2184,7 +2217,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		// constructor
 		if (bestSplit - start == 1 && tokens[start].type == STT_Ident)
 		{
-			if (auto* ty = ast.GetTypeByName(TokenStringData(start).c_str()))
+			if (auto* ty = ast.GetTypeByName(TokenStringC(start)))
 			{
 				auto* ilist = new InitListExpr;
 				ast.unassignedNodes.AppendChild(ilist);
@@ -2930,7 +2963,7 @@ Stmt* Parser::ParseExprDeclStatement()
 		bs->loc = T().loc;
 		return bs;
 	}
-	else if (tt == STT_Ident && ast.IsTypeName(TokenStringData()))
+	else if (tt == STT_Ident && ast.IsTypeName(TokenStringC()))
 	{
 		auto* varDecl = new VarDeclStmt;
 		ast.unassignedNodes.AppendChild(varDecl);
@@ -3118,7 +3151,7 @@ void Parser::ParseDecl()
 		EXPECT(STT_Ident);
 
 		std::string name = TokenStringData();
-		if (ast.IsTypeName(name))
+		if (ast.IsTypeName(name.c_str()))
 			EmitError("type name already used: " + name);
 
 		FWD();
@@ -3217,7 +3250,7 @@ void Parser::ParseDecl()
 	else if (tt == STT_KW_Const
 		|| tt == STT_KW_Uniform
 		|| tt == STT_KW_Static
-		|| (tt == STT_Ident && ast.IsTypeName(TokenStringData())))
+		|| (tt == STT_Ident && ast.IsTypeName(TokenStringC())))
 	{
 		uint32_t flags = 0;
 		if (tt == STT_KW_Const)
@@ -3258,6 +3291,11 @@ void Parser::ParseDecl()
 			func->SetReturnType(commonType);
 			func->name = name;
 			func->loc = loc;
+			if (name == entryPointName)
+			{
+				entryPointCount++;
+				ast.entryPoint = func;
+			}
 
 			FWD();
 
@@ -3276,7 +3314,8 @@ void Parser::ParseDecl()
 				vd->prevScopeDecl = funcInfo.scopeVars;
 				funcInfo.scopeVars = vd;
 			}
-			func->mangledName = mangledName;
+			// demangle entry point name since it's unique
+			func->mangledName = ast.entryPoint == func ? entryPointName : mangledName;
 
 			ParseSemantic(func->returnSemanticName, func->returnSemanticIndex);
 
@@ -3286,12 +3325,16 @@ void Parser::ParseDecl()
 			func->GetCode()->ReplaceWith(ParseStatement());
 			funcInfo.func = nullptr;
 
-			auto& funcsWithName = ast.functions[name];
-			if (funcsWithName.find(mangledName) != funcsWithName.end())
+			auto& funcsWithName = functions[name];
+			for (ASTFunction* otherFN : funcsWithName)
 			{
-				EmitError("function '" + name + "' redefined with same parameters");
+				if (otherFN->mangledName == mangledName)
+				{
+					EmitError("function '" + name + "' redefined with same parameters");
+					break;
+				}
 			}
-			funcsWithName[mangledName] = func;
+			funcsWithName.push_back(func);
 
 			curToken++;
 		}
@@ -3449,7 +3492,7 @@ int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
 			tt == STT_LParen &&
 			pos + 1 < tokenArr.size() &&
 			tokenArr[pos + 1].type == STT_Ident &&
-			ast.IsTypeName(TokenStringData(tokenArr[pos + 1])))
+			ast.IsTypeName(TokenStringC(tokenArr[pos + 1])))
 			return 2 | SPLITSCORE_RTLASSOC;
 	}
 
@@ -3477,6 +3520,13 @@ bool Parser::TokenStringDataEquals(const SLToken& t, const char* comp, size_t co
 	int32_t	len = 0;
 	memcpy(&len, &tokenData[t.dataOff], 4);
 	return len == compsz && memcmp((const char*) &tokenData[t.dataOff + 4], comp, compsz) == 0;
+}
+
+const char* Parser::TokenStringC(const SLToken& t) const
+{
+	if (t.type != STT_Ident && t.type != STT_StrLit)
+		return nullptr;
+	return (const char*) &tokenData[t.dataOff + 4];
 }
 
 std::string Parser::TokenStringData(const SLToken& t) const
@@ -3537,6 +3587,7 @@ bool Parser::TokenStringDataEquals(size_t i, const char* comp, size_t compsz) co
 {
 	return TokenStringDataEquals(tokens[i], comp, compsz);
 }
+const char* Parser::TokenStringC(size_t i) const { return TokenStringC(tokens[i]); }
 std::string Parser::TokenStringData(size_t i) const { return TokenStringData(tokens[i]); }
 bool Parser::TokenBoolData(size_t i) const { return TokenBoolData(tokens[i]); }
 int32_t Parser::TokenInt32Data(size_t i) const { return TokenInt32Data(tokens[i]); }
@@ -3547,6 +3598,7 @@ bool Parser::TokenStringDataEquals(const char* comp, size_t compsz) const
 {
 	return TokenStringDataEquals(tokens[curToken], comp, compsz);
 }
+const char* Parser::TokenStringC() const { return TokenStringC(tokens[curToken]); }
 std::string Parser::TokenStringData() const { return TokenStringData(tokens[curToken]); }
 bool Parser::TokenBoolData() const { return TokenBoolData(tokens[curToken]); }
 int32_t Parser::TokenInt32Data() const { return TokenInt32Data(tokens[curToken]); }

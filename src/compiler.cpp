@@ -1313,9 +1313,9 @@ ASTType* TypeSystem::GetTypeByName(const char* name)
 	return GetStructTypeByName(name);
 }
 
-bool TypeSystem::IsTypeName(const std::string& id)
+bool TypeSystem::IsTypeName(const char* name)
 {
-	return GetTypeByName(id.c_str()) != nullptr;
+	return GetTypeByName(name) != nullptr;
 }
 
 
@@ -1359,36 +1359,16 @@ struct UsedFuncMarker : ASTVisitor<UsedFuncMarker>
 	std::vector<ASTFunction*> functionsToProcess;
 };
 
-void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
+void AST::MarkUsed(Diagnostic& diag)
 {
 	// clear flag
-	for (const auto& fns : functions)
+	for (ASTNode* ch = functionList.firstChild; ch; ch = ch->next)
 	{
-		for (const auto& fn : fns.second)
-		{
-			fn.second->used = false;
-		}
+		dyn_cast<ASTFunction>(ch)->used = false;
 	}
-
-	auto fns = functions.find(entryPoint);
-	if (fns == functions.end())
-	{
-		diag.EmitFatalError("entry point '" + entryPoint + "' was not found",
-			Location::BAD());
-	}
-	if (fns->second.size() != 1)
-	{
-		diag.EmitFatalError("too many functions named '" + entryPoint + "', expected one entry point",
-			Location::BAD());
-	}
-	ASTFunction* EPF = fns->second.begin()->second;
-
-	// demangle entry point name since it's unique
-	EPF->mangledName = entryPoint;
-	EPF->isEntryPoint = true;
 
 	// mark all non-uniform arguments as stage i/o
-	for (ASTNode* arg = EPF->GetFirstArg(); arg; arg = arg->next)
+	for (ASTNode* arg = entryPoint->GetFirstArg(); arg; arg = arg->next)
 	{
 		auto* vd = arg->ToVarDecl();
 		if (vd && !(vd->flags & VarDecl::ATTR_Uniform))
@@ -1406,14 +1386,14 @@ void AST::MarkUsed(Diagnostic& diag, const std::string& entryPoint)
 		}
 	}
 	if (stage == ShaderStage_Vertex &&
-		EPF->returnSemanticName == "POSITION" &&
-		(EPF->returnType->kind != ASTType::Vector || EPF->returnType->sizeX != 4))
+		entryPoint->returnSemanticName == "POSITION" &&
+		(entryPoint->returnType->kind != ASTType::Vector || entryPoint->returnType->sizeX != 4))
 	{
 		diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
-			EPF->loc);
+			entryPoint->loc);
 	}
 
-	UsedFuncMarker ufm(fns->second.begin()->second);
+	UsedFuncMarker ufm(entryPoint);
 	ufm.Process();
 }
 
@@ -1427,12 +1407,9 @@ void AST::Dump(OutStream& out) const
 	{
 		g->Dump(out);
 	}
-	for (const auto& fgdef : functions)
+	for (ASTNode* f = functionList.firstChild; f; f = f->next)
 	{
-		for (const auto& fdef : fgdef.second)
-		{
-			fdef.second->Dump(out);
-		}
+		f->Dump(out);
 	}
 }
 
@@ -1441,28 +1418,25 @@ void AST::Dump(OutStream& out) const
 void VariableAccessValidator::RunOnAST(const AST& ast)
 {
 	// functions
-	for (auto& fnsp : ast.functions)
+	for (ASTNode* f = ast.functionList.firstChild; f; f = f->next)
 	{
-		for (auto& fnp : fnsp.second)
+		auto* fn = dyn_cast<ASTFunction>(f);
+
+		ValidateSetupFunc(fn);
+
+		curASTFunction = fn;
+
+		if (ProcessStmt(fn->GetCode()) == false)
 		{
-			auto* fn = fnp.second;
-
-			ValidateSetupFunc(fn);
-
-			curASTFunction = fn;
-
-			if (ProcessStmt(fn->GetCode()) == false)
+			if (fn->GetReturnType()->IsVoid())
 			{
-				if (fn->GetReturnType()->IsVoid())
-				{
-					ValidateCheckOutputElementsWritten(fn->loc);
-				}
-				else
-				{
-					diag.EmitError("'" + fn->name +
-						"' - not all control paths return a value",
-						fn->loc);
-				}
+				ValidateCheckOutputElementsWritten(fn->loc);
+			}
+			else
+			{
+				diag.EmitError("'" + fn->name +
+					"' - not all control paths return a value",
+					fn->loc);
 			}
 		}
 	}
@@ -2020,23 +1994,14 @@ static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, Ou
 
 static void HLSLAdjustEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
-	for (const auto& fgdef : ast.functions)
+	auto* F = ast.entryPoint;
+	// extract return value
+	if (F->GetReturnType()->IsVoid() == false)
+		HLSLAdjustSemantic(F->returnSemanticName, true, stage, shaderFormat);
+	for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
 	{
-		for (const auto& fdef : fgdef.second)
-		{
-			ASTFunction* F = fdef.second;
-			if (F->isEntryPoint)
-			{
-				// extract return value
-				if (F->GetReturnType()->IsVoid() == false)
-					HLSLAdjustSemantic(F->returnSemanticName, true, stage, shaderFormat);
-				for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
-				{
-					auto* vd = arg->ToVarDecl();
-					HLSLAdjustSemantic(vd->semanticName, !!(vd->flags & VarDecl::ATTR_Out), stage, shaderFormat);
-				}
-			}
-		}
+		auto* vd = arg->ToVarDecl();
+		HLSLAdjustSemantic(vd->semanticName, !!(vd->flags & VarDecl::ATTR_Out), stage, shaderFormat);
 	}
 }
 
@@ -2202,96 +2167,85 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 
 static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
-	for (const auto& fgdef : ast.functions)
+	auto* F = ast.entryPoint;
+	// extract return value
+	if (F->GetReturnType()->IsVoid() == false)
 	{
-		for (const auto& fdef : fgdef.second)
+		VarDecl* vd = ast.CreateGlobalVar();
+		vd->semanticName = F->returnSemanticName;
+		vd->semanticIndex = F->returnSemanticIndex;
+		vd->SetType(F->GetReturnType());
+		vd->flags |= VarDecl::ATTR_Out | VarDecl::ATTR_StageIO;
+		GLSLRenameInOut(vd, stage, shaderFormat);
+
+		F->SetReturnType(ast.GetVoidType());
+
+		for (ReturnStmt* ret = F->firstRetStmt; ret; ret = ret->nextRetStmt)
 		{
-			ASTFunction* F = fdef.second;
-			if (F->isEntryPoint)
+			if (dyn_cast<BlockStmt>(ret->parent) == nullptr)
 			{
-				// extract return value
-				if (F->GetReturnType()->IsVoid() == false)
-				{
-					VarDecl* vd = ast.CreateGlobalVar();
-					vd->semanticName = F->returnSemanticName;
-					vd->semanticIndex = F->returnSemanticIndex;
-					vd->SetType(F->GetReturnType());
-					vd->flags |= VarDecl::ATTR_Out | VarDecl::ATTR_StageIO;
-					GLSLRenameInOut(vd, stage, shaderFormat);
-
-					F->SetReturnType(ast.GetVoidType());
-
-					for (ReturnStmt* ret = F->firstRetStmt; ret; ret = ret->nextRetStmt)
-					{
-						if (dyn_cast<BlockStmt>(ret->parent) == nullptr)
-						{
-							BlockStmt* blk = new BlockStmt;
-							ret->ReplaceWith(blk);
-							blk->AppendChild(ret);
-						}
-
-						auto* exprst = new ExprStmt;
-						auto* assign = new BinaryOpExpr;
-						auto* dre = new DeclRefExpr;
-						dre->name = vd->name;
-						dre->decl = vd;
-						dre->SetReturnType(vd->type);
-						ret->InsertBeforeMe(exprst);
-						exprst->AppendChild(assign);
-						assign->AppendChild(dre);
-						assign->AppendChild(ret->GetExpr());
-						assign->opType = STT_OP_Assign;
-						assign->SetReturnType(dre->GetReturnType());
-					}
-				}
-				else // append a return statement at the end for AST normalization
-				{
-					ReturnStmt* ret = new ReturnStmt;
-					ret->AddToFunction(F);
-					F->GetCode()->AppendChild(ret);
-				}
-
-				// fold arguments into body, initialize all inputs, extract all outputs
-				for (ASTNode* argdecl = F->GetFirstArg(); argdecl; )
-				{
-					VarDecl* argvd = argdecl->ToVarDecl();
-					argdecl = argdecl->next;
-
-					if (argvd->GetType()->kind != ASTType::Structure)
-					{
-						argvd->Unlink();
-						GLSLRenameInOut(argvd, stage, shaderFormat);
-						ast.globalVars.AppendChild(argvd);
-					}
-					else
-					{
-						uint32_t flags = argvd->flags;
-						argvd->flags &= ~(VarDecl::ATTR_In | VarDecl::ATTR_Out);
-
-						auto* vds = dyn_cast<VarDeclStmt>(F->GetCode()->firstChild);
-						if (vds == nullptr)
-						{
-							vds = new VarDeclStmt;
-							F->GetCode()->PrependChild(vds);
-						}
-
-						if (flags & VarDecl::ATTR_In)
-						{
-							auto* ile = new InitListExpr;
-							ile->SetReturnType(argvd->GetType());
-							argvd->SetInitExpr(ile);
-
-							GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, ile, argvd, argvd->GetType()->ToStructType());
-						}
-						else
-							GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, nullptr, argvd, argvd->GetType()->ToStructType());
-
-						vds->PrependChild(argvd);
-					}
-				}
-
-				break;
+				BlockStmt* blk = new BlockStmt;
+				ret->ReplaceWith(blk);
+				blk->AppendChild(ret);
 			}
+
+			auto* exprst = new ExprStmt;
+			auto* assign = new BinaryOpExpr;
+			auto* dre = new DeclRefExpr;
+			dre->name = vd->name;
+			dre->decl = vd;
+			dre->SetReturnType(vd->type);
+			ret->InsertBeforeMe(exprst);
+			exprst->AppendChild(assign);
+			assign->AppendChild(dre);
+			assign->AppendChild(ret->GetExpr());
+			assign->opType = STT_OP_Assign;
+			assign->SetReturnType(dre->GetReturnType());
+		}
+	}
+	else // append a return statement at the end for AST normalization
+	{
+		ReturnStmt* ret = new ReturnStmt;
+		ret->AddToFunction(F);
+		F->GetCode()->AppendChild(ret);
+	}
+
+	// fold arguments into body, initialize all inputs, extract all outputs
+	for (ASTNode* argdecl = F->GetFirstArg(); argdecl; )
+	{
+		VarDecl* argvd = argdecl->ToVarDecl();
+		argdecl = argdecl->next;
+
+		if (argvd->GetType()->kind != ASTType::Structure)
+		{
+			argvd->Unlink();
+			GLSLRenameInOut(argvd, stage, shaderFormat);
+			ast.globalVars.AppendChild(argvd);
+		}
+		else
+		{
+			uint32_t flags = argvd->flags;
+			argvd->flags &= ~(VarDecl::ATTR_In | VarDecl::ATTR_Out);
+
+			auto* vds = dyn_cast<VarDeclStmt>(F->GetCode()->firstChild);
+			if (vds == nullptr)
+			{
+				vds = new VarDeclStmt;
+				F->GetCode()->PrependChild(vds);
+			}
+
+			if (flags & VarDecl::ATTR_In)
+			{
+				auto* ile = new InitListExpr;
+				ile->SetReturnType(argvd->GetType());
+				argvd->SetInitExpr(ile);
+
+				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, ile, argvd, argvd->GetType()->ToStructType());
+			}
+			else
+				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, nullptr, argvd, argvd->GetType()->ToStructType());
+
+			vds->PrependChild(argvd);
 		}
 	}
 }
@@ -3190,7 +3144,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 	Diagnostic diag(errorOutputStream, name);
 	try
 	{
-		Parser p(diag, stage, loadIncludeFilePFN, loadIncludeFileUD);
+		Parser p(diag, stage, entryPoint, loadIncludeFilePFN, loadIncludeFileUD);
 
 		std::string codeWithDefines;
 		if (defines)
@@ -3224,7 +3178,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 	//	FILEStream(stderr) << code;
 
 		p.ParseCode(code);
-		p.ast.MarkUsed(diag, entryPoint);
+		p.ast.MarkUsed(diag);
 
 		if (ASTDumpStream)
 		{

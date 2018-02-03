@@ -3,6 +3,8 @@
 #pragma once
 #include "compiler.hpp"
 
+#include <unordered_map>
+
 
 struct PreprocMacro
 {
@@ -20,8 +22,9 @@ struct CurFunctionInfo
 
 struct Parser
 {
-	Parser(Diagnostic& d, ShaderStage s, LoadIncludeFilePFN lifpfn, void* lifud) :
+	Parser(Diagnostic& d, ShaderStage s, const std::string& ep, LoadIncludeFilePFN lifpfn, void* lifud) :
 		diag(d),
+		entryPointName(ep),
 		loadIncludeFilePFN(lifpfn),
 		loadIncludeFileUD(lifud)
 	{
@@ -114,6 +117,7 @@ struct Parser
 		size_t pos, size_t start, bool allowFunctions);
 
 	bool TokenStringDataEquals(const SLToken& t, const char* comp, size_t compsz) const;
+	const char* TokenStringC(const SLToken& t) const;
 	std::string TokenStringData(const SLToken& t) const;
 	bool TokenBoolData(const SLToken& t) const;
 	int32_t TokenInt32Data(const SLToken& t) const;
@@ -121,6 +125,7 @@ struct Parser
 	std::string TokenToString(const SLToken& t) const;
 
 	bool TokenStringDataEquals(size_t i, const char* comp, size_t compsz) const;
+	const char* TokenStringC(size_t i) const;
 	std::string TokenStringData(size_t i) const;
 	bool TokenBoolData(size_t i) const;
 	int32_t TokenInt32Data(size_t i) const;
@@ -128,6 +133,7 @@ struct Parser
 	std::string TokenToString(size_t i) const;
 
 	bool TokenStringDataEquals(const char* comp, size_t compsz) const;
+	const char* TokenStringC() const;
 	std::string TokenStringData() const;
 	bool TokenBoolData() const;
 	int32_t TokenInt32Data() const;
@@ -154,6 +160,10 @@ struct Parser
 	bool isWriteCtx = false; // if current expression is part of a write
 
 	CurFunctionInfo funcInfo;
+	typedef std::vector<ASTFunction*> ASTFuncList;
+	std::unordered_map<std::string, ASTFuncList> functions;
+	std::string entryPointName;
+	int entryPointCount = 0;
 
 	AST ast;
 };

@@ -22,6 +22,8 @@
 #  include <dirent.h>
 #endif
 
+#include <unordered_map>
+
 
 const char* outfile = "tests-output.log";
 const char* outfile_errors = "tests-errors.log";

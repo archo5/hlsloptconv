@@ -3,8 +3,6 @@
 #pragma once
 #include "common.hpp"
 
-#include <unordered_map>
-
 
 struct ASTStructType;
 struct ASTNode;
@@ -761,7 +759,6 @@ struct ASTFunction : ASTNode
 	ReturnStmt* lastRetStmt = nullptr;
 	std::vector<VarDecl*> tmpVars;
 	bool used = false;
-	bool isEntryPoint = false;
 };
 
 struct TypeSystem
@@ -788,7 +785,7 @@ struct TypeSystem
 	ASTType* GetBaseTypeByName(const char* name);
 	ASTStructType* GetStructTypeByName(const char* name);
 	ASTType* GetTypeByName(const char* name);
-	bool IsTypeName(const std::string& id);
+	bool IsTypeName(const char* name);
 
 	ASTType* firstAllocType = nullptr;
 	ASTType* firstArrayType = nullptr;
@@ -840,17 +837,16 @@ struct TypeSystem
 	ASTType typeFloat32MtxDefs[16];
 };
 
-typedef std::unordered_map<std::string, ASTFunction*> ASTFuncMap;
 struct AST : TypeSystem
 {
 	VarDecl* CreateGlobalVar();
-	void MarkUsed(Diagnostic& diag, const std::string& entryPoint);
+	void MarkUsed(Diagnostic& diag);
 	void Dump(OutStream& out) const;
 
 	ShaderStage stage;
 	BlockStmt functionList;
 	BlockStmt globalVars; // contains VarDecl/CBufferDecl nodes only
-	std::unordered_map<std::string, ASTFuncMap> functions;
+	ASTFunction* entryPoint = nullptr;
 
 	BlockStmt unassignedNodes;
 
@@ -880,12 +876,9 @@ template< class V > struct ASTVisitor
 	}
 	void VisitAST(AST& ast)
 	{
-		for (const auto& fns : ast.functions)
+		for (ASTNode* ch = ast.functionList.firstChild; ch; ch = ch->next)
 		{
-			for (const auto& fn : fns.second)
-			{
-				static_cast<V*>(this)->VisitFunction(fn.second);
-			}
+			static_cast<V*>(this)->VisitFunction(dyn_cast<ASTFunction>(ch));
 		}
 	}
 };
@@ -948,12 +941,9 @@ template< class V > struct ASTWalker
 	}
 	void VisitAST(AST& ast)
 	{
-		for (const auto& fns : ast.functions)
+		for (ASTNode* ch = ast.functionList.firstChild; ch; ch = ch->next)
 		{
-			for (const auto& fn : fns.second)
-			{
-				static_cast<V*>(this)->VisitFunction(fn.second);
-			}
+			static_cast<V*>(this)->VisitFunction(dyn_cast<ASTFunction>(ch));
 		}
 	}
 

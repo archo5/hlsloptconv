@@ -200,21 +200,13 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 
 void RemoveUnusedFunctions::RunOnAST(AST& ast)
 {
-	std::unordered_map<std::string, ASTFuncMap> funcmap;
-	for (auto& fgdef : ast.functions)
+	for (ASTNode* ch = ast.functionList.firstChild; ch; )
 	{
-		ASTFuncMap mfuncmap;
-		for (auto& fdef : fgdef.second)
-		{
-			if (fdef.second->used)
-				mfuncmap[fdef.first] = std::move(fdef.second);
-			else
-				delete fdef.second;
-		}
-		if (mfuncmap.empty() == false)
-			funcmap[fgdef.first] = std::move(mfuncmap);
+		auto* F = dyn_cast<ASTFunction>(ch);
+		ch = ch->next;
+		if (!F->used)
+			delete F;
 	}
-	std::swap(ast.functions, funcmap);
 }
 
 
