@@ -3004,6 +3004,62 @@ static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt
 }
 
 
+struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
+{
+	SplitTexSampleArgsPass(AST& a, OutputShaderFormat of) : ast(a), outputFmt(of){}
+	void ExpandCoord(ASTNode* arg, int dims)
+	{
+		auto* argcoord = FoldOutIfBest(arg->ToExpr());
+		auto* arglod = argcoord->Clone()->ToExpr();
+		argcoord->InsertAfterMe(arglod);
+		auto* coordSwizzle = new MemberExpr;
+		coordSwizzle->swizzleComp = dims;
+		coordSwizzle->memberID = 0 | (1<<2) | (2<<4);
+		coordSwizzle->memberName = dims == 3 ? "xyz" : (dims == 2 ? "xy" : "x");
+		auto* lodSwizzle = new MemberExpr;
+		lodSwizzle->memberID = 3;
+		lodSwizzle->swizzleComp = 1;
+		lodSwizzle->memberName = "w";
+		argcoord->ReplaceWith(coordSwizzle);
+		arglod->ReplaceWith(lodSwizzle);
+		coordSwizzle->SetReturnType(ast.CastToVector(ast.CastToScalar(argcoord->GetReturnType()), dims));
+		coordSwizzle->AppendChild(argcoord);
+		lodSwizzle->SetReturnType(ast.CastToScalar(argcoord->GetReturnType()));
+		lodSwizzle->AppendChild(arglod);
+	}
+	void PostVisit(ASTNode* node)
+	{
+		if (auto* op = dyn_cast<OpExpr>(node))
+		{
+			switch (op->opKind)
+			{
+			case Op_Tex1DBias:
+			case Op_Tex1DLOD:
+				ExpandCoord(op->GetFirstArg()->next, 1);
+				break;
+			case Op_Tex2DBias:
+			case Op_Tex2DLOD:
+				ExpandCoord(op->GetFirstArg()->next, 2);
+				break;
+			case Op_Tex3DBias:
+			case Op_Tex3DLOD:
+			case Op_TexCubeBias:
+			case Op_TexCubeLOD:
+				ExpandCoord(op->GetFirstArg()->next, 3);
+				break;
+			}
+		}
+	}
+	AST& ast;
+	OutputShaderFormat outputFmt;
+};
+
+static void SplitTexSampleArgs(AST& ast, OutputShaderFormat outputFmt)
+{
+	SplitTexSampleArgsPass(ast, outputFmt).VisitAST(ast);
+}
+
+
 static void ReplaceVM1Type(AST& ast, ASTType* type)
 {
 	// cast all return/declaration types in code
@@ -3196,6 +3252,10 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		vav.RunOnAST(p.ast);
 
 		// output-specific transformations (emulation/feature mapping)
+		if (outputFmt != OSF_HLSL_SM3)
+		{
+			SplitTexSampleArgs(p.ast, outputFmt);
+		}
 		switch (outputFmt)
 		{
 		case OSF_HLSL_SM3:

@@ -1940,10 +1940,10 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 				if (retType)
 				{
 					fcall->SetReturnType(retType);
-				//	fcall->isBuiltinFunc = true;
-					if (ie->name == "ddx" ||
-						ie->name == "ddy" ||
-						ie->name == "fwidth")
+					auto op = fcall->opKind;
+					if (op == Op_DDX || op == Op_DDY || op == Op_FWidth ||
+						op == Op_Tex1DGrad || op == Op_Tex2DGrad ||
+						op == Op_Tex3DGrad || op == Op_TexCubeGrad)
 					{
 						ast.usingDerivatives = true;
 					}
@@ -3224,7 +3224,7 @@ void Parser::ParseDecl()
 
 			vd->loc = T().loc;
 			vd->type = ParseType();
-			vd->flags |= VarDecl::ATTR_Uniform;
+			vd->flags |= VarDecl::ATTR_Uniform | VarDecl::ATTR_Global;
 
 			EXPECT(STT_Ident);
 			vd->name = TokenStringData();
@@ -3252,7 +3252,7 @@ void Parser::ParseDecl()
 		|| tt == STT_KW_Static
 		|| (tt == STT_Ident && ast.IsTypeName(TokenStringC())))
 	{
-		uint32_t flags = 0;
+		uint32_t flags = VarDecl::ATTR_Global;
 		if (tt == STT_KW_Const)
 		{
 			EmitError("use 'static const' to create a compile-time constant");

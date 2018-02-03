@@ -44,6 +44,7 @@ struct HLSLGenerator : SLGenerator
 		supportsDoubles = true;
 		supportsScalarSwizzle = true;
 	}
+	bool IsGE4(){ return shaderFormat == OSF_HLSL_SM4; }
 	void EmitTypeRef(const ASTType* type);
 	void EmitExpr(const Expr* node);
 	void Generate();
@@ -538,10 +539,10 @@ void HLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::UInt32:      out << "uint"; break;
 	case ASTType::Float16:     out << "half"; break;
 	case ASTType::Float32:     out << "float"; break;
-	case ASTType::Sampler1D:   out << "sampler1D"; break;
-	case ASTType::Sampler2D:   out << "sampler2D"; break;
-	case ASTType::Sampler3D:   out << "sampler3D"; break;
-	case ASTType::SamplerCUBE: out << "samplerCUBE"; break;
+	case ASTType::Sampler1D:   out << (IsGE4() ? "SAMPLER_1D" : "sampler1D"); break;
+	case ASTType::Sampler2D:   out << (IsGE4() ? "SAMPLER_2D" : "sampler2D"); break;
+	case ASTType::Sampler3D:   out << (IsGE4() ? "SAMPLER_3D" : "sampler3D"); break;
+	case ASTType::SamplerCUBE: out << (IsGE4() ? "SAMPLER_CUBE" : "samplerCUBE"); break;
 	case ASTType::Structure:
 		out << type->ToStructType()->name;
 		break;
@@ -599,8 +600,74 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		}
 		return;
 	}
+	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
+	{
+		if (IsGE4() &&
+			dre->decl &&
+			(dre->decl->flags & VarDecl::ATTR_Global) &&
+			dre->decl->GetType()->IsSampler())
+		{
+			out << "GET_" << dre->decl->name << "()";
+			return;
+		}
+	}
 	else if (auto* op = dyn_cast<const OpExpr>(node))
 	{
+		if (IsGE4())
+		{
+			enum Type
+			{
+				Normal,
+				Bias,
+				Grad,
+				Level,
+			};
+			Type type;
+			switch (op->opKind)
+			{
+			case Op_Tex1D:       type = Normal;   goto texSample;
+			case Op_Tex1DBias:   type = Bias;     goto texSample;
+			case Op_Tex1DGrad:   type = Grad;     goto texSample;
+			case Op_Tex1DLOD:    type = Level;    goto texSample;
+			case Op_Tex1DProj:   assert( false ); return;
+			case Op_Tex2D:       type = Normal;   goto texSample;
+			case Op_Tex2DBias:   type = Bias;     goto texSample;
+			case Op_Tex2DGrad:   type = Grad;     goto texSample;
+			case Op_Tex2DLOD:    type = Level;    goto texSample;
+			case Op_Tex2DProj:   assert( false ); return;
+			case Op_Tex3D:       type = Normal;   goto texSample;
+			case Op_Tex3DBias:   type = Bias;     goto texSample;
+			case Op_Tex3DGrad:   type = Grad;     goto texSample;
+			case Op_Tex3DLOD:    type = Level;    goto texSample;
+			case Op_Tex3DProj:   assert( false ); return;
+			case Op_TexCube:     type = Normal;   goto texSample;
+			case Op_TexCubeBias: type = Bias;     goto texSample;
+			case Op_TexCubeGrad: type = Grad;     goto texSample;
+			case Op_TexCubeLOD:  type = Level;    goto texSample;
+			case Op_TexCubeProj: assert( false ); return;
+			default: break;
+			texSample:
+				EmitExpr(op->firstChild->ToExpr());
+				out << ".tex.";
+				switch (type)
+				{
+				case Normal: out << "Sample";      break;
+				case Bias:   out << "SampleBias";  break;
+				case Grad:   out << "SampleGrad";  break;
+				case Level:  out << "SampleLevel"; break;
+				}
+				out << "(";
+				EmitExpr(op->firstChild->ToExpr());
+				out << ".smp";
+				for (ASTNode* ch = op->firstChild->next; ch; ch = ch->next)
+				{
+					out << ",";
+					EmitExpr(ch->ToExpr());
+				}
+				out << ")";
+				return;
+			}
+		}
 		const char* fnstr = nullptr;
 		const char* opstr = ",";
 		switch (op->opKind)
@@ -656,6 +723,16 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 
 void HLSLGenerator::Generate()
 {
+	if (shaderFormat == OSF_HLSL_SM4)
+	{
+		out <<
+			"struct SAMPLER_1D { Texture1D tex; SamplerState smp; };\n"
+			"struct SAMPLER_2D { Texture2D tex; SamplerState smp; };\n"
+			"struct SAMPLER_3D { Texture3D tex; SamplerState smp; };\n"
+			"struct SAMPLER_Cube { TextureCube tex; SamplerState smp; };\n"
+		;
+	}
+
 	SLGenerator::GenerateStructs();
 
 	for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
@@ -678,10 +755,38 @@ void HLSLGenerator::Generate()
 		}
 		else
 		{
-			if (g->ToVarDecl()->flags & VarDecl::ATTR_Hidden)
+			auto* vd = g->ToVarDecl();
+			if (vd->flags & VarDecl::ATTR_Hidden)
 				continue;
-			EmitVarDecl(g->ToVarDecl());
-			out << ";\n";
+			if (IsGE4() && vd->GetType()->IsSampler())
+			{
+				const char* sfx = nullptr;
+				switch (vd->GetType()->kind)
+				{
+				case ASTType::Sampler1D:   sfx = "1D";   break;
+				case ASTType::Sampler2D:   sfx = "2D";   break;
+				case ASTType::Sampler3D:   sfx = "3D";   break;
+				case ASTType::SamplerCUBE: sfx = "Cube"; break;
+				}
+				out << "Texture" << sfx << " TEX_" << vd->name;
+				if (vd->regID >= 0)
+					out << " : register(t" << vd->regID << ")";
+				out << ";\n";
+
+				out << "SamplerState SMP_" << vd->name;
+				if (vd->regID >= 0)
+					out << " : register(s" << vd->regID << ")";
+				out << ";\n";
+
+				out << "SAMPLER_" << sfx << " GET_" << vd->name << "(){ SAMPLER_"
+					<< sfx << " v = { TEX_" << vd->name << ", SMP_" << vd->name
+					<< " }; return v; }\n";
+			}
+			else
+			{
+				EmitVarDecl(vd);
+				out << ";\n";
+			}
 		}
 	}
 

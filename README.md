@@ -15,6 +15,13 @@ It has an extensive test suite, including a [HTML5 WebGL 1 demo](http://archo.wo
 
 The main test suite checks most converted code with `glslangValidator` as well as does a before/after comparison with `fxc`, the DirectX shader compiler, to make sure that the meaning of the code is not lost in translation.
 
+#### Features:
+
+* Built-in preprocessor
+* Built-in validator (variable access, casts, overload resolution etc.)
+* Basic constant propagation
+* Removal of unused functions, branches and variables
+
 #### What is missing (and may or may not appear later)?
 
 * Parsing support for the following intrinsics: `frexp`, `modf`, `sincos`, `transpose`
@@ -33,9 +40,9 @@ The main test suite checks most converted code with `glslangValidator` as well a
 #### Inherent incompatibilities between shader languages/APIs:
 
 * `pow` intrinsic has different (reduced) output guarantees when converted to GLSL (do not use with `x < 0`).
-* [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures)
-* `tex3D` is not supported for GLSL ES 1.0 (there are no 3D textures)
-* floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds
+* [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures).
+* `tex3D` is not supported for GLSL ES 1.0 (there are no 3D textures).
+* Floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds.
 
 #### Other planned improvements:
 

@@ -332,7 +332,7 @@ struct Expr : ASTNode
 	FINLINE Expr() {}
 	Expr(const Expr& o);
 	~Expr();
-	ASTType* GetReturnType() const { return returnType; }
+	FINLINE ASTType* GetReturnType() const { return returnType; }
 	void SetReturnType(ASTType* t);
 	IMPLEMENT_ISTHISTYPE_RANGE(Expr);
 
@@ -362,6 +362,7 @@ struct VarDecl : ASTNode, AccessPointDecl
 		ATTR_Static  = 0x0010,
 		ATTR_Hidden  = 0x0020, // does not get printed (for built-in in/out variables)
 		ATTR_StageIO = 0x0040, // whether the vardecl is stage i/o, not (just) function i/o
+		ATTR_Global  = 0x0080,
 	};
 
 	VarDecl(const VarDecl& o);
@@ -369,7 +370,7 @@ struct VarDecl : ASTNode, AccessPointDecl
 	IMPLEMENT_NODE(VarDecl);
 	Expr* GetInitExpr() const { return firstChild ? firstChild->ToExpr() : nullptr; }
 	void SetInitExpr(Expr* e) { SetFirst(e); }
-	ASTType* GetType() const { return type; }
+	FINLINE ASTType* GetType() const { return type; }
 	void SetType(ASTType* t);
 
 	void GetMangling(std::string& out) const;
