@@ -37,7 +37,7 @@ struct Parser
 	}
 	void ParseCode(const char* text);
 	void ParseTokens(const char* text, uint32_t source);
-	void PreprocessTokens(PreprocMacroMap macros, uint32_t source);
+	void PreprocessTokens(uint32_t source);
 
 	SLToken RequestIntBoolToken(bool v);
 	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
@@ -156,6 +156,7 @@ struct Parser
 	std::vector<std::string> filenames;
 	std::vector<char> tokenData;
 	std::vector<SLToken> tokens;
+	PreprocMacroMap macros;
 	size_t curToken = 0;
 	bool isWriteCtx = false; // if current expression is part of a write
 

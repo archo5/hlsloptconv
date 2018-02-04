@@ -603,6 +603,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				Result("false");
 				HLSLOrigFail(decoded_value);
 			}
+			else if (ident == "compile_fail_glsl_es100")
+			{
+				Compile(decoded_value == "pixel" ? ShaderStage_Pixel : ShaderStage_Vertex, OSF_GLSL_ES_100);
+				Result("false");
+			}
 			else if (ident == "hlsl_before_after")
 			{
 				HLSLBeforeAfter(decoded_value);

@@ -811,7 +811,7 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Sampler1D: out << "sampler1D"; break;
 	case ASTType::Sampler2D: out << "sampler2D"; break;
 	case ASTType::Sampler3D: out << "sampler3D"; break;
-	case ASTType::SamplerCUBE: out << "samplerCUBE"; break;
+	case ASTType::SamplerCUBE: out << "samplerCube"; break;
 	case ASTType::Structure:
 		out << type->ToStructType()->name;
 		break;
@@ -895,26 +895,30 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		case Op_MulMV:
 		case Op_MulVM:     fnstr = ""; opstr = "*"; break;
 		case Op_RSqrt:     fnstr = "inversesqrt"; break;
-		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE_texture2D"     : "texture";     break;
-		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE_texture2DBias" : "textureBias"; break;
-		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture2DGrad" : "textureGrad"; break;
-		case Op_Tex1DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture2DLod"  : "textureLod";  break;
-		case Op_Tex1DProj: fnstr = version < 140 ? "UNAVAILABLE_texture2DProj" : "textureProj"; break;
-		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"     : "texture";     break;
-		case Op_Tex2DBias: fnstr = version < 140 ? "texture2DBias" : "textureBias"; break;
-		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGrad" : "textureGrad"; break;
-		case Op_Tex2DLOD:  fnstr = version < 140 ? "texture2DLod"  : "textureLod";  break;
-		case Op_Tex2DProj: fnstr = version < 140 ? "texture2DProj" : "textureProj"; break;
-		case Op_Tex3D:     fnstr = version < 140 ? "UNAVAILABLE_texture2D"     : "texture";     break;
-		case Op_Tex3DBias: fnstr = version < 140 ? "UNAVAILABLE_texture2DBias" : "textureBias"; break;
-		case Op_Tex3DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture2DGrad" : "textureGrad"; break;
-		case Op_Tex3DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture2DLod"  : "textureLod";  break;
-		case Op_Tex3DProj: fnstr = version < 140 ? "UNAVAILABLE_texture2DProj" : "textureProj"; break;
-		case Op_TexCube:     fnstr = version < 140 ? "textureCube"     : "texture";     break;
-		case Op_TexCubeBias: fnstr = version < 140 ? "textureCubeBias" : "textureBias"; break;
-		case Op_TexCubeGrad: fnstr = version < 140 ? "textureCubeGrad" : "textureGrad"; break;
-		case Op_TexCubeLOD:  fnstr = version < 140 ? "textureCubeLod"  : "textureLod";  break;
-		case Op_TexCubeProj: fnstr = version < 140 ? "textureCubeProj" : "textureProj"; break;
+		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
+		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
+		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture1DGrad" : "textureGrad"; break;
+		case Op_Tex1DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture1DLod"  : "textureLod";  break;
+		case Op_Tex1DProj: fnstr = version < 140 ? "UNAVAILABLE_texture1DProj" : "textureProj"; break;
+		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"        : "texture";     break;
+		case Op_Tex2DBias: fnstr = version < 140 ? "texture2D"        : "texture";     break;
+		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGradEXT" : "textureGrad"; break;
+		case Op_Tex2DLOD:  fnstr = version < 140 ?
+			(ast.stage == ShaderStage_Pixel ? "texture2DLodEXT" : "texture2DLod") :
+			"textureLod";  break;
+		case Op_Tex2DProj: fnstr = version < 140 ? "texture2DProj"    : "textureProj"; break;
+		case Op_Tex3D:     fnstr = version < 140 ? "UNAVAILABLE_texture3D"     : "texture";     break;
+		case Op_Tex3DBias: fnstr = version < 140 ? "UNAVAILABLE_texture3D"     : "texture";     break;
+		case Op_Tex3DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture3DGrad" : "textureGrad"; break;
+		case Op_Tex3DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture3DLod"  : "textureLod";  break;
+		case Op_Tex3DProj: fnstr = version < 140 ? "UNAVAILABLE_texture3DProj" : "textureProj"; break;
+		case Op_TexCube:     fnstr = version < 140 ? "textureCube"        : "texture";     break;
+		case Op_TexCubeBias: fnstr = version < 140 ? "textureCube"        : "texture";     break;
+		case Op_TexCubeGrad: fnstr = version < 140 ? "textureCubeGradEXT" : "textureGrad"; break;
+		case Op_TexCubeLOD:  fnstr = version < 140 ?
+			(ast.stage == ShaderStage_Pixel ? "textureCubeLodEXT" : "textureCubeLod") :
+			"textureLod";  break;
+		case Op_TexCubeProj: fnstr = version < 140 ? "textureCubeProj"    : "textureProj"; break;
 		}
 		if (fnstr)
 		{
@@ -967,6 +971,11 @@ void GLSLGenerator::Generate()
 		if (ast.usingDerivatives)
 		{
 			out << "#extension GL_OES_standard_derivatives : enable\n";
+		}
+		if ((ast.usingLODTextureSampling && ast.stage == ShaderStage_Pixel) ||
+			ast.usingGradTextureSampling)
+		{
+			out << "#extension GL_EXT_shader_texture_lod : enable\n";
 		}
 	}
 

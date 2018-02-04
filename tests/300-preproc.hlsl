@@ -266,3 +266,12 @@ source `
 compile_fail ``
 check_err `real:2:1: error: unexpected token: +
 `
+
+// `macro from preprocessor include`
+rminc ``
+addinc `fna=#define MAIN_FUNC main()`
+source `
+#include "fna"
+float4 MAIN_FUNC : POSITION { return 0.0; }
+`
+compile_hlsl ``

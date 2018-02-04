@@ -224,7 +224,7 @@ static const OperatorInfo g_allOperatorsResolveOrder[] =
 void Parser::ParseCode(const char* text)
 {
 	ParseTokens(text, 0);
-	PreprocessTokens({}, 0);
+	PreprocessTokens(0);
 
 //	FILEStream err(stderr);
 //	for (size_t i = 0; i < tokens.size(); ++i)
@@ -477,7 +477,7 @@ struct PPTokenRange
 	SLToken* end;
 };
 
-void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
+void Parser::PreprocessTokens(uint32_t source)
 {
 	std::vector<SLToken> ppTokens, replacedTokens, tokensToReplace;
 	ppTokens.reserve(tokens.size());
@@ -489,7 +489,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 	std::vector<uint8_t> ppOutputEnabled;
 	ppOutputEnabled.reserve(32);
 
-	auto FindTokenReplaceRange = [this, &macros](std::vector<SLToken>& arr, size_t& i) -> PPTokenRange
+	auto FindTokenReplaceRange = [this](std::vector<SLToken>& arr, size_t& i) -> PPTokenRange
 	{
 		if (arr[i].type == STT_Ident)
 		{
@@ -635,7 +635,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 			if (t.type == STT_Ident && TokenStringData(t) == range.it->first)
 				t.type = STT_IdentPPNoReplace;
 	};
-	auto EvaluateCondition = [this, &macros, &tokensToReplace, &replacedTokens,
+	auto EvaluateCondition = [this, &tokensToReplace, &replacedTokens,
 		&FindTokenReplaceRange, &ReplaceTokenRangeTo]() -> bool
 	{
 		// find tokens
@@ -913,7 +913,7 @@ void Parser::PreprocessTokens(PreprocMacroMap macros, uint32_t source)
 
 						uint32_t subsrc = diag.GetSourceID(file);
 						ParseTokens(buf, subsrc);
-						PreprocessTokens(macros, subsrc);
+						PreprocessTokens(subsrc);
 
 						std::swap(tmpTokens, tokens);
 						std::swap(tmpCurToken, curToken);
@@ -1941,11 +1941,19 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 				{
 					fcall->SetReturnType(retType);
 					auto op = fcall->opKind;
-					if (op == Op_DDX || op == Op_DDY || op == Op_FWidth ||
-						op == Op_Tex1DGrad || op == Op_Tex2DGrad ||
-						op == Op_Tex3DGrad || op == Op_TexCubeGrad)
+					if (op == Op_DDX || op == Op_DDY || op == Op_FWidth)
 					{
 						ast.usingDerivatives = true;
+					}
+					if (op == Op_Tex1DLOD || op == Op_Tex2DLOD ||
+						op == Op_Tex3DLOD || op == Op_TexCubeLOD)
+					{
+						ast.usingLODTextureSampling = true;
+					}
+					if (op == Op_Tex1DGrad || op == Op_Tex2DGrad ||
+						op == Op_Tex3DGrad || op == Op_TexCubeGrad)
+					{
+						ast.usingGradTextureSampling = true;
 					}
 				}
 				// otherwise error already printed

@@ -1169,7 +1169,7 @@ ASTType* TypeSystem::CastToScalar(ASTType* t)
 	}
 }
 
-ASTType* TypeSystem::CastToVector(ASTType* t, int size)
+ASTType* TypeSystem::CastToVector(ASTType* t, int size, bool force)
 {
 	if (size < 1 || size > 4)
 		return nullptr;
@@ -1180,7 +1180,7 @@ ASTType* TypeSystem::CastToVector(ASTType* t, int size)
 	case ASTType::UInt32:  return &typeUInt32VecDefs [size - 1];
 	case ASTType::Float32: return &typeFloat32VecDefs[size - 1];
 	case ASTType::Float16: return &typeFloat16VecDefs[size - 1];
-	case ASTType::Vector:  return t;
+	case ASTType::Vector:  return force ? CastToVector(t->subType, size) : t;
 	default: return nullptr;
 	}
 }
@@ -2933,18 +2933,6 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				op->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
 				op->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
 				break;
-			case Op_Tex1D:
-				if (!IsNewSamplingAPI())
-				{
-					op->opKind = Op_Tex2D;
-					CastExprTo(op->GetFirstArg()->next->ToExpr(), ast.GetFloat32VecType(2));
-					return;
-				}
-				break;
-			case Op_Tex3D:
-				if (!IsNewSamplingAPI())
-					diag.EmitFatalError("tex3D is not supported with GLSL 1.0", op->loc);
-				break;
 			}
 			return;
 		}
@@ -3006,26 +2994,54 @@ static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt
 
 struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 {
-	SplitTexSampleArgsPass(AST& a, OutputShaderFormat of) : ast(a), outputFmt(of){}
-	void ExpandCoord(ASTNode* arg, int dims)
+	SplitTexSampleArgsPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
+	void ExpandCoord(ASTNode* arg, int dims, bool projDivide = false)
 	{
 		auto* argcoord = FoldOutIfBest(arg->ToExpr());
-		auto* arglod = argcoord->Clone()->ToExpr();
-		argcoord->InsertAfterMe(arglod);
+		auto* argW = argcoord->Clone()->ToExpr();
+		argcoord->InsertAfterMe(argW);
 		auto* coordSwizzle = new MemberExpr;
 		coordSwizzle->swizzleComp = dims;
 		coordSwizzle->memberID = 0 | (1<<2) | (2<<4);
 		coordSwizzle->memberName = dims == 3 ? "xyz" : (dims == 2 ? "xy" : "x");
-		auto* lodSwizzle = new MemberExpr;
-		lodSwizzle->memberID = 3;
-		lodSwizzle->swizzleComp = 1;
-		lodSwizzle->memberName = "w";
+		auto* WSwizzle = new MemberExpr;
+		WSwizzle->memberID = 3;
+		WSwizzle->swizzleComp = 1;
+		WSwizzle->memberName = "w";
 		argcoord->ReplaceWith(coordSwizzle);
-		arglod->ReplaceWith(lodSwizzle);
-		coordSwizzle->SetReturnType(ast.CastToVector(ast.CastToScalar(argcoord->GetReturnType()), dims));
+		argW->ReplaceWith(WSwizzle);
+		coordSwizzle->SetReturnType(ast.CastToVector(argcoord->GetReturnType(), dims, true));
 		coordSwizzle->AppendChild(argcoord);
-		lodSwizzle->SetReturnType(ast.CastToScalar(argcoord->GetReturnType()));
-		lodSwizzle->AppendChild(arglod);
+		WSwizzle->SetReturnType(ast.CastToScalar(argcoord->GetReturnType()));
+		WSwizzle->AppendChild(argW);
+
+		if (projDivide)
+		{
+			auto* div = new OpExpr;
+			div->opKind = Op_Divide;
+			div->SetReturnType(coordSwizzle->GetReturnType());
+			coordSwizzle->ReplaceWith(div);
+			div->AppendChild(coordSwizzle);
+			div->AppendChild(WSwizzle);
+			CastExprTo(WSwizzle, coordSwizzle->GetReturnType());
+		}
+	}
+	void ConvertV1ToV2(ASTNode* arg, bool all = false)
+	{
+		for (;;)
+		{
+			auto* argexpr = arg->ToExpr();
+			arg = arg->next;
+
+			auto* ile = new InitListExpr;
+			ile->SetReturnType(ast.CastToVector(argexpr->GetReturnType(), 2, true));
+			argexpr->ReplaceWith(ile);
+			ile->AppendChild(argexpr);
+			ile->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
+
+			if (!all || !arg)
+				break;
+		}
 	}
 	void PostVisit(ASTNode* node)
 	{
@@ -3048,15 +3064,85 @@ struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 				ExpandCoord(op->GetFirstArg()->next, 3);
 				break;
 			}
+
+			if (outputFmt == OSF_GLSL_ES_100)
+			{
+				switch (op->opKind)
+				{
+				case Op_Tex1D:
+					op->opKind = Op_Tex2D;
+					ConvertV1ToV2(op->GetFirstArg()->next);
+					break;
+				case Op_Tex1DBias:
+					op->opKind = Op_Tex2DBias;
+					ConvertV1ToV2(op->GetFirstArg()->next);
+					break;
+				case Op_Tex1DGrad:
+					op->opKind = Op_Tex2DGrad;
+					ConvertV1ToV2(op->GetFirstArg()->next, true);
+					break;
+				case Op_Tex1DLOD:
+					op->opKind = Op_Tex2DLOD;
+					ConvertV1ToV2(op->GetFirstArg()->next);
+					break;
+				case Op_Tex1DProj:
+					op->opKind = Op_Tex2DProj;
+					break;
+				case Op_Tex3D:
+				case Op_Tex3DBias:
+				case Op_Tex3DGrad:
+				case Op_Tex3DLOD:
+				case Op_Tex3DProj:
+					diag.EmitError("GLSL ES 1.0 does not support 3D textures", op->loc);
+					break;
+				case Op_TexCubeProj:
+					op->opKind = Op_TexCube;
+					ExpandCoord(op->GetFirstArg()->next, 3, true);
+					break;
+				}
+			}
+			else if (outputFmt == OSF_GLSL_140)
+			{
+				switch (op->opKind)
+				{
+				case Op_TexCubeProj:
+					op->opKind = Op_TexCube;
+					ExpandCoord(op->GetFirstArg()->next, 3, true);
+					break;
+				}
+			}
+			else if (outputFmt == OSF_HLSL_SM4)
+			{
+				switch (op->opKind)
+				{
+				case Op_Tex1DProj:
+					ExpandCoord(op->GetFirstArg()->next, 1, true);
+					op->opKind = Op_Tex1D;
+					break;
+				case Op_Tex2DProj:
+					ExpandCoord(op->GetFirstArg()->next, 2, true);
+					op->opKind = Op_Tex2D;
+					break;
+				case Op_Tex3DProj:
+					ExpandCoord(op->GetFirstArg()->next, 3, true);
+					op->opKind = Op_Tex3D;
+					break;
+				case Op_TexCubeProj:
+					ExpandCoord(op->GetFirstArg()->next, 3, true);
+					op->opKind = Op_TexCube;
+					break;
+				}
+			}
 		}
 	}
 	AST& ast;
+	Diagnostic& diag;
 	OutputShaderFormat outputFmt;
 };
 
-static void SplitTexSampleArgs(AST& ast, OutputShaderFormat outputFmt)
+static void SplitTexSampleArgs(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
 {
-	SplitTexSampleArgsPass(ast, outputFmt).VisitAST(ast);
+	SplitTexSampleArgsPass(ast, diag, outputFmt).VisitAST(ast);
 }
 
 
@@ -3254,7 +3340,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		// output-specific transformations (emulation/feature mapping)
 		if (outputFmt != OSF_HLSL_SM3)
 		{
-			SplitTexSampleArgs(p.ast, outputFmt);
+			SplitTexSampleArgs(p.ast, diag, outputFmt);
 		}
 		switch (outputFmt)
 		{
@@ -3271,6 +3357,8 @@ bool Compiler::CompileFile(const char* name, const char* code)
 			GLSLConvert(p.ast, diag, outputFmt);
 			break;
 		}
+
+		diag.CheckNonFatalErrors();
 
 		// optimizations
 		ConstantPropagation().RunOnAST(p.ast);

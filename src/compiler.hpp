@@ -771,7 +771,7 @@ struct TypeSystem
 	ASTType* CastToInt(ASTType* t);
 	ASTType* CastToFloat(ASTType* t);
 	ASTType* CastToScalar(ASTType* t);
-	ASTType* CastToVector(ASTType* t, int size = 1);
+	ASTType* CastToVector(ASTType* t, int size = 1, bool force = false);
 	ASTType* GetVectorType(ASTType* t, int size);
 	const ASTType* GetVectorType(ASTType* t, int size) const {
 		return const_cast<TypeSystem*>(this)->GetVectorType(t, size); }
@@ -852,6 +852,8 @@ struct AST : TypeSystem
 	BlockStmt unassignedNodes;
 
 	bool usingDerivatives = false;
+	bool usingLODTextureSampling = false;
+	bool usingGradTextureSampling = false;
 };
 
 template< class V > struct ASTVisitor
