@@ -708,6 +708,8 @@ static const char* g_OpKindNames[] =
 {
 	"FCall",
 
+	"Add",
+	"Subtract",
 	"Multiply",
 	"Divide",
 	"Modulus",
@@ -2781,7 +2783,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		{
 			auto* argExpr = arg->ToExpr();
 			arg = arg->next;
-			assert(argExpr->GetReturnType() == mtxTy);
+			assert(argExpr->GetReturnType()->IsSameSizeVM(mtxTy));
 
 			argExpr = FoldOutIfBest(argExpr);
 			auto* idxe = new IndexExpr;
@@ -2832,6 +2834,43 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		{
 			switch (op->opKind)
 			{
+			case Op_FMod:
+				if (outputFmt == OSF_GLSL_ES_100)
+				{
+					diag.EmitError("GLSL ES 1.0 does not support 'fmod'", op->loc);
+				}
+				else
+				{
+					// x - y * trunc(x/y)
+					// -(x, *(y, trunc(/(x,y))))
+					auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
+					auto* y = FoldOutIfBest(op->GetFirstArg()->next->ToExpr());
+					auto* sub = new OpExpr;
+					auto* mul = new OpExpr;
+					auto* trunc = new OpExpr;
+					auto* div = new OpExpr;
+
+					auto* rt = x->GetReturnType();
+					sub->SetReturnType(rt);
+					sub->opKind = Op_Subtract;
+					sub->AppendChild(x);
+					sub->AppendChild(mul);
+					mul->SetReturnType(rt);
+					mul->opKind = Op_Multiply;
+					mul->AppendChild(y);
+					mul->AppendChild(trunc);
+					trunc->SetReturnType(rt);
+					trunc->opKind = Op_Trunc;
+					trunc->AppendChild(div);
+					div->SetReturnType(rt);
+					div->opKind = Op_Divide;
+					div->AppendChild(x->DeepClone());
+					div->AppendChild(y->DeepClone());
+
+					delete op->ReplaceWith(sub);
+					curPos = sub;
+				}
+				break;
 			case Op_Log10:
 				// log10(x) -> log(x) / log(10)
 				{
@@ -2847,6 +2886,22 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					MatrixUnpack(div);
 				}
 				// PostVisit will do matrix expansion/argument casting as needed on Op_Log
+				break;
+			case Op_Round:
+				if (outputFmt == OSF_GLSL_ES_100)
+				{
+					// floor(x + 0.5)
+					auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
+					auto* half = new Float32Expr(0.5, ast.GetFloat32Type());
+					auto* add = new OpExpr;
+					op->opKind = Op_Floor;
+					x->ReplaceWith(add);
+					add->opKind = Op_Add;
+					add->SetReturnType(x->GetReturnType());
+					add->AppendChild(x);
+					add->AppendChild(half);
+					CastExprTo(half, x->GetReturnType());
+				}
 				break;
 			}
 		}
@@ -2866,11 +2921,22 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			case Op_ATan:
 			case Op_ATan2:
 			case Op_Ceil:
+			case Op_Cos:
+			case Op_CosH:
+			case Op_Degrees:
 			case Op_Exp:
 			case Op_Exp2:
 			case Op_Floor:
+			case Op_LdExp:
+			case Op_Lerp:
 			case Op_Log:
 			case Op_Log2:
+			case Op_Radians:
+			case Op_Sin:
+			case Op_SinH:
+			case Op_SmoothStep:
+			case Op_Tan:
+			case Op_TanH:
 				CastArgsES100(op, false);
 				MatrixUnpack(op);
 				break;
@@ -2917,21 +2983,32 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			case Op_Dot:
 				CastArgsToFloat(op, true);
 				break;
-			case Op_Log10:
-				assert(false);
-				break;
+			case Op_Clamp:
 			case Op_Max:
 			case Op_Min:
 				CastArgsES100(op, true);
 				MatrixUnpack(op);
 				break;
+			case Op_Sign:
+				CastArgsES100(op, false);
+				op->SetReturnType(ast.CastToFloat(op->GetReturnType()));
+				CastExprTo(op, ast.CastToInt(op->GetReturnType()));
+				MatrixUnpack(op);
+				break;
 			case Op_Pow:
 				MatrixUnpack(op);
 				break;
+			case Op_Round:
+				MatrixUnpack(op);
+				break;
 			case Op_Saturate:
-				op->opKind = Op_Clamp;
-				op->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
-				op->AppendChild(new Float32Expr(1, ast.GetFloat32Type()));
+				CastArgsES100(op, false);
+				MatrixUnpack(op);
+				break;
+			case Op_Trunc:
+				if (outputFmt == OSF_GLSL_ES_100)
+					diag.EmitError("GLSL ES 1.0 does not support 'trunc'", op->loc);
+				MatrixUnpack(op);
 				break;
 			}
 			return;
@@ -2980,14 +3057,6 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 
 static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
 {
-	if (outputFmt == OSF_GLSL_ES_100)
-	{
-		// replace sampler1D with sampler2D for GLSL ES 1.0
-		auto* typeS1D = ast.GetSampler1DType();
-		auto* typeS2D = ast.GetSampler2DType();
-		while (typeS1D->firstUse)
-			typeS1D->firstUse->ChangeAssocType(typeS2D);
-	}
 	GLSLConversionPass(ast, diag, outputFmt).VisitAST(ast);
 }
 
@@ -3142,6 +3211,14 @@ struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 
 static void SplitTexSampleArgs(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
 {
+	if (outputFmt == OSF_GLSL_ES_100)
+	{
+		// replace sampler1D with sampler2D for GLSL ES 1.0
+		auto* typeS1D = ast.GetSampler1DType();
+		auto* typeS2D = ast.GetSampler2DType();
+		while (typeS1D->firstUse)
+			typeS1D->firstUse->ChangeAssocType(typeS2D);
+	}
 	SplitTexSampleArgsPass(ast, diag, outputFmt).VisitAST(ast);
 }
 

@@ -1699,6 +1699,7 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	{ return VectorIntrin(parser, fcall, Op_Length, "length", false, true, 1); }},
 	{ "lerp", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, Op_Lerp, "lerp", false, 3); }},
+	/// lit ?
 	DEF_INTRIN_SSF(Op_Log, log),
 	DEF_INTRIN_SSF(Op_Log10, log10),
 	DEF_INTRIN_SSF(Op_Log2, log2),
@@ -1811,6 +1812,7 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 		assert(retTy);
 		return retTy;
 	} },
+	/// noise ?
 	{ "normalize", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return VectorIntrin(parser, fcall, Op_Normalize, "normalize", false, false); } },
 	{ "pow", [](Parser* parser, OpExpr* fcall) -> ASTType*
@@ -1873,7 +1875,7 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	/// sincos
 	DEF_INTRIN_SSF(Op_SinH, sinh),
 	{ "smoothstep", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return ScalableSymmetricIntrin(parser, fcall, Op_SmoothStep, "smoothstep", false, 2); } },
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_SmoothStep, "smoothstep", false, 3); } },
 	DEF_INTRIN_SSF(Op_Sqrt, sqrt),
 	{ "step", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, Op_Step, "step", false, 2); } },

@@ -199,6 +199,8 @@ void SLGenerator::EmitExpr(const Expr* node)
 		switch (op->opKind)
 		{
 		case Op_FCall:     fnstr = op->resolvedFunc->mangledName.c_str(); break;
+		case Op_Add:       fnstr = ""; opstr = "+"; break;
+		case Op_Subtract:  fnstr = ""; opstr = "-"; break;
 		case Op_Multiply:  fnstr = ""; opstr = "*"; break;
 		case Op_Divide:    fnstr = ""; opstr = "/"; break;
 		case Op_Modulus:   fnstr = ""; opstr = "%"; break;
@@ -231,12 +233,16 @@ void SLGenerator::EmitExpr(const Expr* node)
 		case Op_Radians:   fnstr = "radians";   break;
 		case Op_Reflect:   fnstr = "reflect";   break;
 		case Op_Refract:   fnstr = "refract";   break;
+		case Op_Round:     fnstr = "round";     break;
+		case Op_Sign:      fnstr = "sign";      break;
 		case Op_Sin:       fnstr = "sin";       break;
 		case Op_SinH:      fnstr = "sinh";      break;
+		case Op_SmoothStep:fnstr = "smoothstep";break;
 		case Op_Sqrt:      fnstr = "sqrt";      break;
 		case Op_Step:      fnstr = "step";      break;
 		case Op_Tan:       fnstr = "tan";       break;
 		case Op_TanH:      fnstr = "tanh";      break;
+		case Op_Trunc:     fnstr = "trunc";     break;
 		}
 		out << fnstr << "(";
 		for (ASTNode* ch = op->firstChild; ch; ch = ch->next)
@@ -674,9 +680,12 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 		{
 		case Op_ATan2:     fnstr = "atan2";     break;
 		case Op_Clip:      fnstr = "clip";      break;
+		case Op_Determinant: fnstr = "determinant"; break;
 		case Op_DDX:       fnstr = "ddx";       break;
 		case Op_DDY:       fnstr = "ddy";       break;
+		case Op_FMod:      fnstr = "fmod";      break;
 		case Op_Frac:      fnstr = "frac";      break;
+		case Op_LdExp:     fnstr = "ldexp";     break;
 		case Op_Lerp:      fnstr = "lerp";      break;
 		case Op_MulMM:
 		case Op_MulMV:
@@ -829,9 +838,9 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Matrix:
 		switch (type->subType->kind)
 		{
-		case ASTType::Bool: out << "bmat"; break;
-		case ASTType::Int32: out << "imat"; break;
-		case ASTType::UInt32: out << "umat"; break;
+		case ASTType::Bool: out << "mat"; break;
+		case ASTType::Int32: out << "mat"; break;
+		case ASTType::UInt32: out << "mat"; break;
 		case ASTType::Float16: out << "mediump mat"; break;
 		case ASTType::Float32: out << "mat"; break;
 		}
@@ -889,12 +898,26 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 		case Op_Clip:      assert( false ); break;
 		case Op_DDX:       fnstr = "dFdx";  break;
 		case Op_DDY:       fnstr = "dFdy";  break;
+		case Op_FMod:      assert( false ); break;
 		case Op_Frac:      fnstr = "fract"; break;
+		case Op_LdExp:
+			out << "(";
+			EmitExpr(op->GetFirstArg()->ToExpr());
+			out << "*exp2(";
+			EmitExpr(op->GetFirstArg()->next->ToExpr());
+			out << "))";
+			return;
 		case Op_Lerp:      fnstr = "mix";   break;
 		case Op_MulMM:
 		case Op_MulMV:
 		case Op_MulVM:     fnstr = ""; opstr = "*"; break;
+		case Op_Round:     assert( version >= 130 ); break;
 		case Op_RSqrt:     fnstr = "inversesqrt"; break;
+		case Op_Saturate:
+			out << "clamp(";
+			EmitExpr(op->GetFirstArg()->ToExpr());
+			out << ",0.0,1.0)";
+			return;
 		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
 		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
 		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture1DGrad" : "textureGrad"; break;
@@ -919,6 +942,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			(ast.stage == ShaderStage_Pixel ? "textureCubeLodEXT" : "textureCubeLod") :
 			"textureLod";  break;
 		case Op_TexCubeProj: fnstr = version < 140 ? "textureCubeProj"    : "textureProj"; break;
+		case Op_Trunc:     assert(version >= 130); break;
 		}
 		if (fnstr)
 		{

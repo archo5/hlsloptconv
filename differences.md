@@ -53,7 +53,7 @@ Integer coordinate offsets are not considered here.
 
 Vertex shader availability:
 
-* HLSL3: `tex2Dlod`
+* HLSL3: `*lod`
 * HLSL4: `*grad` (`SampleGrad`), `*lod` (`SampleLevel`)
 * GLSL: `*grad`, `*lod`
 

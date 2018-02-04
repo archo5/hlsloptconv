@@ -108,6 +108,20 @@ compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
+// `clamp`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return clamp(4, 5, 2) + clamp(true, false, true) + clamp(0.5, 0.6, 0.7)
+		+ clamp(p, p, p) + clamp(MTX, MTX, MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `clip`
 source `
 float2x3 MTX;
@@ -125,6 +139,32 @@ compile_glsl `-S frag`
 in_shader `discard`
 compile_glsl_es100 `-S frag`
 in_shader `discard`
+
+// `cos`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return cos(true) + cos(0) + cos(0.5) + cos(p) + cos(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `cosh`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return cosh(true) + cosh(0) + cosh(0.5) + cosh(p) + cosh(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+// `TODO_FIXME compile_glsl_es100`
 
 // `cross`
 source `
@@ -162,6 +202,33 @@ compile_glsl `-S frag`
 in_shader `dFdy`
 compile_glsl_es100 `-S frag`
 in_shader `dFdy`
+
+// `degrees`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return degrees(true) + degrees(0) + degrees(0.5) + degrees(p) + degrees(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `determinant`
+source `
+float2x2 MTX2;
+float3x3 MTX3;
+float4x4 MTX4;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return determinant(MTX2) + determinant(MTX3) + determinant(MTX4);
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+// `TODO_FIXME compile_glsl`
+// `TODO_FIXME compile_glsl_es100`
 
 // `distance`
 source `
@@ -211,6 +278,8 @@ compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
+// `TODO faceforward`
+
 // `floor`
 source `
 float2x3 MTX;
@@ -223,6 +292,25 @@ compile_hlsl4 ``
 compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
+
+// `fmod`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	float q = fmod(0, true);
+	float a = fmod(true, 1);
+	float b = fmod(0.5, -0.5);
+	float4 c = fmod(p, 0.5);
+	return q + a + b + c
+		+ fmod(MTX, 1.5)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+in_shader `trunc(`
+source_replace `float2x3=>float3x3`
+compile_fail_glsl_es100 ``
 
 // `frac`
 source `
@@ -247,6 +335,57 @@ compile_hlsl_before_after `/T ps_3_0`
 compile_hlsl4 `/T ps_4_0`
 compile_glsl `-S frag`
 compile_glsl_es100 `-S frag`
+
+// `TODO isfinite`
+// `TODO isinf`
+// `TODO isnan`
+
+// `ldexp`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	float q = ldexp(0, true);
+	float a = ldexp(true, 1);
+	float b = ldexp(0.5, -0.5);
+	float4 c = ldexp(p, 0.5);
+	return q + a + b + c
+		+ ldexp(MTX, 1.5)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `length`
+source `
+float4 main(float3 p : POSITION) : POSITION
+{
+	return length(4) + length(true) + length(0.5) + length(p);
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `lerp`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return lerp(4, 5, 2) + lerp(true, false, true) + lerp(0.5, 0.6, 0.7)
+		+ lerp(p, p, p) + lerp(MTX, MTX, MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+in_shader `lerp`
+compile_hlsl4 ``
+in_shader `lerp`
+compile_glsl ``
+in_shader `mix`
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+in_shader `mix`
 
 // `log`
 source `
@@ -498,11 +637,24 @@ compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
+// `radians`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return radians(p.x) + radians(p.xy).xyxy + radians(p.xyz).xyzx + radians(p) + radians(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
 // `reflect`
 source `
 float4 main(float4 p : POSITION, float4 c : COLOR) : POSITION
 {
-	return reflect(p, c) + reflect(p, 5) + reflect(4, c)/* TODO + reflect(2, 3)*/;
+	return reflect(p, c) + reflect(p, 5) + reflect(4, c) + reflect(2, 3);
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
@@ -513,11 +665,24 @@ compile_glsl_es100 ``
 source `
 float4 main(float4 p : POSITION, float4 c : COLOR) : POSITION
 {
-	return refract(p, c, 0.314) + refract(p, 5, 0.314) + refract(4, c, 0.314)/* TODO + refract(2, 3, 0.314)*/;
+	return refract(p, c, 0.314) + refract(p, 5, 0.314) + refract(4, c, 0.314) + refract(2, 3, 0.314);
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
 compile_glsl ``
+compile_glsl_es100 ``
+
+// `round`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return round(p.x) + round(p.xy).xyxy + round(p.xyz).xyzx + round(p) + round(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
 // `rsqrt`
@@ -532,6 +697,72 @@ compile_glsl ``
 in_shader `inversesqrt`
 compile_glsl_es100 ``
 in_shader `inversesqrt`
+
+// `saturate`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return saturate(p.x) + saturate(p.xy).xyxy + saturate(p.xyz).xyzx + saturate(p) + saturate(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `sign`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return sign(p.x) + sign(p.xy).xyxy + sign(p.xyz).xyzx + sign(p) + sign(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `sin`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return sin(p.x) + sin(p.xy).xyxy + sin(p.xyz).xyzx + sin(p) + sin(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `sinh`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return sinh(p.x) + sinh(p.xy).xyxy + sinh(p.xyz).xyzx + sinh(p) + sinh(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+// `TODO_FIXME compile_glsl_es100`
+
+// `smoothstep`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return smoothstep(4, 5, 2) + smoothstep(true, false, true) + smoothstep(0.5, 0.6, 0.7)
+		+ smoothstep(p, p, p) + smoothstep(MTX, MTX, MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `sqrt`
 source `
@@ -554,6 +785,32 @@ compile_hlsl_before_after ``
 compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
+
+// `tan`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return tan(p.x) + tan(p.xy).xyxy + tan(p.xyz).xyzx + tan(p) + tan(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+
+// `tanh`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return tanh(p.x) + tanh(p.xy).xyxy + tanh(p.xyz).xyzx + tanh(p) + tanh(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+// `TODO_FIXME compile_glsl_es100`
 
 // `tex1D`
 source `
@@ -954,3 +1211,18 @@ compile_glsl `-S frag`
 in_shader `texture`
 compile_glsl_es100 `-S frag`
 in_shader `textureCube`
+
+// `TODO transpose`
+
+// `trunc`
+source `
+float2x3 MTX;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return trunc(p.x) + trunc(p.xy).xyxy + trunc(p.xyz).xyzx + trunc(p) + trunc(MTX)._11_12_13_22;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_fail_glsl_es100 ``

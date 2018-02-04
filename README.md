@@ -24,7 +24,8 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 #### What is missing (and may or may not appear later)?
 
-* Parsing support for the following intrinsics: `frexp`, `modf`, `sincos`, `transpose`
+* Parsing support for the following intrinsics: `frexp`, `lit`, `modf`, `noise`, `sincos`, `transpose`
+* Token pasting support in preprocessor
 * GLSL output support for some renamed intrinsics
 * Non-square matrix emulation for GLSL ES 1.0
 * Array emulation for GLSL ES 1.0
@@ -34,15 +35,16 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 #### Other differences from HLSL:
 
-* `static const` requires an initialization expression, but it is disallowed to have one for just `const` or other types. This is to avoid creating constants that are not actually initialized in the shader, but just look like they might be.
+* `static [const]` requires an initialization expression, but it is disallowed to have one for just `const` or other types. This is to avoid creating constants that are not actually initialized in the shader, but just look like they might be.
 * `tex1D/tex2D/tex3D/texCUBE` overloads that work same as their `*grad` versions are not recognized.
 
 #### Inherent incompatibilities between shader languages/APIs:
 
 * `pow` intrinsic has different (reduced) output guarantees when converted to GLSL (do not use with `x < 0`).
 * [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures).
-* `tex3D` is not supported for GLSL ES 1.0 (there are no 3D textures).
+* `tex3D*` intrinsics are not supported for GLSL ES 1.0 (there are no 3D textures).
 * Floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds.
+* `fmod` and `trunc` are not supported on GLSL ES 1.0 as they're not native and are expensive to emulate.
 
 #### Other planned improvements:
 

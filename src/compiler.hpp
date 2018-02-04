@@ -471,6 +471,8 @@ enum OpKind
 {
 	Op_FCall,
 
+	Op_Add,
+	Op_Subtract,
 	Op_Multiply,
 	Op_Divide,
 	Op_Modulus,
