@@ -2827,6 +2827,45 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		if (outputFmt == OSF_GLSL_ES_100)
 			CastArgsToFloat(fcintrin, preserveInts);
 	}
+	Expr* ImplementMod(OpExpr* op)
+	{
+		// x - y * trunc(x/y)
+		// -(x, *(y, trunc(/(x,y))))
+		auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
+		auto* y = FoldOutIfBest(op->GetFirstArg()->next->ToExpr());
+		auto* sub = new OpExpr;
+		auto* mul = new OpExpr;
+		auto* trunc = outputFmt != OSF_GLSL_ES_100 ? new OpExpr : nullptr;
+		auto* div = new OpExpr;
+
+		auto* rt = x->GetReturnType();
+		sub->SetReturnType(rt);
+		sub->opKind = Op_Subtract;
+		sub->AppendChild(x);
+		sub->AppendChild(mul);
+		mul->SetReturnType(rt);
+		mul->opKind = Op_Multiply;
+		mul->AppendChild(y);
+		mul->AppendChild(trunc ? trunc : div);
+		if (trunc)
+		{
+			trunc->SetReturnType(rt);
+			trunc->opKind = Op_Trunc;
+			trunc->AppendChild(div);
+		}
+		div->SetReturnType(rt);
+		div->opKind = Op_Divide;
+		div->AppendChild(x->DeepClone());
+		div->AppendChild(y->DeepClone());
+		if (!trunc)
+		{
+			CastExprTo(mul->GetRgt(), ast.CastToInt(mul->GetRgt()->GetReturnType()));
+			CastExprTo(mul->GetRgt(), ast.CastToFloat(mul->GetRgt()->GetReturnType()));
+		}
+
+		delete op->ReplaceWith(sub);
+		return sub;
+	}
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PreVisit(ASTNode* node)
 	{
@@ -2835,41 +2874,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			switch (op->opKind)
 			{
 			case Op_FMod:
-				if (outputFmt == OSF_GLSL_ES_100)
-				{
-					diag.EmitError("GLSL ES 1.0 does not support 'fmod'", op->loc);
-				}
-				else
-				{
-					// x - y * trunc(x/y)
-					// -(x, *(y, trunc(/(x,y))))
-					auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
-					auto* y = FoldOutIfBest(op->GetFirstArg()->next->ToExpr());
-					auto* sub = new OpExpr;
-					auto* mul = new OpExpr;
-					auto* trunc = new OpExpr;
-					auto* div = new OpExpr;
-
-					auto* rt = x->GetReturnType();
-					sub->SetReturnType(rt);
-					sub->opKind = Op_Subtract;
-					sub->AppendChild(x);
-					sub->AppendChild(mul);
-					mul->SetReturnType(rt);
-					mul->opKind = Op_Multiply;
-					mul->AppendChild(y);
-					mul->AppendChild(trunc);
-					trunc->SetReturnType(rt);
-					trunc->opKind = Op_Trunc;
-					trunc->AppendChild(div);
-					div->SetReturnType(rt);
-					div->opKind = Op_Divide;
-					div->AppendChild(x->DeepClone());
-					div->AppendChild(y->DeepClone());
-
-					delete op->ReplaceWith(sub);
-					curPos = sub;
-				}
+				curPos = ImplementMod(op);
 				break;
 			case Op_Log10:
 				// log10(x) -> log(x) / log(10)
@@ -2901,6 +2906,17 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 					add->AppendChild(x);
 					add->AppendChild(half);
 					CastExprTo(half, x->GetReturnType());
+				}
+				break;
+			case Op_Trunc:
+				if (outputFmt == OSF_GLSL_ES_100)
+				{
+					CastExprTo(op->GetFirstArg()->ToExpr(),
+						ast.CastToInt(op->GetFirstArg()->ToExpr()->GetReturnType()));
+					CastExprTo(op->GetFirstArg()->ToExpr(),
+						ast.CastToFloat(op->GetFirstArg()->ToExpr()->GetReturnType()));
+					curPos = op->GetFirstArg();
+					delete op->ReplaceWith(op->GetFirstArg());
 				}
 				break;
 			}
@@ -3006,8 +3022,6 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				MatrixUnpack(op);
 				break;
 			case Op_Trunc:
-				if (outputFmt == OSF_GLSL_ES_100)
-					diag.EmitError("GLSL ES 1.0 does not support 'trunc'", op->loc);
 				MatrixUnpack(op);
 				break;
 			}

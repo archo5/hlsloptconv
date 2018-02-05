@@ -29,6 +29,14 @@ float FULLSCREEN_TRIANGLE_VERTICES[] =
 	-1, 3, 0.5f,
 };
 
+uint8_t CUBE_MAP_FACE[16] =
+{
+	64,192,64,192,
+	192,64,192,64,
+	64,192,64,192,
+	192,64,192,64,
+};
+
 
 #ifndef FORCEINLINE
 #ifdef _MSC_VER
@@ -221,6 +229,7 @@ namespace D3D9
 	HWND                    apiWin = nullptr;
 	IDirect3D9*             d3d    = nullptr;
 	IDirect3DDevice9*       dev    = nullptr;
+	IDirect3DCubeTexture9*  cmtex  = nullptr;
 	IDirect3DVertexShader9* vs     = nullptr;
 	IDirect3DPixelShader9*  ps     = nullptr;
 
@@ -293,6 +302,20 @@ namespace D3D9
 		CHK(d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, apiWin,
 			D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &dev));
 
+		CHK(dev->CreateCubeTexture(4, 1, 0, D3DFMT_L8, D3DPOOL_MANAGED, &cmtex, nullptr));
+		for (int i = 0; i < 6; ++i)
+		{
+			D3DLOCKED_RECT lr;
+			cmtex->LockRect((D3DCUBEMAP_FACES) i, 0, &lr, nullptr, D3DLOCK_DISCARD);
+			char* p = (char*) lr.pBits;
+			for (int j = 0; j < 4; ++j)
+			{
+				memcpy(p, &CUBE_MAP_FACE[j * 4], 4);
+				p += lr.Pitch;
+			}
+			cmtex->UnlockRect((D3DCUBEMAP_FACES) i, 0);
+		}
+
 		printf("[%f] D3D9: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
@@ -302,6 +325,7 @@ namespace D3D9
 	void Free()
 	{
 		printf("[%f] D3D9: cleanup\n", GetTime());
+		cmtex->Release();
 		ps->Release();
 		vs->Release();
 		dev->Release();
@@ -325,6 +349,7 @@ namespace D3D9
 		dev->SetVertexShaderConstantF(0, reso, 1);
 		dev->SetPixelShaderConstantF(0, mtx, 4);
 		dev->SetPixelShaderConstantF(3, reso, 1);
+		dev->SetTexture(0, cmtex);
 		dev->SetFVF(D3DFVF_XYZ);
 		dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, FULLSCREEN_TRIANGLE_VERTICES, sizeof(float) * 3);
 		dev->EndScene();
@@ -351,6 +376,9 @@ namespace D3D11
 	ID3D11BlendState*        blendState  = nullptr;
 	ID3D11DepthStencilState* dsState     = nullptr;
 	ID3D11Buffer*            cbuf        = nullptr;
+	ID3D11Texture2D*         cmtex       = nullptr;
+	ID3D11ShaderResourceView*cmsrv       = nullptr;
+	ID3D11SamplerState*      cmsmp       = nullptr;
 	ID3D11VertexShader*      vs          = nullptr;
 	ID3D11PixelShader*       ps          = nullptr;
 
@@ -454,6 +482,42 @@ namespace D3D11
 		cbd.MiscFlags = 0;
 		CHK(dev->CreateBuffer(&cbd, NULL, &cbuf));
 
+		D3D11_TEXTURE2D_DESC cmt2d;
+		memset(&cmt2d, 0, sizeof(cmt2d));
+		cmt2d.Width = 4;
+		cmt2d.Height = 4;
+		cmt2d.MipLevels = 1;
+		cmt2d.ArraySize = 6;
+		cmt2d.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		cmt2d.SampleDesc.Count = 1;
+		cmt2d.Usage = D3D11_USAGE_IMMUTABLE;
+		cmt2d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		cmt2d.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+		D3D11_SUBRESOURCE_DATA cmsrd[6];
+		uint32_t convdata[16];
+		for (int i = 0; i < 16; ++i)
+		{
+			convdata[i] = (0xff << 24) | (CUBE_MAP_FACE[i] << 16)
+				| (CUBE_MAP_FACE[i] << 8) | (CUBE_MAP_FACE[i]);
+		}
+		for (int i = 0; i < 6; ++i)
+		{
+			cmsrd[i].pSysMem = convdata;
+			cmsrd[i].SysMemPitch = 16;
+			cmsrd[i].SysMemSlicePitch = 0;
+		}
+		CHK(dev->CreateTexture2D(&cmt2d, cmsrd, &cmtex));
+		CHK(dev->CreateShaderResourceView(cmtex, nullptr, &cmsrv));
+
+		D3D11_SAMPLER_DESC cmsmd;
+		memset(&cmsmd, 0, sizeof(cmsmd));
+		cmsmd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+		cmsmd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmsmd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmsmd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmsmd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		CHK(dev->CreateSamplerState(&cmsmd, &cmsmp));
+
 		printf("[%f] D3D11: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
@@ -463,6 +527,9 @@ namespace D3D11
 	void Free()
 	{
 		printf("[%f] D3D11: cleanup\n", GetTime());
+		cmsmp->Release();
+		cmsrv->Release();
+		cmtex->Release();
 		ps->Release();
 		vs->Release();
 		cbuf->Release();
@@ -501,6 +568,8 @@ namespace D3D11
 		ctx->PSSetShader(ps, nullptr, 0);
 		ctx->VSSetConstantBuffers(0, 1, &cbuf);
 		ctx->PSSetConstantBuffers(0, 1, &cbuf);
+		ctx->PSSetShaderResources(0, 1, &cmsrv);
+		ctx->PSSetSamplers(0, 1, &cmsmp);
 		ctx->IASetInputLayout(nullptr);
 		ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		ctx->RSSetState(rasterState);
@@ -528,6 +597,13 @@ typedef char GLchar;
 #ifndef APIENTRYP
 #define APIENTRYP APIENTRY *
 #endif
+#define GL_TEXTURE_CUBE_MAP               0x8513
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X    0x8515
+#define GL_TEXTURE_CUBE_MAP_NEGATIVE_X    0x8516
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_Y    0x8517
+#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Y    0x8518
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_Z    0x8519
+#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z    0x851A
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_DYNAMIC_DRAW                   0x88E8
@@ -575,6 +651,16 @@ typedef void (APIENTRYP PFNGLUNIFORMBLOCKBINDINGPROC) (GLuint program, GLuint un
 typedef void (APIENTRYP PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
 // } imported
 
+GLenum g_CubeMapBindPoints[6] =
+{
+	GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+	GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+	GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
+};
+
 void _GLCheck_Succeeded(const char* code, int line)
 {
 	auto err = glGetError();
@@ -593,6 +679,7 @@ namespace GL20
 	HDC    dc     = nullptr;
 	HGLRC  glrc   = nullptr;
 	GLuint vbo    = 0;
+	GLuint cmtex  = 0;
 	GLuint vs     = 0;
 	GLuint ps     = 0;
 	GLuint prog   = 0;
@@ -736,6 +823,16 @@ namespace GL20
 		GLCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0));
 		GLCHK(glEnableVertexAttribArray(0));
 
+		GLCHK(glGenTextures(1, &cmtex));
+		GLCHK(glBindTexture(GL_TEXTURE_CUBE_MAP, cmtex));
+		GLCHK(glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+		GLCHK(glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+		for (int i = 0; i < 6; ++i)
+		{
+			GLCHK(glTexImage2D(g_CubeMapBindPoints[i], 0, GL_LUMINANCE,
+				4, 4, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, CUBE_MAP_FACE));
+		}
+
 		printf("[%f] GL2.0: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
@@ -778,6 +875,7 @@ namespace GL20
 		printf("[%f] GL2.0: cleanup\n", GetTime());
 		WINCHK(wglMakeCurrent(dc, glrc));
 		GLCHK(glDeleteBuffers(1, &vbo));
+		GLCHK(glDeleteTextures(1, &cmtex));
 		GLCHK(glDetachShader(prog, vs));
 		GLCHK(glDetachShader(prog, ps));
 		GLCHK(glDeleteProgram(prog));
@@ -824,6 +922,7 @@ namespace GL31
 	GLuint vao    = 0;
 	GLuint vbo    = 0;
 	GLuint ubo    = 0;
+	GLuint cmtex  = 0;
 	GLuint vs     = 0;
 	GLuint ps     = 0;
 	GLuint prog   = 0;
@@ -1033,6 +1132,16 @@ namespace GL31
 		GLCHK(glBindBuffer(GL_UNIFORM_BUFFER, ubo));
 		GLCHK(glBufferData(GL_UNIFORM_BUFFER, sizeof(CBufData), nullptr, GL_DYNAMIC_DRAW));
 
+		GLCHK(glGenTextures(1, &cmtex));
+		GLCHK(glBindTexture(GL_TEXTURE_CUBE_MAP, cmtex));
+		GLCHK(glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+		GLCHK(glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+		for (int i = 0; i < 6; ++i)
+		{
+			GLCHK(glTexImage2D(g_CubeMapBindPoints[i], 0, GL_LUMINANCE,
+				4, 4, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, CUBE_MAP_FACE));
+		}
+
 		printf("[%f] GL3.1: compiling shaders\n", GetTime());
 		CompileShader(false);
 		CompileShader(true);
@@ -1081,6 +1190,7 @@ namespace GL31
 		GLCHK(glDeleteBuffers(1, &vbo));
 		GLCHK(glDeleteBuffers(1, &ubo));
 		GLCHK(glDeleteVertexArrays(1, &vao));
+		GLCHK(glDeleteTextures(1, &cmtex));
 		GLCHK(glDetachShader(prog, vs));
 		GLCHK(glDetachShader(prog, ps));
 		GLCHK(glDeleteProgram(prog));

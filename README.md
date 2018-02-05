@@ -44,7 +44,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures).
 * `tex3D*` intrinsics are not supported for GLSL ES 1.0 (there are no 3D textures).
 * Floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds.
-* `fmod` and `trunc` are not supported on GLSL ES 1.0 as they're not native and are expensive to emulate.
 
 #### Other planned improvements:
 

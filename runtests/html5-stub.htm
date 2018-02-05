@@ -6,6 +6,9 @@
 	var PIXEL_SHADER = PIXEL_SHADER_STRING_POS;
 	var canvas = document.getElementById("c");
 	var gl = canvas.getContext("webgl");
+	if (!gl)
+		gl = canvas.getContext("experimental-webgl");
+
 	var vertices =
 	[
 		-1,-1,
@@ -20,6 +23,33 @@
 	var IB = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IB);
 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+	var cubeMapFace = new Uint8Array
+	([
+		64,192,64,192,
+		192,64,192,64,
+		64,192,64,192,
+		192,64,192,64,
+	]);
+	var cubeMap = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeMap);
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	var cubeMapBindPoints =
+	[
+		gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+		gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+		gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+		gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+	];
+	for (var i = 0; i < 6; ++i)
+	{
+		gl.texImage2D(cubeMapBindPoints[i], 0, gl.LUMINANCE,
+			4, 4, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, cubeMapFace);
+	}
+
 	var VS = gl.createShader(gl.VERTEX_SHADER);
 	var PS = gl.createShader(gl.FRAGMENT_SHADER);
 	function shaderCompile(sh, code)

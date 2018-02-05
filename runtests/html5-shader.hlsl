@@ -182,6 +182,8 @@ float3 rayDir(float fov, float2 size, float2 coord)
 	return normalize(float3(xy, -z));
 }
 
+samplerCUBE CubeMap : register( s0 );
+
 void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 {
 	float fov = 60;
@@ -198,6 +200,8 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 		if (coord.x < 60){ outCol = float4(log(y3 * 4), 1); return; }
 		if (coord.x < 70){ outCol = float4(log10(y3 * 12), 1); return; }
 		if (coord.x < 80){ outCol = float4(log2(y3 * 3), 1); return; }
+		if (coord.x < 90){ outCol = float4(trunc(y3 + v1) * 0.25 + 0.5, 1); return; }
+		if (coord.x < 100){ outCol = float4(fmod(v1 + y, 2), 1); return; }
 	}
 	float3 dir = mul(float4(rayDir(fov, iResolution, coord),0), viewMatrix);
 	//float3 dir = rayDir(fov, iResolution, coord);
@@ -219,12 +223,14 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 	float NdotL = saturate(dot(normal,lightDir));
 	float NdotH = saturate(dot(normal,normalize(lightDir + normalize(eye - pos))));
 	float NdotV = saturate(dot(normal,normalize(eye - pos)));
-	float fresnel = lerp(0.5, 1, pow(1 - NdotV, 5));
+	float fresnel05 = lerp(0.5, 1, pow(1 - NdotV, 5));
+	float3 cubeCol = texCUBE(CubeMap, reflect(normalize(eye - pos), normal)).rgb;
 	float ao = computeAO(pos, normal);
 	float shadow = computeSoftShadow(pos, lightDir, 0.03, 20);
 	float distf = 20.0 / pow(length(lightPos - pos),2);
-	float3 col = (NdotL + pow(NdotH + 0.04, 128) * fresnel) * shadow * distf * float3(0.9,0.4,0.1);
+	float3 col = (NdotL + pow(NdotH + 0.04, 128) * fresnel05) * shadow * distf * float3(0.9,0.4,0.1);
 	col += ao * float3(0.06,0.12,0.24);
+	col += cubeCol * lerp(0.1,1,pow(1 - NdotV, 5)) * saturate(pos.z+1);
 	col = col / (1 + col);
 	outCol = float4(sqrt(col)-0.05,1);//float4(coord.x % 2, coord.y % 2,1,1);
 }

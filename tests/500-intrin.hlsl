@@ -310,7 +310,7 @@ compile_hlsl4 ``
 compile_glsl ``
 in_shader `trunc(`
 source_replace `float2x3=>float3x3`
-compile_fail_glsl_es100 ``
+compile_glsl_es100 ``
 
 // `frac`
 source `
@@ -1225,4 +1225,4 @@ compile_hlsl_before_after ``
 compile_hlsl4 ``
 compile_glsl ``
 source_replace `float2x3=>float3x3`
-compile_fail_glsl_es100 ``
+compile_glsl_es100 ``
