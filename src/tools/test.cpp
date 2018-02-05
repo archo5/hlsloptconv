@@ -592,7 +592,7 @@ static void exec_test(const char* fname, const char* nameonly)
 					}
 				}
 			}
-			else if (ident == "compile_fail")
+			else if (ident == "compile_fail" || ident == "compile_fail_hlsl")
 			{
 				Compile(decoded_value == "pixel" ? ShaderStage_Pixel : ShaderStage_Vertex, OSF_HLSL_SM3);
 				Result("false");

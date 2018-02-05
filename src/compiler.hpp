@@ -119,7 +119,10 @@ struct ASTType
 		Sampler1D,
 		Sampler2D,
 		Sampler3D,
-		SamplerCUBE,
+		SamplerCube,
+		Sampler1DCmp,
+		Sampler2DCmp,
+		SamplerCubeCmp,
 	};
 
 	struct SubTypeCount
@@ -152,7 +155,8 @@ struct ASTType
 	const ASTStructType* ToStructType() const { return const_cast<ASTType*>(this)->ToStructType(); }
 	
 	bool IsVoid() const { return kind == Void; }
-	bool IsSampler() const { return kind == Sampler1D || kind == Sampler2D || kind == Sampler3D || kind == SamplerCUBE; }
+	bool IsSampler() const { return kind == Sampler1D || kind == Sampler2D || kind == Sampler3D
+		|| kind == SamplerCube || kind == Sampler1DCmp || kind == Sampler2DCmp || kind == SamplerCubeCmp; }
 	bool IsFloat() const { return kind == Float16 || kind == Float32; }
 	bool IsNumber() const { return kind == Int32 || kind == UInt32 || kind == Float16 || kind == Float32; }
 	bool IsBoolBased() const { return kind == Bool || ((kind == Vector || kind == Matrix) && subType->kind == Bool); }
@@ -557,6 +561,13 @@ enum OpKind
 	Op_TexCubeLOD,
 	Op_TexCubeProj,
 
+	Op_Tex1DCmp,
+	Op_Tex1DLOD0Cmp,
+	Op_Tex2DCmp,
+	Op_Tex2DLOD0Cmp,
+	Op_TexCubeCmp,
+	Op_TexCubeLOD0Cmp,
+
 	Op_COUNT,
 	Op_NONE = Op_COUNT,
 };
@@ -800,7 +811,10 @@ struct TypeSystem
 	ASTType* GetSampler1DType()   { return &typeSampler1DDef; }
 	ASTType* GetSampler2DType()   { return &typeSampler2DDef; }
 	ASTType* GetSampler3DType()   { return &typeSampler3DDef; }
-	ASTType* GetSamplerCUBEType() { return &typeSamplerCUBEDef; }
+	ASTType* GetSamplerCubeType() { return &typeSamplerCubeDef; }
+	ASTType* GetSampler1DCmpType()   { return &typeSampler1DCmpDef; }
+	ASTType* GetSampler2DCmpType()   { return &typeSampler2DCmpDef; }
+	ASTType* GetSamplerCubeCmpType() { return &typeSamplerCubeCmpDef; }
 	ASTType* GetBoolType()        { return &typeBoolDef; }
 	ASTType* GetInt32Type()       { return &typeInt32Def; }
 	ASTType* GetUInt32Type()      { return &typeUInt32Def; }
@@ -822,7 +836,10 @@ struct TypeSystem
 	ASTType typeSampler1DDef;
 	ASTType typeSampler2DDef;
 	ASTType typeSampler3DDef;
-	ASTType typeSamplerCUBEDef;
+	ASTType typeSamplerCubeDef;
+	ASTType typeSampler1DCmpDef;
+	ASTType typeSampler2DCmpDef;
+	ASTType typeSamplerCubeCmpDef;
 	ASTType typeBoolDef;
 	ASTType typeInt32Def;
 	ASTType typeUInt32Def;

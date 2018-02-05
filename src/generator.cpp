@@ -548,7 +548,10 @@ void HLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Sampler1D:   out << (IsGE4() ? "SAMPLER_1D" : "sampler1D"); break;
 	case ASTType::Sampler2D:   out << (IsGE4() ? "SAMPLER_2D" : "sampler2D"); break;
 	case ASTType::Sampler3D:   out << (IsGE4() ? "SAMPLER_3D" : "sampler3D"); break;
-	case ASTType::SamplerCUBE: out << (IsGE4() ? "SAMPLER_CUBE" : "samplerCUBE"); break;
+	case ASTType::SamplerCube: out << (IsGE4() ? "SAMPLER_CUBE" : "samplerCUBE"); break;
+	case ASTType::Sampler1DCmp:   out << "SAMPLER_1D_CMP"; break;
+	case ASTType::Sampler2DCmp:   out << "SAMPLER_2D_CMP"; break;
+	case ASTType::SamplerCubeCmp: out << "SAMPLER_CUBE_CMP"; break;
 	case ASTType::Structure:
 		out << type->ToStructType()->name;
 		break;
@@ -627,6 +630,8 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 				Bias,
 				Grad,
 				Level,
+				Cmp,
+				CmpLevelZero,
 			};
 			Type type;
 			switch (op->opKind)
@@ -651,6 +656,13 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 			case Op_TexCubeGrad: type = Grad;     goto texSample;
 			case Op_TexCubeLOD:  type = Level;    goto texSample;
 			case Op_TexCubeProj: assert( false ); return;
+
+			case Op_Tex1DCmp:
+			case Op_Tex2DCmp:
+			case Op_TexCubeCmp: type = Cmp; goto texSample;
+			case Op_Tex1DLOD0Cmp:
+			case Op_Tex2DLOD0Cmp:
+			case Op_TexCubeLOD0Cmp: type = CmpLevelZero; goto texSample;
 			default: break;
 			texSample:
 				EmitExpr(op->firstChild->ToExpr());
@@ -661,6 +673,8 @@ void HLSLGenerator::EmitExpr(const Expr* node)
 				case Bias:   out << "SampleBias";  break;
 				case Grad:   out << "SampleGrad";  break;
 				case Level:  out << "SampleLevel"; break;
+				case Cmp:    out << "SampleCmp";   break;
+				case CmpLevelZero: out << "SampleCmpLevelZero"; break;
 				}
 				out << "(";
 				EmitExpr(op->firstChild->ToExpr());
@@ -739,6 +753,9 @@ void HLSLGenerator::Generate()
 			"struct SAMPLER_2D { Texture2D tex; SamplerState smp; };\n"
 			"struct SAMPLER_3D { Texture3D tex; SamplerState smp; };\n"
 			"struct SAMPLER_Cube { TextureCube tex; SamplerState smp; };\n"
+			"struct SAMPLER_1D_CMP { Texture1D tex; SamplerComparisonState smp; };\n"
+			"struct SAMPLER_2D_CMP { Texture2D tex; SamplerComparisonState smp; };\n"
+			"struct SAMPLER_Cube_CMP { TextureCube tex; SamplerComparisonState smp; };\n"
 		;
 	}
 
@@ -770,26 +787,32 @@ void HLSLGenerator::Generate()
 			if (IsGE4() && vd->GetType()->IsSampler())
 			{
 				const char* sfx = nullptr;
+				bool smpComp = false;
 				switch (vd->GetType()->kind)
 				{
 				case ASTType::Sampler1D:   sfx = "1D";   break;
 				case ASTType::Sampler2D:   sfx = "2D";   break;
 				case ASTType::Sampler3D:   sfx = "3D";   break;
-				case ASTType::SamplerCUBE: sfx = "Cube"; break;
+				case ASTType::SamplerCube: sfx = "Cube"; break;
+				case ASTType::Sampler1DCmp:   sfx = "1D";   smpComp = true; break;
+				case ASTType::Sampler2DCmp:   sfx = "2D";   smpComp = true; break;
+				case ASTType::SamplerCubeCmp: sfx = "Cube"; smpComp = true; break;
 				}
+				const char* smpSfx = smpComp ? "_CMP" : "";
 				out << "Texture" << sfx << " TEX_" << vd->name;
 				if (vd->regID >= 0)
 					out << " : register(t" << vd->regID << ")";
 				out << ";\n";
 
-				out << "SamplerState SMP_" << vd->name;
+				out << (smpComp ? "SamplerComparisonState" : "SamplerState");
+				out << " SMP_" << vd->name;
 				if (vd->regID >= 0)
 					out << " : register(s" << vd->regID << ")";
 				out << ";\n";
 
-				out << "SAMPLER_" << sfx << " GET_" << vd->name << "(){ SAMPLER_"
-					<< sfx << " v = { TEX_" << vd->name << ", SMP_" << vd->name
-					<< " }; return v; }\n";
+				out << "SAMPLER_" << sfx << smpSfx << " GET_" << vd->name
+					<< "(){ SAMPLER_" << sfx << smpSfx << " v = { TEX_" << vd->name
+					<< ", SMP_" << vd->name << " }; return v; }\n";
 			}
 			else
 			{
@@ -820,7 +843,10 @@ void GLSLGenerator::EmitTypeRef(const ASTType* type)
 	case ASTType::Sampler1D: out << "sampler1D"; break;
 	case ASTType::Sampler2D: out << "sampler2D"; break;
 	case ASTType::Sampler3D: out << "sampler3D"; break;
-	case ASTType::SamplerCUBE: out << "samplerCube"; break;
+	case ASTType::SamplerCube: out << "samplerCube"; break;
+	case ASTType::Sampler1DCmp: out << "sampler1DShadow"; break;
+	case ASTType::Sampler2DCmp: out << "sampler2DShadow"; break;
+	case ASTType::SamplerCubeCmp: out << "samplerCubeShadow"; break;
 	case ASTType::Structure:
 		out << type->ToStructType()->name;
 		break;
@@ -882,6 +908,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 	{
 		const char* fnstr = nullptr;
 		const char* opstr = ",";
+		const char* fnEnd = ")";
 		switch (op->opKind)
 		{
 		case Op_Multiply:
@@ -918,11 +945,11 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			EmitExpr(op->GetFirstArg()->ToExpr());
 			out << ",0.0,1.0)";
 			return;
-		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
-		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE_texture1D"     : "texture";     break;
-		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture1DGrad" : "textureGrad"; break;
-		case Op_Tex1DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture1DLod"  : "textureLod";  break;
-		case Op_Tex1DProj: fnstr = version < 140 ? "UNAVAILABLE_texture1DProj" : "textureProj"; break;
+		case Op_Tex1D:     fnstr = version < 140 ? "UNAVAILABLE"      : "texture";     break;
+		case Op_Tex1DBias: fnstr = version < 140 ? "UNAVAILABLE"      : "texture";     break;
+		case Op_Tex1DGrad: fnstr = version < 140 ? "UNAVAILABLE"      : "textureGrad"; break;
+		case Op_Tex1DLOD:  fnstr = version < 140 ? "UNAVAILABLE"      : "textureLod";  break;
+		case Op_Tex1DProj: fnstr = version < 140 ? "UNAVAILABLE"      : "textureProj"; break;
 		case Op_Tex2D:     fnstr = version < 140 ? "texture2D"        : "texture";     break;
 		case Op_Tex2DBias: fnstr = version < 140 ? "texture2D"        : "texture";     break;
 		case Op_Tex2DGrad: fnstr = version < 140 ? "texture2DGradEXT" : "textureGrad"; break;
@@ -930,11 +957,11 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			(ast.stage == ShaderStage_Pixel ? "texture2DLodEXT" : "texture2DLod") :
 			"textureLod";  break;
 		case Op_Tex2DProj: fnstr = version < 140 ? "texture2DProj"    : "textureProj"; break;
-		case Op_Tex3D:     fnstr = version < 140 ? "UNAVAILABLE_texture3D"     : "texture";     break;
-		case Op_Tex3DBias: fnstr = version < 140 ? "UNAVAILABLE_texture3D"     : "texture";     break;
-		case Op_Tex3DGrad: fnstr = version < 140 ? "UNAVAILABLE_texture3DGrad" : "textureGrad"; break;
-		case Op_Tex3DLOD:  fnstr = version < 140 ? "UNAVAILABLE_texture3DLod"  : "textureLod";  break;
-		case Op_Tex3DProj: fnstr = version < 140 ? "UNAVAILABLE_texture3DProj" : "textureProj"; break;
+		case Op_Tex3D:     fnstr = version < 140 ? "UNAVAILABLE"      : "texture";     break;
+		case Op_Tex3DBias: fnstr = version < 140 ? "UNAVAILABLE"      : "texture";     break;
+		case Op_Tex3DGrad: fnstr = version < 140 ? "UNAVAILABLE"      : "textureGrad"; break;
+		case Op_Tex3DLOD:  fnstr = version < 140 ? "UNAVAILABLE"      : "textureLod";  break;
+		case Op_Tex3DProj: fnstr = version < 140 ? "UNAVAILABLE"      : "textureProj"; break;
 		case Op_TexCube:     fnstr = version < 140 ? "textureCube"        : "texture";     break;
 		case Op_TexCubeBias: fnstr = version < 140 ? "textureCube"        : "texture";     break;
 		case Op_TexCubeGrad: fnstr = version < 140 ? "textureCubeGradEXT" : "textureGrad"; break;
@@ -942,6 +969,13 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			(ast.stage == ShaderStage_Pixel ? "textureCubeLodEXT" : "textureCubeLod") :
 			"textureLod";  break;
 		case Op_TexCubeProj: fnstr = version < 140 ? "textureCubeProj"    : "textureProj"; break;
+		case Op_Tex1DLOD0Cmp:
+		case Op_Tex2DLOD0Cmp:
+		case Op_TexCubeLOD0Cmp: fnEnd = ",-32)"; // <- bias LOD away from lower mip levels
+			// passthrough
+		case Op_Tex1DCmp:
+		case Op_Tex2DCmp:
+		case Op_TexCubeCmp: fnstr = version < 140 ? "UNAVAILABLE" : "texture"; break;
 		case Op_Trunc:     assert(version >= 130); break;
 		}
 		if (fnstr)
@@ -953,7 +987,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 				if (ch->next)
 					out << opstr;
 			}
-			out << ")";
+			out << fnEnd; // normally )
 			return;
 		}
 	}

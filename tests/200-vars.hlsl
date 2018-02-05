@@ -349,6 +349,15 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `comparison samplers`
+source `
+sampler1Dcmp s1c;
+sampler2Dcmp s2c;
+samplerCUBEcmp scc;
+float4 main() : POSITION { return 0; }`
+compile_hlsl4 ``
+compile_glsl ``
+
 // `samplers w/ registers`
 source `
 sampler1D s1 : register(s0);

@@ -118,7 +118,7 @@ void ASTType::GetMangling(std::string& out) const
 	case Sampler1D:   out += "s1"; break;
 	case Sampler2D:   out += "s2"; break;
 	case Sampler3D:   out += "s3"; break;
-	case SamplerCUBE: out += "sc"; break;
+	case SamplerCube: out += "sc"; break;
 	default: out += "<ERROR>"; break;
 	}
 }
@@ -154,7 +154,7 @@ void ASTType::Dump(OutStream& out) const
 	case Sampler1D:   out << "sampler1D"; break;
 	case Sampler2D:   out << "sampler2D"; break;
 	case Sampler3D:   out << "sampler3D"; break;
-	case SamplerCUBE: out << "samplerCUBE"; break;
+	case SamplerCube: out << "samplerCUBE"; break;
 	}
 }
 
@@ -176,7 +176,7 @@ std::string ASTType::GetName() const
 	case Sampler1D:   return "sampler1D";
 	case Sampler2D:   return "sampler2D";
 	case Sampler3D:   return "sampler3D";
-	case SamplerCUBE: return "samplerCUBE";
+	case SamplerCube: return "samplerCUBE";
 	default: return "<ERROR>";
 	}
 }
@@ -793,6 +793,13 @@ static const char* g_OpKindNames[] =
 	"TexCubeGrad",
 	"TexCubeLOD",
 	"TexCubeProj",
+
+	"Tex1DCmp",
+	"Tex1DLOD0Cmp",
+	"Tex2DCmp",
+	"Tex2DLOD0Cmp",
+	"TexCubeCmp",
+	"TexCubeLOD0Cmp",
 };
 static_assert(
 	sizeof(g_OpKindNames) / sizeof(g_OpKindNames[0]) == Op_COUNT,
@@ -1061,7 +1068,10 @@ TypeSystem::TypeSystem() :
 	typeSampler1DDef   (ASTType::Sampler1D  ),
 	typeSampler2DDef   (ASTType::Sampler2D  ),
 	typeSampler3DDef   (ASTType::Sampler3D  ),
-	typeSamplerCUBEDef (ASTType::SamplerCUBE),
+	typeSamplerCubeDef (ASTType::SamplerCube),
+	typeSampler1DCmpDef   (ASTType::Sampler1DCmp  ),
+	typeSampler2DCmpDef   (ASTType::Sampler2DCmp  ),
+	typeSamplerCubeCmpDef (ASTType::SamplerCubeCmp),
 	typeBoolDef        (ASTType::Bool       ),
 	typeInt32Def       (ASTType::Int32      ),
 	typeUInt32Def      (ASTType::UInt32     ),
@@ -1291,7 +1301,13 @@ ASTType* TypeSystem::GetBaseTypeByName(const char* name)
 		if (strcmp(name + sizeof("sampler") - 1, "3D") == 0)
 			return &typeSampler3DDef;
 		if (strcmp(name + sizeof("sampler") - 1, "CUBE") == 0)
-			return &typeSamplerCUBEDef;
+			return &typeSamplerCubeDef;
+		if (strcmp(name + sizeof("sampler") - 1, "1Dcmp") == 0)
+			return &typeSampler1DCmpDef;
+		if (strcmp(name + sizeof("sampler") - 1, "2Dcmp") == 0)
+			return &typeSampler2DCmpDef;
+		if (strcmp(name + sizeof("sampler") - 1, "CUBEcmp") == 0)
+			return &typeSamplerCubeCmpDef;
 	}
 	if (strcmp(name, "void") == 0)
 		return &typeVoidDef;
@@ -1916,7 +1932,7 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 	case ASTType::Sampler1D:
 	case ASTType::Sampler2D:
 	case ASTType::Sampler3D:
-	case ASTType::SamplerCUBE:
+	case ASTType::SamplerCube:
 		// ...
 	case ASTType::Bool:
 	case ASTType::Int32:
@@ -1980,6 +1996,39 @@ void VariableAccessValidator::ValidateCheckVariableError(const DeclRefExpr* dre)
 {
 	diag.EmitError("variable '" + dre->decl->name + "' used before sufficient initialization", dre->loc);
 }
+
+
+struct ContentValidator : ASTWalker<ContentValidator>
+{
+	ContentValidator(Diagnostic& d, OutputShaderFormat fmt) : diag(d), outputFmt(fmt) {}
+	void RunOnAST(AST& ast)
+	{
+		VisitAST(ast);
+	}
+	void PreVisit(ASTNode* node)
+	{
+		if (auto* op = dyn_cast<OpExpr>(node))
+		{
+			if (outputFmt == OSF_HLSL_SM3 || outputFmt == OSF_GLSL_ES_100)
+			{
+				switch (op->opKind)
+				{
+				case Op_Tex1DCmp:
+				case Op_Tex1DLOD0Cmp:
+				case Op_Tex2DCmp:
+				case Op_Tex2DLOD0Cmp:
+				case Op_TexCubeCmp:
+				case Op_TexCubeLOD0Cmp:
+					diag.EmitError("shadow/comparison sampling intrinsics are not supported for this output",
+						op->loc);
+					break;
+				}
+			}
+		}
+	}
+	Diagnostic& diag;
+	OutputShaderFormat outputFmt;
+};
 
 
 static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, OutputShaderFormat shaderFormat)
@@ -2653,7 +2702,7 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 	case ASTType::Sampler1D:
 	case ASTType::Sampler2D:
 	case ASTType::Sampler3D:
-	case ASTType::SamplerCUBE:
+	case ASTType::SamplerCube:
 		return src;
 	case ASTType::Vector:
 		{
@@ -3109,6 +3158,20 @@ struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 			CastExprTo(WSwizzle, coordSwizzle->GetReturnType());
 		}
 	}
+	void CombineCoords(ASTNode* arg, int dims, bool ins0)
+	{
+		auto* argcoord = arg->ToExpr();
+		auto* argz = arg->next->ToExpr();
+		auto* ile = new InitListExpr;
+		ile->SetReturnType(ast.CastToVector(arg->ToExpr()->GetReturnType(), dims, true));
+		argcoord->ReplaceWith(ile);
+		ile->AppendChild(argcoord);
+		if (ins0)
+		{
+			ile->AppendChild(new Float32Expr(0, ast.GetFloat32Type()));
+		}
+		ile->AppendChild(argz);
+	}
 	void ConvertV1ToV2(ASTNode* arg, bool all = false)
 	{
 		for (;;)
@@ -3191,6 +3254,18 @@ struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 				case Op_TexCubeProj:
 					op->opKind = Op_TexCube;
 					ExpandCoord(op->GetFirstArg()->next, 3, true);
+					break;
+				case Op_Tex1DCmp:
+				case Op_Tex1DLOD0Cmp:
+					CombineCoords(op->GetFirstArg()->next, 3, true);
+					break;
+				case Op_Tex2DCmp:
+				case Op_Tex2DLOD0Cmp:
+					CombineCoords(op->GetFirstArg()->next, 3, false);
+					break;
+				case Op_TexCubeCmp:
+				case Op_TexCubeLOD0Cmp:
+					CombineCoords(op->GetFirstArg()->next, 4, false);
 					break;
 				}
 			}
@@ -3421,12 +3496,12 @@ bool Compiler::CompileFile(const char* name, const char* code)
 		}
 
 		// ignore unused functions entirely
-		RemoveUnusedFunctions ruf;
-		ruf.RunOnAST(p.ast);
+		RemoveUnusedFunctions().RunOnAST(p.ast);
 
 		// validate all
-		VariableAccessValidator vav(diag);
-		vav.RunOnAST(p.ast);
+		VariableAccessValidator(diag).RunOnAST(p.ast);
+		ContentValidator(diag, outputFmt).RunOnAST(p.ast);
+
 
 		// output-specific transformations (emulation/feature mapping)
 		if (outputFmt != OSF_HLSL_SM3)

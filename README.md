@@ -33,10 +33,19 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * Validation of certain syntax constructs such as register notation
 * Full semantic remapping support for HLSL 4.0
 
-#### Other differences from HLSL:
+#### Other differences from HLSL 3.0:
 
 * `static [const]` requires an initialization expression, but it is disallowed to have one for just `const` or other types. This is to avoid creating constants that are not actually initialized in the shader, but just look like they might be.
 * `tex1D/tex2D/tex3D/texCUBE` overloads that work same as their `*grad` versions are not recognized.
+* Shadow/comparison samplers and intrinsics from newer specifications have been added:
+  * `sampler1Dcmp`, `sampler2Dcmp`, `samplerCUBEcmp` - comparison sampler types
+  * `tex*[lod0]cmp` intrinsics - sample the red channel of sampler `s` using coordinates `c`, compare each sampled value using sampler's comparison settings and reference value `z` before filtering. The `lod0` variant limits sampling to the first level of detail (overriding sampler's mipmapping settings).
+    * `tex1Dcmp(sampler1Dcmp s, float c, float z)`
+    * `tex1Dlod0cmp(sampler1Dcmp s, float c, float z)`
+    * `tex2Dcmp(sampler2Dcmp s, float2 c, float z)`
+    * `tex2Dlod0cmp(sampler2Dcmp s, float2 c, float z)`
+    * `texCUBEcmp(samplerCUBEcmp s, float3 c, float z)`
+    * `texCUBElod0cmp(samplerCUBEcmp s, float3 c, float z)`
 
 #### Inherent incompatibilities between shader languages/APIs:
 

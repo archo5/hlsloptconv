@@ -1546,6 +1546,53 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 	return parser->ast.GetFloat32VecType(4);
 }
 
+static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
+	const char* name, ASTType::Kind smpType, int vecSize)
+{
+	if (fcall->GetArgCount() != 3)
+	{
+		parser->EmitError("'" + std::string(name) + "' requires 3 arguments");
+		return nullptr;
+	}
+	auto* arg = fcall->GetFirstArg();
+	ASTType* rt0 = arg->ToExpr()->GetReturnType();
+	if (rt0->kind != smpType)
+		goto mismatch;
+	arg = arg->next;
+	{
+		ASTType* rtN = arg->ToExpr()->GetReturnType();
+		if (rtN->IsNumericBased() == false || rtN->kind == ASTType::Matrix)
+			goto mismatch;
+		if (vecSize == 1)
+		{
+			if (rtN->IsNumeric() == false)
+				goto mismatch;
+		}
+		else if (rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize))
+			goto mismatch;
+		arg = arg->next;
+	}
+	if (arg->ToExpr()->GetReturnType()->IsNumericOrVM1() == false)
+		goto mismatch;
+
+	// cast arg 2
+	auto* arg2 = fcall->GetFirstArg()->next->ToExpr();
+	ASTType* reqty = parser->ast.CastToFloat(arg2->GetReturnType());
+	if (vecSize > 1)
+		reqty = parser->ast.CastToVector(reqty, vecSize);
+	CastExprTo(arg2, reqty);
+	// cast arg 3
+	auto* arg3 = fcall->GetFirstArg()->next->next->ToExpr();
+	CastExprTo(arg3, parser->ast.CastToFloat(arg3->GetReturnType()));
+
+	fcall->opKind = opKind;
+	return parser->ast.GetFloat32Type();
+
+mismatch:
+	parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+	return nullptr;
+}
+
 struct ConstCharEqual
 {
 	bool operator () (const char* a, const char* b) const
@@ -1916,15 +1963,29 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	{ return TexSampleIntrin(parser, fcall, Op_Tex3DProj, "tex3Dproj", ASTType::Sampler3D, 4, 2); } },
 
 	{ "texCUBE", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, Op_TexCube, "texCUBE", ASTType::SamplerCUBE, 3, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCube, "texCUBE", ASTType::SamplerCube, 3, 2); } },
 	{ "texCUBEbias", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, Op_TexCubeBias, "texCUBEbias", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeBias, "texCUBEbias", ASTType::SamplerCube, 4, 2); } },
 	{ "texCUBEgrad", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, Op_TexCubeGrad, "texCUBEgrad", ASTType::SamplerCUBE, 3, 4); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeGrad, "texCUBEgrad", ASTType::SamplerCube, 3, 4); } },
 	{ "texCUBElod", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, Op_TexCubeLOD, "texCUBElod", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeLOD, "texCUBElod", ASTType::SamplerCube, 4, 2); } },
 	{ "texCUBEproj", [](Parser* parser, OpExpr* fcall) -> ASTType*
-	{ return TexSampleIntrin(parser, fcall, Op_TexCubeProj, "texCUBEproj", ASTType::SamplerCUBE, 4, 2); } },
+	{ return TexSampleIntrin(parser, fcall, Op_TexCubeProj, "texCUBEproj", ASTType::SamplerCube, 4, 2); } },
+
+	// custom intrinsics:
+	{ "tex1Dcmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_Tex1DCmp, "tex1Dcmp", ASTType::Sampler1DCmp, 1); } },
+	{ "tex1Dlod0cmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_Tex1DLOD0Cmp, "tex1Dlod0cmp", ASTType::Sampler1DCmp, 1); } },
+	{ "tex2Dcmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_Tex2DCmp, "tex2Dcmp", ASTType::Sampler2DCmp, 2); } },
+	{ "tex2Dlod0cmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_Tex2DLOD0Cmp, "tex2Dlod0cmp", ASTType::Sampler2DCmp, 2); } },
+	{ "texCUBEcmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_TexCubeCmp, "texCUBEcmp", ASTType::SamplerCubeCmp, 3); } },
+	{ "texCUBElod0cmp", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return TexSampleCmpIntrin(parser, fcall, Op_TexCubeLOD0Cmp, "texCUBElod0cmp", ASTType::SamplerCubeCmp, 3); } },
 
 	/// transpose
 	DEF_INTRIN_SSF(Op_Trunc, trunc),

@@ -10,6 +10,8 @@ test4: sltest.exe
 	sltest -t tests/400-func.hlsl
 test5: sltest.exe
 	sltest -t tests/500-intrin.hlsl
+test5t: sltest.exe
+	sltest -t tests/560-intrin-tex.hlsl
 html5test: hlsloptconv.exe
 	py runtests/html5-compile.py
 four: four.exe
