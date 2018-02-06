@@ -37,8 +37,9 @@ float4 main(float4 p : POSITION) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
-// `TODO_FIXME compile_glsl`
-// `TODO_FIXME compile_glsl_es100`
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `any`
 source `
@@ -49,8 +50,9 @@ float4 main(float4 p : POSITION) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
-// `TODO_FIXME compile_glsl`
-// `TODO_FIXME compile_glsl_es100`
+compile_glsl ``
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
 
 // `asin`
 source `
@@ -282,7 +284,17 @@ compile_glsl ``
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
 
-// `TODO faceforward`
+// `faceforward`
+source `
+float4 main(float3 p : POSITION) : POSITION
+{
+	return (faceforward(4, 5, p) + faceforward(true, p, false)
+		+ faceforward(p, 0.5, 0.6) + faceforward(p, p, p)).xyzz;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
 
 // `floor`
 source `

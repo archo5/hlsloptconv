@@ -220,6 +220,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		case Op_Dot:       fnstr = "dot";       break;
 		case Op_Exp:       fnstr = "exp";       break;
 		case Op_Exp2:      fnstr = "exp2";      break;
+		case Op_FaceForward:fnstr="faceforward";break;
 		case Op_Floor:     fnstr = "floor";     break;
 		case Op_FWidth:    fnstr = "fwidth";    break;
 		case Op_Length:    fnstr = "length";    break;

@@ -1094,9 +1094,30 @@ TypeSystem::~TypeSystem()
 
 void TypeSystem::InitBasicTypes()
 {
-	ASTType* baseTypes[5]     = { GetBoolType(), GetInt32Type(), GetUInt32Type(), GetFloat16Type(), GetFloat32Type() };
-	ASTType* vecTypeArrays[5] = { typeBoolVecDefs, typeInt32VecDefs, typeUInt32VecDefs, typeFloat16VecDefs, typeFloat32VecDefs };
-	ASTType* mtxTypeArrays[5] = { typeBoolMtxDefs, typeInt32MtxDefs, typeUInt32MtxDefs, typeFloat16MtxDefs, typeFloat32MtxDefs };
+	ASTType* baseTypes[5]     =
+	{
+		GetBoolType(),
+		GetInt32Type(),
+		GetUInt32Type(),
+		GetFloat16Type(),
+		GetFloat32Type()
+	};
+	ASTType* vecTypeArrays[5] =
+	{
+		typeBoolVecDefs,
+		typeInt32VecDefs,
+		typeUInt32VecDefs,
+		typeFloat16VecDefs,
+		typeFloat32VecDefs
+	};
+	ASTType* mtxTypeArrays[5] =
+	{
+		typeBoolMtxDefs,
+		typeInt32MtxDefs,
+		typeUInt32MtxDefs,
+		typeFloat16MtxDefs,
+		typeFloat32MtxDefs
+	};
 	for (int t = 0; t < 5; ++t)
 	{
 		ASTType* baseType = baseTypes[t];
@@ -1575,7 +1596,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 			{
 				uint32_t swizzle = 0;
 				int swzSize = 0;
-				bool isMatrixSwizzle = false;
+				bool isMtxSwizzle = false;
 
 				if (revTrail.empty() == false)
 				{
@@ -1595,7 +1616,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 								isMmbSwizzle = true;
 								swizzle = mmb->memberID;
 								swzSize = mmb->GetReturnType()->GetElementCount();
-								isMatrixSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
+								isMtxSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
 							}
 						}
 						else if (auto* idx = dyn_cast<const IndexExpr>(sve))
@@ -1618,8 +1639,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 
 				if (swzSize)
 				{
-					int mult = isMatrixSwizzle ? 4 : 2;
-					uint32_t mask = isMatrixSwizzle ? 0xf : 0x3;
+					int mult = isMtxSwizzle ? 4 : 2;
+					uint32_t mask = isMtxSwizzle ? 0xf : 0x3;
 					for (int i = 0; i < swzSize; ++i)
 					{
 						if (elementsWritten[rf + ((swizzle >> (i * mult)) & mask)] == 0)
@@ -1686,7 +1707,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 			{
 				uint32_t swizzle = 0;
 				int swzSize = 0;
-				bool isMatrixSwizzle = false;
+				bool isMtxSwizzle = false;
 
 				if (revTrail.empty() == false)
 				{
@@ -1709,7 +1730,7 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 							{
 								swizzle = mmb->memberID;
 								swzSize = mmb->GetReturnType()->GetElementCount();
-								isMatrixSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
+								isMtxSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
 							}
 						}
 						else if (auto* idx = dyn_cast<const IndexExpr>(sve))
@@ -1722,7 +1743,8 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 							}
 							else
 							{
-								diag.EmitError("cannot write to local array from a computed index", idx->loc);
+								diag.EmitError("cannot write to local array from a computed index",
+									idx->loc);
 							}
 						}
 					}
@@ -1731,8 +1753,8 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 
 				if (swzSize)
 				{
-					int mult = isMatrixSwizzle ? 4 : 2;
-					uint32_t mask = isMatrixSwizzle ? 0xf : 0x3;
+					int mult = isMtxSwizzle ? 4 : 2;
+					uint32_t mask = isMtxSwizzle ? 0xf : 0x3;
 					for (int i = 0; i < swzSize; ++i)
 						elementsWritten[rf + ((swizzle >> (i * mult)) & mask)] = true;
 				}
@@ -2033,13 +2055,13 @@ struct ContentValidator : ASTWalker<ContentValidator>
 };
 
 
-static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, OutputShaderFormat shaderFormat)
+static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, OutputShaderFormat outputFmt)
 {
-	if (out && stage == ShaderStage_Pixel && shaderFormat == OSF_HLSL_SM4 && sem == "COLOR")
+	if (out && stage == ShaderStage_Pixel && outputFmt == OSF_HLSL_SM4 && sem == "COLOR")
 	{
 		sem = "SV_TARGET";
 	}
-	if (out && stage == ShaderStage_Vertex && shaderFormat == OSF_HLSL_SM4 && sem == "POSITION")
+	if (out && stage == ShaderStage_Vertex && outputFmt == OSF_HLSL_SM4 && sem == "POSITION")
 	{
 		sem = "SV_POSITION";
 	}
@@ -2293,10 +2315,12 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat
 				ile->SetReturnType(argvd->GetType());
 				argvd->SetInitExpr(ile);
 
-				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, ile, argvd, argvd->GetType()->ToStructType());
+				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat,
+					ile, argvd, argvd->GetType()->ToStructType());
 			}
 			else
-				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat, nullptr, argvd, argvd->GetType()->ToStructType());
+				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat,
+					nullptr, argvd, argvd->GetType()->ToStructType());
 
 			vds->PrependChild(argvd);
 		}
@@ -2678,7 +2702,7 @@ static void UnpackMatrixSwizzle(AST& ast)
 
 
 // TODO merge with hlslparser's version
-static void CastExprTo(Expr* val, ASTType* to)
+static Expr* CastExprTo(Expr* val, ASTType* to)
 {
 	assert(to);
 	if (to != val->GetReturnType())
@@ -2687,7 +2711,9 @@ static void CastExprTo(Expr* val, ASTType* to)
 		cast->SetReturnType(to);
 		val->ReplaceWith(cast);
 		cast->SetSource(val);
+		return cast;
 	}
+	return val;
 }
 
 static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
@@ -2894,15 +2920,30 @@ static void PadAPI(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
-	void MatrixUnpack(OpExpr* fcintrin)
+	enum MtxUnpackRecombineMode
 	{
-		auto* mtxTy = fcintrin->GetReturnType();
+		MURM_Matrix,  // recombine parts back into a matrix
+		MURM_Cascade, // recombine parts into a vector and pass that through the same op
+	};
+	void MatrixUnpack(OpExpr* fcintrin, MtxUnpackRecombineMode recombineMode = MURM_Matrix)
+	{
+		auto* retTy = fcintrin->GetReturnType();
+		ASTType* mtxTy = nullptr;
+		switch (recombineMode)
+		{
+		case MURM_Matrix:
+			mtxTy = retTy;
+			break;
+		case MURM_Cascade:
+			mtxTy = fcintrin->GetFirstArg()->ToExpr()->GetReturnType();
+			break;
+		}
 		if (mtxTy->kind != ASTType::Matrix)
 			return;
 
 		int numCols = mtxTy->sizeX;
 		auto* ile = new InitListExpr;
-		ile->SetReturnType(mtxTy);
+		ile->SetReturnType(recombineMode == MURM_Matrix ? mtxTy : ast.GetVectorType(retTy, numCols));
 		fcintrin->ReplaceWith(ile);
 		ile->AppendChild(fcintrin);
 
@@ -2927,6 +2968,12 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				dyn_cast<Int32Expr>(dyn_cast<IndexExpr>(arg)->GetIndex())->value = i;
 			}
 			ile->AppendChild(fcx);
+		}
+		if (recombineMode == MURM_Cascade)
+		{
+			auto* fcrecomb = fcintrin->Clone();
+			ile->ReplaceWith(fcrecomb);
+			fcrecomb->AppendChild(ile);
 		}
 	//	ile->Dump(FILEStream(stderr),0);
 	}
@@ -3103,6 +3150,25 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				CastArgsES100(op, false);
 				MatrixUnpack(op);
 				break;
+			case Op_All:
+			case Op_Any:
+				if (op->GetFirstArg()->ToExpr()->GetReturnType()->IsNumeric())
+				{
+					// scalar passed, replace with bool cast
+					delete op->ReplaceWith(curPos = CastExprTo(
+						op->GetFirstArg()->ToExpr(), ast.GetBoolType()));
+				}
+				else
+				{
+					MatrixUnpack(op, MURM_Cascade);
+					for (ASTNode* expr = op; expr; expr = expr->next)
+					{
+						auto* opin = dyn_cast<OpExpr>(expr);
+						auto* arg = opin->GetFirstArg()->ToExpr();
+						CastExprTo(arg, ast.CastToBool(arg->GetReturnType()));
+					}
+				}
+				break;
 			case Op_ModGLSL:
 			case Op_Pow:
 			case Op_Round:
@@ -3162,7 +3228,8 @@ static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt
 
 struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 {
-	SplitTexSampleArgsPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
+	SplitTexSampleArgsPass(AST& a, Diagnostic& d, OutputShaderFormat of)
+		: ast(a), diag(d), outputFmt(of){}
 	void ExpandCoord(ASTNode* arg, int dims, bool projDivide = false)
 	{
 		auto* argcoord = FoldOutIfBest(arg->ToExpr());
@@ -3420,7 +3487,9 @@ struct ArrayOfArrayRemover : ASTWalker<ArrayOfArrayRemover>
 					// idxe { <source>, <idxin> * srcidxe.rettype.elementCount + <idxout> }
 					auto* mul = new BinaryOpExpr;
 					mul->AppendChild(srcidxe->GetIndex());
-					mul->AppendChild(new Int32Expr(srcidxe->GetReturnType()->elementCount, ast.GetInt32Type()));
+					mul->AppendChild(new Int32Expr(
+						srcidxe->GetReturnType()->elementCount,
+						ast.GetInt32Type()));
 					mul->opType = STT_OP_Mul;
 					mul->SetReturnType(mul->GetLft()->GetReturnType()->IsFloatBased()
 						? ast.GetFloat32Type() : ast.GetInt32Type());
