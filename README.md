@@ -46,6 +46,7 @@ The main test suite checks most converted code with `glslangValidator` as well a
     * `tex2Dlod0cmp(sampler2Dcmp s, float2 c, float z)`
     * `texCUBEcmp(samplerCUBEcmp s, float3 c, float z)`
     * `texCUBElod0cmp(samplerCUBEcmp s, float3 c, float z)`
+* `mod` from GLSL is also supported, since it differs from HLSL's `fmod` and has certain use cases.
 
 #### Inherent incompatibilities between shader languages/APIs:
 

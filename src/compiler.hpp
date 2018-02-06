@@ -518,6 +518,7 @@ enum OpKind
 	Op_Log2,
 	Op_Max,
 	Op_Min,
+	Op_ModGLSL,
 	Op_MulMM,
 	Op_MulMV,
 	Op_MulVM,

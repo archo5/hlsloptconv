@@ -935,6 +935,7 @@ void GLSLGenerator::EmitExpr(const Expr* node)
 			out << "))";
 			return;
 		case Op_Lerp:      fnstr = "mix";   break;
+		case Op_ModGLSL:   fnstr = "mod";   break;
 		case Op_MulMM:
 		case Op_MulMV:
 		case Op_MulVM:     fnstr = ""; opstr = "*"; break;

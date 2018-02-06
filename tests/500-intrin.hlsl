@@ -37,6 +37,8 @@ float4 main(float4 p : POSITION) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+// `TODO_FIXME compile_glsl`
+// `TODO_FIXME compile_glsl_es100`
 
 // `any`
 source `
@@ -47,6 +49,8 @@ float4 main(float4 p : POSITION) : POSITION
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+// `TODO_FIXME compile_glsl`
+// `TODO_FIXME compile_glsl_es100`
 
 // `asin`
 source `
@@ -592,7 +596,25 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
-// `mod (GLSL)`
+// `mod (GLSL, emulated on HLSL)`
+source `
+float2x3 MTX1;
+float2x3 MTX2;
+float4 main(float4 p : POSITION) : POSITION
+{
+	return mod(p, float4(1,2,3,4)) * mod(MTX1, MTX2)._11_12_13_22;
+}`
+compile_hlsl ``
+in_shader `floor(`
+compile_hlsl4 ``
+in_shader `floor(`
+compile_glsl ``
+in_shader `mod(`
+source_replace `float2x3=>float3x3`
+compile_glsl_es100 ``
+in_shader `mod(`
+
+// `% -> mod (GLSL)`
 source `
 float2x3 MTX1;
 float2x3 MTX2;
@@ -603,10 +625,10 @@ float4 main(float4 p : POSITION) : POSITION
 compile_hlsl_before_after ``
 compile_hlsl4 ``
 compile_glsl ``
-in_shader `mod`
+in_shader `mod(`
 source_replace `float2x3=>float3x3`
 compile_glsl_es100 ``
-in_shader `mod`
+in_shader `mod(`
 
 // `normalize`
 source `

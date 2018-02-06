@@ -751,6 +751,7 @@ static const char* g_OpKindNames[] =
 	"Log2",
 	"Max",
 	"Min",
+	"Mod(GLSL)",
 	"MulMM",
 	"MulMV",
 	"MulVM",
@@ -2004,6 +2005,7 @@ struct ContentValidator : ASTWalker<ContentValidator>
 	void RunOnAST(AST& ast)
 	{
 		VisitAST(ast);
+		diag.CheckNonFatalErrors();
 	}
 	void PreVisit(ASTNode* node)
 	{
@@ -2813,6 +2815,82 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 }
 
 
+enum ModRoundMode
+{
+	MRM_Trunc,
+	MRM_IntCast,
+	MRM_Floor,
+};
+
+Expr* ImplementMod(AST& ast, OpExpr* op, ModRoundMode roundMode)
+{
+	// x - y * trunc(x/y)
+	// -(x, *(y, trunc(/(x,y))))
+	auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
+	auto* y = FoldOutIfBest(op->GetFirstArg()->next->ToExpr());
+	auto* sub = new OpExpr;
+	auto* mul = new OpExpr;
+	auto* roundOp = roundMode != MRM_IntCast ? new OpExpr : nullptr;
+	auto* div = new OpExpr;
+
+	auto* rt = x->GetReturnType();
+	sub->SetReturnType(rt);
+	sub->opKind = Op_Subtract;
+	sub->AppendChild(x);
+	sub->AppendChild(mul);
+	mul->SetReturnType(rt);
+	mul->opKind = Op_Multiply;
+	mul->AppendChild(y);
+	mul->AppendChild(roundOp ? roundOp : div);
+	if (roundOp)
+	{
+		roundOp->SetReturnType(rt);
+		roundOp->opKind = roundMode == MRM_Floor ? Op_Floor : Op_Trunc;
+		roundOp->AppendChild(div);
+	}
+	div->SetReturnType(rt);
+	div->opKind = Op_Divide;
+	div->AppendChild(x->DeepClone());
+	div->AppendChild(y->DeepClone());
+	if (!roundOp)
+	{
+		CastExprTo(mul->GetRgt(), ast.CastToInt(mul->GetRgt()->GetReturnType()));
+		CastExprTo(mul->GetRgt(), ast.CastToFloat(mul->GetRgt()->GetReturnType()));
+	}
+
+	delete op->ReplaceWith(sub);
+	return sub;
+}
+
+struct APIPadding : ASTWalker<APIPadding>
+{
+	APIPadding(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
+	void PreVisit(ASTNode* node)
+	{
+		if (auto* op = dyn_cast<OpExpr>(node))
+		{
+			if (outputFmt == OSF_HLSL_SM3 || outputFmt == OSF_HLSL_SM4)
+			{
+				switch (op->opKind)
+				{
+				case Op_ModGLSL:
+					curPos = ImplementMod(ast, op, MRM_Floor);
+					break;
+				}
+			}
+		}
+	}
+	AST& ast;
+	Diagnostic& diag;
+	OutputShaderFormat outputFmt;
+};
+
+static void PadAPI(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
+{
+	APIPadding(ast, diag, outputFmt).VisitAST(ast);
+}
+
+
 struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 {
 	GLSLConversionPass(AST& a, Diagnostic& d, OutputShaderFormat of) : ast(a), diag(d), outputFmt(of){}
@@ -2876,45 +2954,6 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 		if (outputFmt == OSF_GLSL_ES_100)
 			CastArgsToFloat(fcintrin, preserveInts);
 	}
-	Expr* ImplementMod(OpExpr* op)
-	{
-		// x - y * trunc(x/y)
-		// -(x, *(y, trunc(/(x,y))))
-		auto* x = FoldOutIfBest(op->GetFirstArg()->ToExpr());
-		auto* y = FoldOutIfBest(op->GetFirstArg()->next->ToExpr());
-		auto* sub = new OpExpr;
-		auto* mul = new OpExpr;
-		auto* trunc = outputFmt != OSF_GLSL_ES_100 ? new OpExpr : nullptr;
-		auto* div = new OpExpr;
-
-		auto* rt = x->GetReturnType();
-		sub->SetReturnType(rt);
-		sub->opKind = Op_Subtract;
-		sub->AppendChild(x);
-		sub->AppendChild(mul);
-		mul->SetReturnType(rt);
-		mul->opKind = Op_Multiply;
-		mul->AppendChild(y);
-		mul->AppendChild(trunc ? trunc : div);
-		if (trunc)
-		{
-			trunc->SetReturnType(rt);
-			trunc->opKind = Op_Trunc;
-			trunc->AppendChild(div);
-		}
-		div->SetReturnType(rt);
-		div->opKind = Op_Divide;
-		div->AppendChild(x->DeepClone());
-		div->AppendChild(y->DeepClone());
-		if (!trunc)
-		{
-			CastExprTo(mul->GetRgt(), ast.CastToInt(mul->GetRgt()->GetReturnType()));
-			CastExprTo(mul->GetRgt(), ast.CastToFloat(mul->GetRgt()->GetReturnType()));
-		}
-
-		delete op->ReplaceWith(sub);
-		return sub;
-	}
 	bool IsNewSamplingAPI(){ return outputFmt == OSF_GLSL_140; }
 	void PreVisit(ASTNode* node)
 	{
@@ -2923,7 +2962,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			switch (op->opKind)
 			{
 			case Op_FMod:
-				curPos = ImplementMod(op);
+				curPos = ImplementMod(ast, op, outputFmt == OSF_GLSL_ES_100 ? MRM_IntCast : MRM_Trunc);
 				break;
 			case Op_Log10:
 				// log10(x) -> log(x) / log(10)
@@ -3060,16 +3099,13 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				CastExprTo(op, ast.CastToInt(op->GetReturnType()));
 				MatrixUnpack(op);
 				break;
-			case Op_Pow:
-				MatrixUnpack(op);
-				break;
-			case Op_Round:
-				MatrixUnpack(op);
-				break;
 			case Op_Saturate:
 				CastArgsES100(op, false);
 				MatrixUnpack(op);
 				break;
+			case Op_ModGLSL:
+			case Op_Pow:
+			case Op_Round:
 			case Op_Trunc:
 				MatrixUnpack(op);
 				break;
@@ -3504,6 +3540,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 
 
 		// output-specific transformations (emulation/feature mapping)
+		PadAPI(p.ast, diag, outputFmt);
 		if (outputFmt != OSF_HLSL_SM3)
 		{
 			SplitTexSampleArgs(p.ast, diag, outputFmt);

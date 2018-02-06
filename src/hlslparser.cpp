@@ -1754,6 +1754,8 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	{ return ScalableSymmetricIntrin(parser, fcall, Op_Max, "max", true, 2); }},
 	{ "min", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{ return ScalableSymmetricIntrin(parser, fcall, Op_Min, "min", true, 2); }},
+	{ "mod", [](Parser* parser, OpExpr* fcall) -> ASTType*
+	{ return ScalableSymmetricIntrin(parser, fcall, Op_ModGLSL, "mod", false, 2); }},
 	/// modf
 	{ "mul", [](Parser* parser, OpExpr* fcall) -> ASTType*
 	{
