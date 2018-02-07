@@ -197,8 +197,11 @@ void main( out v2p OUT )
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+in_shader `SV_POSITION`
 compile_glsl ``
+in_shader `gl_Position`
 compile_glsl_es100 ``
+in_shader `gl_Position`
 
 // `struct I/O 2`
 source `
@@ -211,8 +214,11 @@ void main( in a2v IN, out v2p OUT )
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+in_shader `SV_POSITION`
 compile_glsl ``
+in_shader `gl_Position`
 compile_glsl_es100 ``
+in_shader `gl_Position`
 
 // `struct I/O 3a`
 source `
@@ -224,8 +230,11 @@ void main( in vdata IN, out vdata OUT )
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+in_shader `SV_POSITION`
 compile_glsl ``
+in_shader `gl_Position`
 compile_glsl_es100 ``
+in_shader `gl_Position`
 
 // `struct I/O 3b`
 source `
@@ -238,8 +247,11 @@ void main( in vdataw IN, out vdataw OUT )
 }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+in_shader `SV_POSITION`
 compile_glsl ``
+in_shader `gl_Position`
 compile_glsl_es100 ``
+in_shader `gl_Position`
 
 // `explicit uniform`
 source `

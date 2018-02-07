@@ -757,6 +757,7 @@ struct ASTFunction : ASTNode
 	Stmt* GetCode() const { return firstChild ? firstChild->ToStmt() : nullptr; }
 	// VarDecl:
 	ASTNode* GetFirstArg() const { return childCount >= 1 ? firstChild->next : nullptr; }
+	ASTNode* GetLastArg() const { return childCount >= 1 ? lastChild : nullptr; }
 	int GetArgCount() const { return childCount >= 1 ? childCount - 1 : 0; }
 
 	ASTType* GetReturnType() const { return returnType; }

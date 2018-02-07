@@ -5,6 +5,7 @@ float4 main() : POSITION { return 0.0; }
 `
 compile_hlsl_before_after ``
 compile_hlsl4 ``
+in_shader `SV_POSITION`
 compile_glsl ``
 compile_glsl_es100 ``
 

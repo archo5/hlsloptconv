@@ -2055,80 +2055,80 @@ struct ContentValidator : ASTWalker<ContentValidator>
 };
 
 
-static void HLSLAdjustSemantic(std::string& sem, bool out, ShaderStage stage, OutputShaderFormat outputFmt)
+static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
-	if (out && stage == ShaderStage_Pixel && outputFmt == OSF_HLSL_SM4 && sem == "COLOR")
+	bool out = !!(vd->flags & VarDecl::ATTR_Out);
+	switch (shaderFormat)
 	{
-		sem = "SV_TARGET";
-	}
-	if (out && stage == ShaderStage_Vertex && outputFmt == OSF_HLSL_SM4 && sem == "POSITION")
-	{
-		sem = "SV_POSITION";
-	}
-}
-
-static void HLSLAdjustEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
-{
-	auto* F = ast.entryPoint;
-	// extract return value
-	if (F->GetReturnType()->IsVoid() == false)
-		HLSLAdjustSemantic(F->returnSemanticName, true, stage, shaderFormat);
-	for (ASTNode* arg = F->GetFirstArg(); arg; arg = arg->next)
-	{
-		auto* vd = arg->ToVarDecl();
-		HLSLAdjustSemantic(vd->semanticName, !!(vd->flags & VarDecl::ATTR_Out), stage, shaderFormat);
-	}
-}
-
-
-static void GLSLRenameInOut(VarDecl* vd, ShaderStage stage, OutputShaderFormat shaderFormat)
-{
-	if (vd->flags & VarDecl::ATTR_Out)
-	{
-		if (stage == ShaderStage_Vertex)
+	case OSF_HLSL_SM3:
+		return;
+	case OSF_HLSL_SM4:
+		if (out && stage == ShaderStage_Pixel && vd->semanticName == "COLOR")
 		{
-			if (vd->semanticName == "POSITION")
-			{
-				vd->name = "gl_Position";
-				vd->flags |= VarDecl::ATTR_Hidden;
-				return;
-			}
+			vd->semanticName = "SV_TARGET";
+			return;
 		}
-		if (stage == ShaderStage_Pixel)
+		if (out && stage == ShaderStage_Pixel && vd->semanticName == "DEPTH")
 		{
-			if (vd->semanticName == "COLOR")
+			vd->semanticName = "SV_DEPTH";
+			return;
+		}
+		if (out && stage == ShaderStage_Vertex && vd->semanticName == "POSITION")
+		{
+			vd->semanticName = "SV_POSITION";
+			return;
+		}
+		return;
+	case OSF_GLSL_ES_100:
+	case OSF_GLSL_140:
+		if (out)
+		{
+			if (stage == ShaderStage_Vertex)
 			{
-				if (shaderFormat == OSF_GLSL_ES_100)
+				if (vd->semanticName == "POSITION")
 				{
-					vd->name = "gl_FragColor";
+					vd->name = "gl_Position";
 					vd->flags |= VarDecl::ATTR_Hidden;
 					return;
 				}
-				else
+			}
+			if (stage == ShaderStage_Pixel)
+			{
+				if (vd->semanticName == "COLOR")
 				{
-					char bfr[32];
-					sprintf(bfr, "_PSCOLOR%d", vd->GetSemanticIndex());
-					vd->name = bfr;
+					if (shaderFormat == OSF_GLSL_ES_100)
+					{
+						vd->name = "gl_FragColor";
+						vd->flags |= VarDecl::ATTR_Hidden;
+						return;
+					}
+					else
+					{
+						char bfr[32];
+						sprintf(bfr, "_PSCOLOR%d", vd->GetSemanticIndex());
+						vd->name = bfr;
+					}
+					return;
 				}
-				return;
 			}
 		}
-	}
 
-	// TODO geometry shaders?
-//	if (shaderFormat == OSF_GLSL_ES_100)
-	{
-		// force rename varyings to semantics to automate linkage
-		if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
-			((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
+		// TODO geometry shaders?
+	//	if (shaderFormat == OSF_GLSL_ES_100)
 		{
-			vd->name = "attr" + vd->semanticName + std::to_string(vd->GetSemanticIndex());
+			// force rename varyings to semantics to automate linkage
+			if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
+				((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
+			{
+				vd->name = "attr" + vd->semanticName + std::to_string(vd->GetSemanticIndex());
+			}
 		}
-	}
 
-	if (vd->name.empty())
-	{
-		vd->name = vd->semanticName;
+		if (vd->name.empty())
+		{
+			vd->name = vd->semanticName;
+		}
+		return;
 	}
 }
 
@@ -2162,7 +2162,8 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 		}
 
 
-		VarDecl* vd = ast.CreateGlobalVar();
+		VarDecl* vd = new VarDecl;
+		F->AppendChild(vd);
 		vd->name = inSRC->ToVarDecl()->name;
 		for (auto& mmbidx : mmbIndices)
 		{
@@ -2173,7 +2174,7 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 		vd->flags = (outILE ? VarDecl::ATTR_In : VarDecl::ATTR_Out) | VarDecl::ATTR_StageIO;
 		vd->semanticName = mmb.semanticName;
 		vd->semanticIndex = mmb.semanticIndex;
-		GLSLRenameInOut(vd, stage, shaderFormat);
+		InOutFixSemanticsAndNames(vd, stage, shaderFormat);
 
 		if (outILE)
 		{
@@ -2240,18 +2241,101 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 	}
 }
 
-static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
+void SwapNodesSameParent(ASTNode* a, ASTNode* b)
 {
+	// in case where a <-> b, a->next = b, b->next must be changed to a
+	assert(a->parent == b->parent);
+	ASTNode* aprev = a->prev;
+	ASTNode* anext = a->next;
+	a->prev = b->prev == a ? b : b->prev;
+	a->next = b->next == a ? b : b->next;
+	b->prev = aprev == b ? a : aprev;
+	b->next = anext == b ? a : anext;
+	if (a->prev)
+		a->prev->next = a;
+	if (a->next)
+		a->next->prev = a;
+	if (b->prev)
+		b->prev->next = b;
+	if (b->next)
+		b->next->prev = b;
+	if (a == a->parent->firstChild)
+		a->parent->firstChild = b;
+	else if (b == a->parent->firstChild)
+		a->parent->firstChild = a;
+	if (a == a->parent->lastChild)
+		a->parent->lastChild = b;
+	else if (b == a->parent->lastChild)
+		a->parent->lastChild = a;
+}
+
+template <class F> void SortNodes(ASTNode* first, ASTNode* last, const F& comp)
+{
+	while (first != last)
+	{
+		// forward pass
+		for (ASTNode* n = first; n != last; )
+		{
+		//	n->Dump(FILEStream(stderr),0);
+		//	n->next->Dump(FILEStream(stderr),0);
+			ASTNode* a = n;
+			ASTNode* b = n->next;
+			if (comp(a, b) > 0)
+			{
+				SwapNodesSameParent(a, b);
+				// preserve first/last
+				if (first == a)
+					first = b;
+				if (last == b)
+					last = a;
+			}
+			else n = n->next;
+		}
+		last = last->prev;
+
+		if (first == last)
+			break;
+
+		// backwards pass
+		for (ASTNode* n = last; n != first; )
+		{
+		//	n->prev->Dump(FILEStream(stderr),0);
+		//	n->Dump(FILEStream(stderr),0);
+			ASTNode* a = n->prev;
+			ASTNode* b = n;
+			if (comp(a, b) > 0)
+			{
+				SwapNodesSameParent(a, b);
+				// preserve first/last
+				if (first == a)
+					first = b;
+				if (last == b)
+					last = a;
+			}
+			else n = n->prev;
+		}
+		first = first->next;
+	}
+}
+
+static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
+{
+	if (shaderFormat == OSF_HLSL_SM3)
+		return; // same as input, no need to edit
+
 	auto* F = ast.entryPoint;
 	// extract return value
 	if (F->GetReturnType()->IsVoid() == false)
 	{
-		VarDecl* vd = ast.CreateGlobalVar();
+		auto* vd = new VarDecl;
+		F->AppendChild(vd);
 		vd->semanticName = F->returnSemanticName;
 		vd->semanticIndex = F->returnSemanticIndex;
+		F->returnSemanticName = "";
+		F->returnSemanticIndex = -1;
 		vd->SetType(F->GetReturnType());
 		vd->flags |= VarDecl::ATTR_Out | VarDecl::ATTR_StageIO;
-		GLSLRenameInOut(vd, stage, shaderFormat);
+		InOutFixSemanticsAndNames(vd, stage, shaderFormat);
 
 		F->SetReturnType(ast.GetVoidType());
 
@@ -2293,9 +2377,7 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat
 
 		if (argvd->GetType()->kind != ASTType::Structure)
 		{
-			argvd->Unlink();
-			GLSLRenameInOut(argvd, stage, shaderFormat);
-			ast.globalVars.AppendChild(argvd);
+			InOutFixSemanticsAndNames(argvd, stage, shaderFormat);
 		}
 		else
 		{
@@ -2324,6 +2406,42 @@ static void GLSLUnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat
 
 			vds->PrependChild(argvd);
 		}
+	}
+
+	if (shaderFormat == OSF_HLSL_SM4)
+	{
+		// sort the arguments by type (in,out), then by class (normal,special), then by semantic
+		assert(dyn_cast<const VarDecl>(F->GetFirstArg()));
+		assert(dyn_cast<const VarDecl>(F->GetLastArg()));
+		SortNodes(F->GetFirstArg(), F->GetLastArg(), [](const ASTNode* a, const ASTNode* b) -> int
+		{
+			auto* vda = dyn_cast<const VarDecl>(a);
+			auto* vdb = dyn_cast<const VarDecl>(b);
+			bool a_out = !!(vda->flags & VarDecl::ATTR_Out);
+			bool b_out = !!(vdb->flags & VarDecl::ATTR_Out);
+			if (a_out != b_out)
+				return a_out - b_out;
+			bool a_spec = vda->semanticName == "SV_POSITION"
+				|| vda->semanticName == "SV_TARGET"
+				|| vda->semanticName == "SV_DEPTH";
+			bool b_spec = vdb->semanticName == "SV_POSITION"
+				|| vdb->semanticName == "SV_TARGET"
+				|| vdb->semanticName == "SV_DEPTH";
+			if (a_spec != b_spec)
+				return a_spec - b_spec;
+			int name_diff = vda->semanticName.compare(vdb->semanticName);
+			if (name_diff)
+				return name_diff;
+			int a_idx = vda->semanticIndex >= 0 ? vda->semanticIndex : 0;
+			int b_idx = vdb->semanticIndex >= 0 ? vdb->semanticIndex : 0;
+			return a_idx - b_idx;
+		});
+	//	F->Dump(FILEStream(stderr),0);
+	}
+	if (shaderFormat == OSF_GLSL_140 || shaderFormat == OSF_GLSL_ES_100)
+	{
+		while (F->GetFirstArg())
+			ast.globalVars.AppendChild(F->GetFirstArg());
 	}
 }
 
@@ -3610,22 +3728,18 @@ bool Compiler::CompileFile(const char* name, const char* code)
 
 		// output-specific transformations (emulation/feature mapping)
 		PadAPI(p.ast, diag, outputFmt);
+		UnpackEntryPoint(p.ast, stage, outputFmt);
 		if (outputFmt != OSF_HLSL_SM3)
 		{
 			SplitTexSampleArgs(p.ast, diag, outputFmt);
 		}
 		switch (outputFmt)
 		{
-		case OSF_HLSL_SM3:
-		case OSF_HLSL_SM4:
-			HLSLAdjustEntryPoint(p.ast, stage, outputFmt);
-			break;
 		case OSF_GLSL_140:
 		case OSF_GLSL_ES_100:
 			UnpackMatrixSwizzle(p.ast);
 			RemoveVM1AndM1DTypes(p.ast);
 			RemoveArraysOfArrays(p.ast);
-			GLSLUnpackEntryPoint(p.ast, stage, outputFmt);
 			GLSLConvert(p.ast, diag, outputFmt);
 			break;
 		}

@@ -6,6 +6,8 @@ OBJS := $(patsubst %,obj/%.obj,$(BASEOBJNAMES))
 tools: sltest.exe hlsloptconv.exe
 test: sltest.exe
 	sltest
+test2: sltest.exe
+	sltest -t tests/200-vars.hlsl
 test4: sltest.exe
 	sltest -t tests/400-func.hlsl
 test5: sltest.exe

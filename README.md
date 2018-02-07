@@ -31,7 +31,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * Array emulation for GLSL ES 1.0
 * Geometry shader support
 * Validation of certain syntax constructs such as register notation
-* Full semantic remapping support for HLSL 4.0
 
 #### Other differences from HLSL 3.0:
 

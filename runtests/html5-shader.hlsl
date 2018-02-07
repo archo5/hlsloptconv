@@ -13,7 +13,7 @@ static const float4 verts[3] =
 	3, -1, 0.5f, 1,
 	-1, 3, 0.5f, 1,
 };
-void main(uint vtxid : SV_VertexID, out float2 otex : TEXCOORD0, out float4 opos : POSITION0)
+void main(uint vtxid : SV_VertexID, out float4 opos : POSITION0 /* sort test */, out float2 otex : TEXCOORD0)
 {
 	opos = verts[vtxid];
 	otex = (opos.xy * 0.5 + 0.5) * iResolution;
