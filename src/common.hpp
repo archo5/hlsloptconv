@@ -93,15 +93,6 @@ struct Location
 };
 
 
-// exceptions
-struct NonFatalErrors {};
-struct FatalError
-{
-	std::string msg;
-	Location loc;
-};
-
-
 struct Diagnostic
 {
 	Diagnostic(OutStream* eos, const char* src);
