@@ -35,63 +35,78 @@ struct Parser
 			reinterpret_cast<char*>(i01),
 			reinterpret_cast<char*>(i01 + 2));
 	}
-	void ParseCode(const char* text);
-	void ParseTokens(const char* text, uint32_t source);
-	void PreprocessTokens(uint32_t source);
+	bool ParseCode(const char* text);
+	bool ParseTokens(const char* text, uint32_t source);
+	bool PreprocessTokens(uint32_t source);
 
 	SLToken RequestIntBoolToken(bool v);
 	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
 
-	ASTType* GetType(const std::string& name);
 	ASTType* ParseType(bool isFuncRet = false);
 	ASTType* FindMemberType(ASTType* t, const std::string& name, uint32_t& memberID, int& swizzleComp);
 	VoidExpr* CreateVoidExpr(); // for errors
-	void ParseSemantic(std::string& name, int& index);
-	void ParseArgList(ASTNode* out);
+	bool ParseSemantic(std::string& name, int& index);
+	bool ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTType** equalArgs, bool err);
 	void FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc);
-	void FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
+	bool FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);
 	ASTType* Promote(ASTType* a, ASTType* b);
 	ASTType* FindCommonOpType(ASTType* rt0, ASTType* rt1);
 	bool CanCast(ASTType* from, ASTType* to, bool castExplicitly);
-	void ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos);
-	void ParseInitList(ASTNode* out, int numItems, bool ctor);
+	bool ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos);
+	bool ParseInitList(ASTNode* out, int numItems, bool ctor);
 	Stmt* ParseStatement();
 	Stmt* ParseExprDeclStatement();
 	bool TryCastExprTo(Expr* expr, ASTType* tty, const char* what);
 	int32_t ParseRegister(char ch, bool comp, int32_t limit);
-	void ParseDecl();
+	bool ParseDecl();
 
 	const SLToken& T() const { return tokens[curToken]; }
 	SLTokenType TT() const { return tokens[curToken].type; }
 
-	void FWD(std::vector<SLToken>& arr, size_t& i)
+	bool FWD(std::vector<SLToken>& arr, size_t& i)
 	{
 		if (++i >= arr.size())
-			EmitFatalError("unexpected end of file", false);
+		{
+			EmitError("unexpected end of file", false);
+			diag.hasFatalErrors = true;
+			return false;
+		}
+		return true;
 	}
-	void FWD() { FWD(tokens, curToken); }
+	bool FWD() { return FWD(tokens, curToken); }
 
-	void PPFWD(std::vector<SLToken>& arr, size_t& i)
+	bool PPFWD(std::vector<SLToken>& arr, size_t& i)
 	{
 		FWD(arr, i);
 		if (arr[i - 1].logicalLine != arr[i].logicalLine)
-			EmitFatalError("unexpected end of preprocessor directive", arr[i - 1].loc);
+		{
+			EmitError("unexpected end of preprocessor directive", arr[i - 1].loc);
+			diag.hasFatalErrors = true;
+			return false;
+		}
+		return true;
 	}
-	void PPFWD() { PPFWD(tokens, curToken); }
+	bool PPFWD() { return PPFWD(tokens, curToken); }
 
-	void EXPECT(const SLToken& t, SLTokenType tt)
+	bool EXPECT(const SLToken& t, SLTokenType tt)
 	{
 		if (t.type != tt)
-			EmitFatalError("expected '" + TokenTypeToString(tt) + "', got '" + TokenToString(t) + "'");
+		{
+			EmitError("expected '" + TokenTypeToString(tt) + "', got '" + TokenToString(t) + "'");
+			diag.hasFatalErrors = true;
+			return false;
+		}
+		return true;
 	}
-	void EXPECT(SLTokenType tt) { EXPECT(T(), tt); }
+	bool EXPECT(SLTokenType tt) { return EXPECT(T(), tt); }
 
 	void EXPECTERR(const SLToken& t, const std::string& exp)
 	{
-		EmitFatalError("expected " + exp + ", got '" + TokenToString(t) + "'");
+		EmitError("expected " + exp + ", got '" + TokenToString(t) + "'");
+		diag.hasFatalErrors = true;
 	}
 	void EXPECTERR(const std::string& exp) { EXPECTERR(T(), exp); }
 
@@ -105,11 +120,13 @@ struct Parser
 	}
 	void EmitFatalError(const std::string& msg, const Location& loc)
 	{
-		diag.EmitFatalError(msg, loc);
+		diag.EmitError(msg, loc);
+		diag.hasFatalErrors = true;
 	}
 	void EmitFatalError(const std::string& msg, bool withLoc = true)
 	{
-		diag.EmitFatalError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
+		diag.EmitError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
+		diag.hasFatalErrors = true;
 	}
 
 #define SPLITSCORE_RTLASSOC 0x80

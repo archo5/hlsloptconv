@@ -222,19 +222,6 @@ void Diagnostic::EmitError(const std::string& msg, const Location& loc)
 	PrintError(msg, loc);
 }
 
-void Diagnostic::EmitFatalError(const std::string& msg, const Location& loc)
-{
-	throw FatalError { msg, loc };
-}
-
-void Diagnostic::CheckNonFatalErrors()
-{
-	if (hasErrors)
-	{
-		throw NonFatalErrors();
-	}
-}
-
 
 uint8_t InvertVecSwizzleMask(uint8_t mask, int ncomp)
 {

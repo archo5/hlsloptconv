@@ -258,7 +258,7 @@ std::string TokenTypeToString(SLTokenType tt)
 	const char* str;
 	switch (tt)
 	{
-	case STT_NULL:            str = "<NULL>"; break;
+	case STT_NULL:            str = "<END>"; break;
 	case STT_LParen:          str = "("; break;
 	case STT_RParen:          str = ")"; break;
 	case STT_LBrace:          str = "{"; break;
@@ -1420,8 +1420,10 @@ void AST::MarkUsed(Diagnostic& diag)
 				(vd->flags & VarDecl::ATTR_Out) &&
 				(vd->type->kind != ASTType::Vector || vd->type->sizeX != 4))
 			{
-				diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
+				diag.EmitError("vertex shader POSITION output must be a 4-component vector",
 					vd->loc);
+				diag.hasFatalErrors = true;
+				return;
 			}
 		}
 	}
@@ -1429,8 +1431,10 @@ void AST::MarkUsed(Diagnostic& diag)
 		entryPoint->returnSemanticName == "POSITION" &&
 		(entryPoint->returnType->kind != ASTType::Vector || entryPoint->returnType->sizeX != 4))
 	{
-		diag.EmitFatalError("vertex shader POSITION output must be a 4-component vector",
+		diag.EmitError("vertex shader POSITION output must be a 4-component vector",
 			entryPoint->loc);
+		diag.hasFatalErrors = true;
+		return;
 	}
 
 	UsedFuncMarker ufm(entryPoint);
@@ -1480,8 +1484,6 @@ void VariableAccessValidator::RunOnAST(const AST& ast)
 			}
 		}
 	}
-
-	diag.CheckNonFatalErrors();
 }
 
 void VariableAccessValidator::ProcessReadExpr(const Expr* node)
@@ -1501,6 +1503,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	else if (auto* idop = dyn_cast<const IncDecOpExpr>(node))
 	{
 		ProcessReadExpr(idop->GetSource());
+		if (diag.hasFatalErrors)
+			return;
 		ProcessWriteExpr(idop->GetSource());
 		return;
 	}
@@ -1514,6 +1518,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 			{
 				if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_In)
 					ProcessReadExpr(arg->ToExpr());
+				if (diag.hasFatalErrors)
+					return;
 			}
 
 			for (ASTNode *arg = op->GetFirstArg(), *argdecl = rf->GetFirstArg();
@@ -1522,6 +1528,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 			{
 				if (argdecl->ToVarDecl()->flags & VarDecl::ATTR_Out)
 					ProcessWriteExpr(arg->ToExpr());
+				if (diag.hasFatalErrors)
+					return;
 			}
 			return;
 		}
@@ -1529,7 +1537,11 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		{
 			// TODO write-out intrinsics
 			for (ASTNode* arg = op->firstChild; arg; arg = arg->next)
+			{
 				ProcessReadExpr(arg->ToExpr());
+				if (diag.hasFatalErrors)
+					return;
+			}
 			return;
 		}
 	}
@@ -1543,12 +1555,18 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		if (binop->opType == STT_OP_Assign)
 		{
 			ProcessReadExpr(binop->GetRgt());
+			if (diag.hasFatalErrors)
+				return;
 			ProcessWriteExpr(binop->GetLft());
+			if (diag.hasFatalErrors)
+				return;
 			ProcessReadExpr(binop->GetLft());
 		}
 		else
 		{
 			ProcessReadExpr(binop->GetLft());
+			if (diag.hasFatalErrors)
+				return;
 			ProcessReadExpr(binop->GetRgt());
 		}
 		return;
@@ -1556,7 +1574,11 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	else if (auto* tnop = dyn_cast<const TernaryOpExpr>(node))
 	{
 		ProcessReadExpr(tnop->GetCond());
+		if (diag.hasFatalErrors)
+			return;
 		ProcessReadExpr(tnop->GetTrueExpr());
+		if (diag.hasFatalErrors)
+			return;
 		ProcessReadExpr(tnop->GetFalseExpr());
 		return;
 	}
@@ -1570,6 +1592,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		for (ASTNode* ch = ile->firstChild; ch; ch = ch->next)
 		{
 			ProcessReadExpr(ch->ToExpr());
+			if (diag.hasFatalErrors)
+				return;
 		}
 		return;
 	}
@@ -1584,8 +1608,14 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		}
 
 		for (auto* sve : revTrail)
+		{
 			if (auto* idxe = dyn_cast<const IndexExpr>(sve))
+			{
 				ProcessReadExpr(idxe->GetIndex());
+				if (diag.hasFatalErrors)
+					return;
+			}
+		}
 
 		if (auto* dre = dyn_cast<const DeclRefExpr>(exprIt))
 		{
@@ -1677,7 +1707,7 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 		return;
 	}
 
-	diag.EmitFatalError(std::string("UNHANDLED READ EXPR: ") + node->GetNodeTypeName(), node->loc);
+	assert(!"unhandled read expr type");
 }
 
 void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
@@ -1696,7 +1726,8 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		{
 			if (dre->decl->flags & VarDecl::ATTR_Const)
 			{
-				diag.EmitFatalError("cannot write to constant value", dre->loc);
+				diag.EmitError("cannot write to constant value", dre->loc);
+				diag.hasFatalErrors = true;
 				return;
 			}
 
@@ -1769,14 +1800,17 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		}
 		else
 		{
-			diag.EmitFatalError("cannot write to temporary value", exprIt->loc);
+			diag.EmitError("cannot write to temporary value", exprIt->loc);
+			diag.hasFatalErrors = true;
+			return;
 		}
 	}
 	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 	{
 		if (dre->decl->flags & VarDecl::ATTR_Const)
 		{
-			diag.EmitFatalError("cannot write to constant value", dre->loc);
+			diag.EmitError("cannot write to constant value", dre->loc);
+			diag.hasFatalErrors = true;
 			return;
 		}
 
@@ -1786,7 +1820,8 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 		return;
 	}
 
-	diag.EmitFatalError("cannot write to read-only expression", node->loc);
+	diag.EmitError("cannot write to read-only expression", node->loc);
+	diag.hasFatalErrors = true;
 }
 
 bool VariableAccessValidator::ProcessStmt(const Stmt* node)
@@ -1887,8 +1922,7 @@ bool VariableAccessValidator::ProcessStmt(const Stmt* node)
 		return false;
 	}
 
-	diag.EmitFatalError("(internal) statement "
-		+ std::string(node->GetNodeTypeName()) + " not processed", node->loc);
+	assert(!"unhandled statement type");
 	return false;
 }
 
@@ -2027,7 +2061,6 @@ struct ContentValidator : ASTWalker<ContentValidator>
 	void RunOnAST(AST& ast)
 	{
 		VisitAST(ast);
-		diag.CheckNonFatalErrors();
 	}
 	void PreVisit(ASTNode* node)
 	{
@@ -3673,121 +3706,116 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 bool Compiler::CompileFile(const char* name, const char* code)
 {
 	Diagnostic diag(errorOutputStream, name);
-	try
+	Parser p(diag, stage, entryPoint, loadIncludeFilePFN, loadIncludeFileUD);
+
+	std::string codeWithDefines;
+	if (defines)
 	{
-		Parser p(diag, stage, entryPoint, loadIncludeFilePFN, loadIncludeFileUD);
-
-		std::string codeWithDefines;
-		if (defines)
+		ShaderMacro* d = defines;
+		codeWithDefines += "#line 1 \"<arguments>\"\n";
+		while (d->name)
 		{
-			ShaderMacro* d = defines;
-			codeWithDefines += "#line 1 \"<arguments>\"\n";
-			while (d->name)
+			codeWithDefines += "#define ";
+			size_t pos = codeWithDefines.size();
+			codeWithDefines += d->name;
+			if (const char* eqsp = strchr(d->name, '='))
 			{
-				codeWithDefines += "#define ";
-				size_t pos = codeWithDefines.size();
-				codeWithDefines += d->name;
-				if (const char* eqsp = strchr(d->name, '='))
-				{
-					codeWithDefines[pos + (eqsp - d->name)] = ' ';
-				}
-				if (d->value)
-				{
-					codeWithDefines += " ";
-					codeWithDefines += d->value;
-				}
-				codeWithDefines += "\n";
-				d++;
+				codeWithDefines[pos + (eqsp - d->name)] = ' ';
 			}
-			codeWithDefines += "#line 1 \"";
-			codeWithDefines += name;
-			codeWithDefines += "\"\n";
-			codeWithDefines += code;
-
-			code = codeWithDefines.c_str();
+			if (d->value)
+			{
+				codeWithDefines += " ";
+				codeWithDefines += d->value;
+			}
+			codeWithDefines += "\n";
+			d++;
 		}
-	//	FILEStream(stderr) << code;
+		codeWithDefines += "#line 1 \"";
+		codeWithDefines += name;
+		codeWithDefines += "\"\n";
+		codeWithDefines += code;
 
-		p.ParseCode(code);
-		p.ast.MarkUsed(diag);
+		code = codeWithDefines.c_str();
+	}
+//	FILEStream(stderr) << code;
 
-		if (ASTDumpStream)
-		{
-			*ASTDumpStream << "AST before optimization:\n";
-			p.ast.Dump(*ASTDumpStream);
-			ASTDumpStream->Flush();
-		}
+	if (!p.ParseCode(code))
+		return false;
+	p.ast.MarkUsed(diag);
+	if (diag.hasErrors)
+		return false;
 
-		// ignore unused functions entirely
-		RemoveUnusedFunctions().RunOnAST(p.ast);
+	if (ASTDumpStream)
+	{
+		*ASTDumpStream << "AST before optimization:\n";
+		p.ast.Dump(*ASTDumpStream);
+		ASTDumpStream->Flush();
+	}
 
-		// validate all
-		VariableAccessValidator(diag).RunOnAST(p.ast);
-		ContentValidator(diag, outputFmt).RunOnAST(p.ast);
+	// ignore unused functions entirely
+	RemoveUnusedFunctions().RunOnAST(p.ast);
 
+	// validate all
+	VariableAccessValidator(diag).RunOnAST(p.ast);
+	if (diag.hasErrors)
+		return false;
+	ContentValidator(diag, outputFmt).RunOnAST(p.ast);
+	if (diag.hasErrors)
+		return false;
 
-		// output-specific transformations (emulation/feature mapping)
-		PadAPI(p.ast, diag, outputFmt);
-		UnpackEntryPoint(p.ast, stage, outputFmt);
-		if (outputFmt != OSF_HLSL_SM3)
-		{
-			SplitTexSampleArgs(p.ast, diag, outputFmt);
-		}
+	// output-specific transformations (emulation/feature mapping)
+	PadAPI(p.ast, diag, outputFmt);
+	UnpackEntryPoint(p.ast, stage, outputFmt);
+	if (outputFmt != OSF_HLSL_SM3)
+	{
+		SplitTexSampleArgs(p.ast, diag, outputFmt);
+	}
+	switch (outputFmt)
+	{
+	case OSF_GLSL_140:
+	case OSF_GLSL_ES_100:
+		UnpackMatrixSwizzle(p.ast);
+		RemoveVM1AndM1DTypes(p.ast);
+		RemoveArraysOfArrays(p.ast);
+		GLSLConvert(p.ast, diag, outputFmt);
+		break;
+	}
+
+	if (diag.hasErrors)
+		return false;
+
+	// optimizations
+	ConstantPropagation().RunOnAST(p.ast);
+	MarkUnusedVariables().RunOnAST(p.ast);
+	RemoveUnusedVariables().RunOnAST(p.ast);
+
+	AssignVarDeclNames().VisitAST(p.ast);
+
+	if (ASTDumpStream)
+	{
+		*ASTDumpStream << "AST after optimization:\n";
+		p.ast.Dump(*ASTDumpStream);
+		ASTDumpStream->Flush();
+	}
+
+	if (codeOutputStream)
+	{
 		switch (outputFmt)
 		{
+		case OSF_HLSL_SM3:
+			GenerateHLSL_SM3(p.ast, *codeOutputStream);
+			break;
+		case OSF_HLSL_SM4:
+			GenerateHLSL_SM4(p.ast, *codeOutputStream);
+			break;
 		case OSF_GLSL_140:
+			GenerateGLSL_140(p.ast, *codeOutputStream);
+			break;
 		case OSF_GLSL_ES_100:
-			UnpackMatrixSwizzle(p.ast);
-			RemoveVM1AndM1DTypes(p.ast);
-			RemoveArraysOfArrays(p.ast);
-			GLSLConvert(p.ast, diag, outputFmt);
+			GenerateGLSL_ES_100(p.ast, *codeOutputStream);
 			break;
 		}
-
-		diag.CheckNonFatalErrors();
-
-		// optimizations
-		ConstantPropagation().RunOnAST(p.ast);
-		MarkUnusedVariables().RunOnAST(p.ast);
-		RemoveUnusedVariables().RunOnAST(p.ast);
-
-		AssignVarDeclNames().VisitAST(p.ast);
-
-		if (ASTDumpStream)
-		{
-			*ASTDumpStream << "AST after optimization:\n";
-			p.ast.Dump(*ASTDumpStream);
-			ASTDumpStream->Flush();
-		}
-
-		if (codeOutputStream)
-		{
-			switch (outputFmt)
-			{
-			case OSF_HLSL_SM3:
-				GenerateHLSL_SM3(p.ast, *codeOutputStream);
-				break;
-			case OSF_HLSL_SM4:
-				GenerateHLSL_SM4(p.ast, *codeOutputStream);
-				break;
-			case OSF_GLSL_140:
-				GenerateGLSL_140(p.ast, *codeOutputStream);
-				break;
-			case OSF_GLSL_ES_100:
-				GenerateGLSL_ES_100(p.ast, *codeOutputStream);
-				break;
-			}
-		}
-		return true;
 	}
-	catch (FatalError err)
-	{
-		diag.PrintError(err.msg, err.loc);
-	}
-	catch (NonFatalErrors)
-	{
-		// do nothing, errors have already been printed
-	}
-	return false;
+	return true;
 }
 

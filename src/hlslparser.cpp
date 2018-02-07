@@ -221,10 +221,12 @@ static const OperatorInfo g_allOperatorsResolveOrder[] =
 	{ STT_OP_Ternary, "?" },
 };
 
-void Parser::ParseCode(const char* text)
+bool Parser::ParseCode(const char* text)
 {
-	ParseTokens(text, 0);
-	PreprocessTokens(0);
+	if (!ParseTokens(text, 0))
+		return false;
+	if (!PreprocessTokens(0))
+		return false;
 
 //	FILEStream err(stderr);
 //	for (size_t i = 0; i < tokens.size(); ++i)
@@ -232,23 +234,26 @@ void Parser::ParseCode(const char* text)
 //	err << "\n";
 
 	ast.InitBasicTypes();
-	while (curToken < tokens.size())
-		ParseDecl();
-	diag.CheckNonFatalErrors();
+	while (curToken < tokens.size() && ParseDecl()) ;
+	if (diag.hasErrors || diag.hasFatalErrors)
+		return false;
 
 	if (entryPointCount == 0)
 	{
-		diag.EmitFatalError("entry point '" + entryPointName + "' was not found",
+		diag.EmitError("entry point '" + entryPointName + "' was not found",
 			Location::BAD());
+		return false;
 	}
 	if (entryPointCount > 1)
 	{
-		diag.EmitFatalError("too many functions named '" + entryPointName + "', expected one entry point",
+		diag.EmitError("too many functions named '" + entryPointName + "', expected one entry point",
 			Location::BAD());
+		return false;
 	}
+	return true;
 }
 
-void Parser::ParseTokens(const char* text, uint32_t source)
+bool Parser::ParseTokens(const char* text, uint32_t source)
 {
 	uint32_t line = 1;
 	const char* lineStart = text;
@@ -427,9 +432,11 @@ void Parser::ParseTokens(const char* text, uint32_t source)
 			const char* numStart = text;
 			switch (util_strtonum(&text, &outi, &outf))
 			{
-			case 0: EmitFatalError("failed to parse number", LOC(numStart));
+			case 0:
+				EmitError("failed to parse number", LOC(numStart));
+				return false;
 			case 1:
-				valInt32 = outi;
+				valInt32 = (int32_t) outi;
 				tokens.push_back({ STT_Int32Lit, TLOC(numStart), uint32_t(tokenData.size()) });
 				tokenData.insert(tokenData.end(),
 					reinterpret_cast<char*>(&valInt32),
@@ -463,10 +470,12 @@ void Parser::ParseTokens(const char* text, uint32_t source)
 		notThisOper:;
 		}
 
-		EmitFatalError("unexpected character: '" + std::string(text, 1) + "'", LOC(text));
+		EmitError("unexpected character: '" + std::string(text, 1) + "'", LOC(text));
+		return false;
 
 	continueParsing:;
 	}
+	return true;
 }
 
 
@@ -477,7 +486,7 @@ struct PPTokenRange
 	SLToken* end;
 };
 
-void Parser::PreprocessTokens(uint32_t source)
+bool Parser::PreprocessTokens(uint32_t source)
 {
 	std::vector<SLToken> ppTokens, replacedTokens, tokensToReplace;
 	ppTokens.reserve(tokens.size());
@@ -501,9 +510,10 @@ void Parser::PreprocessTokens(uint32_t source)
 				{
 					// function-style macro
 					size_t start = i;
-					FWD(arr, i);
-					EXPECT(arr[i], STT_LParen);
-					FWD(arr, i);
+					if (!FWD(arr, i) ||
+						!EXPECT(arr[i], STT_LParen) ||
+						!FWD(arr, i))
+						goto notfound;
 
 					// skip braces
 					std::vector<SLTokenType> braceStack;
@@ -518,9 +528,15 @@ void Parser::PreprocessTokens(uint32_t source)
 						else if (tt == STT_RParen || tt == STT_RBrace)
 						{
 							if (braceStack.empty())
+							{
 								EmitFatalError("brace mismatch (too many endings)", arr[i].loc);
+								goto notfound;
+							}
 							if (braceStack.back() != tt)
+							{
 								EmitFatalError("brace mismatch (started with one type, ended with another)", arr[i].loc);
+								goto notfound;
+							}
 							braceStack.pop_back();
 						}
 
@@ -533,6 +549,7 @@ void Parser::PreprocessTokens(uint32_t source)
 						if (i < arr.size())
 							loc = arr[i].loc;
 						EmitFatalError("brace mismatch (too many beginnings)", loc);
+						goto notfound;
 					}
 
 					return { it, &arr[start], arr.data() + i };
@@ -543,9 +560,10 @@ void Parser::PreprocessTokens(uint32_t source)
 				}
 			}
 		}
+notfound:
 		return { macros.end(), nullptr, nullptr };
 	};
-	auto ReplaceTokenRangeTo = [this](std::vector<SLToken>& out, PPTokenRange range)
+	auto ReplaceTokenRangeTo = [this](std::vector<SLToken>& out, PPTokenRange range) -> bool
 	{
 		PreprocMacro& M = range.it->second;
 		if (M.isFunc)
@@ -593,7 +611,9 @@ void Parser::PreprocessTokens(uint32_t source)
 
 			if (argRanges.size() != M.args.size())
 			{
-				EmitFatalError("incorrect number of arguments passed to macro");
+				EmitError("incorrect number of arguments passed to macro");
+				diag.hasFatalErrors = true;
+				return false;
 			}
 
 			for (size_t tid = 0; tid < M.tokens.size(); ++tid)
@@ -634,6 +654,7 @@ void Parser::PreprocessTokens(uint32_t source)
 		for (auto& t : out)
 			if (t.type == STT_Ident && TokenStringData(t) == range.it->first)
 				t.type = STT_IdentPPNoReplace;
+		return true;
 	};
 	auto EvaluateCondition = [this, &tokensToReplace, &replacedTokens,
 		&FindTokenReplaceRange, &ReplaceTokenRangeTo]() -> bool
@@ -667,7 +688,8 @@ void Parser::PreprocessTokens(uint32_t source)
 				}
 				else
 				{
-					EmitFatalError("expected 'defined(<identifier>)'", tokens[i].loc);
+					EmitError("expected 'defined(<identifier>)'", tokens[i].loc);
+					diag.hasFatalErrors = true;
 				}
 			}
 			else
@@ -682,13 +704,16 @@ void Parser::PreprocessTokens(uint32_t source)
 			for (size_t i = 0; i < tokensToReplace.size(); ++i)
 			{
 				range = FindTokenReplaceRange(tokensToReplace, i);
+				if (diag.hasFatalErrors)
+					return false;
 				if (range.begin != range.end)
 					break;
 			}
 			if (range.begin == range.end)
 				break;
 
-			ReplaceTokenRangeTo(replacedTokens, range);
+			if (!ReplaceTokenRangeTo(replacedTokens, range))
+				return 0;
 
 			tokensToReplace.clear();
 			std::swap(tokensToReplace, replacedTokens);
@@ -718,14 +743,18 @@ void Parser::PreprocessTokens(uint32_t source)
 				continue;
 			}
 
-			PPFWD();
+			if (!PPFWD())
+				return false;
 			if (TT() != STT_Ident && TT() != STT_KW_If && TT() != STT_KW_Else)
+			{
 				EXPECTERR("preprocessor command identifier");
+				return false;
+			}
 			std::string cmd = TokenToString();
 			if (cmd == "define")
 			{
-				PPFWD();
-				EXPECT(STT_Ident);
+				if (!PPFWD() || !EXPECT(STT_Ident))
+					return false;
 				std::string name = TokenStringData();
 				uint32_t logicalLine = T().logicalLine;
 
@@ -735,17 +764,20 @@ void Parser::PreprocessTokens(uint32_t source)
 				{
 					// function-style macro, parse arguments
 					macro.isFunc = true;
-					PPFWD();
+					if (!PPFWD())
+						return false;
 
 					while (TT() != STT_RParen)
 					{
-						EXPECT(STT_Ident);
+						if (!EXPECT(STT_Ident))
+							return false;
 						macro.args.push_back(TokenStringData());
-						PPFWD();
+						if (!PPFWD())
+							return false;
 						if (TT() != STT_RParen)
 						{
-							EXPECT(STT_Comma);
-							PPFWD();
+							if (!EXPECT(STT_Comma) || !PPFWD())
+								return false;
 						}
 					}
 
@@ -763,8 +795,8 @@ void Parser::PreprocessTokens(uint32_t source)
 			}
 			else if (cmd == "undef")
 			{
-				PPFWD();
-				EXPECT(STT_Ident);
+				if (!PPFWD() || !EXPECT(STT_Ident))
+					return false;
 				std::string name = TokenStringData();
 
 				if (macros.erase(name) == 0)
@@ -782,6 +814,8 @@ void Parser::PreprocessTokens(uint32_t source)
 				else
 				{
 					bool cond = EvaluateCondition();
+					if (diag.hasFatalErrors)
+						return false;
 					ppOutputEnabled.push_back(cond ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
 				}
 			}
@@ -789,11 +823,13 @@ void Parser::PreprocessTokens(uint32_t source)
 			{
 				if (ppOutputEnabled.empty())
 				{
-					EmitFatalError("#elif not inside preprocessor condition", loc);
+					EmitError("#elif not inside preprocessor condition", loc);
+					return false;
 				}
 				else if (ppOutputEnabled.back() & PPOFLAG_HASELSE)
 				{
-					EmitFatalError("#elif after #else in preprocessor condition", loc);
+					EmitError("#elif after #else in preprocessor condition", loc);
+					return false;
 				}
 				else if (ppOutputEnabled.back() & PPOFLAG_HASSUCC)
 				{
@@ -803,11 +839,13 @@ void Parser::PreprocessTokens(uint32_t source)
 				{
 					ppOutputEnabled.back() = PPOFLAG_ENABLED | PPOFLAG_HASSUCC;
 				}
+				if (diag.hasFatalErrors)
+					return false;
 			}
 			else if (cmd == "ifdef")
 			{
-				PPFWD();
-				EXPECT(STT_Ident);
+				if (!PPFWD() || !EXPECT(STT_Ident))
+					return false;
 				std::string name = TokenStringData();
 
 				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
@@ -823,8 +861,8 @@ void Parser::PreprocessTokens(uint32_t source)
 			}
 			else if (cmd == "ifndef")
 			{
-				PPFWD();
-				EXPECT(STT_Ident);
+				if (!PPFWD() || !EXPECT(STT_Ident))
+					return false;
 				std::string name = TokenStringData();
 
 				ppOutputEnabled.push_back(macros.find(name) == macros.end() ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
@@ -833,11 +871,13 @@ void Parser::PreprocessTokens(uint32_t source)
 			{
 				if (ppOutputEnabled.empty())
 				{
-					EmitFatalError("#else not inside preprocessor condition", loc);
+					EmitError("#else not inside preprocessor condition", loc);
+					return false;
 				}
 				else if (ppOutputEnabled.back() & PPOFLAG_HASELSE)
 				{
-					EmitFatalError("#else repeated in preprocessor condition", loc);
+					EmitError("#else repeated in preprocessor condition", loc);
+					return false;
 				}
 				else if (ppOutputEnabled.back() & PPOFLAG_HASSUCC)
 				{
@@ -852,7 +892,8 @@ void Parser::PreprocessTokens(uint32_t source)
 			{
 				if (ppOutputEnabled.empty())
 				{
-					EmitFatalError("#endif not inside preprocessor condition", loc);
+					EmitError("#endif not inside preprocessor condition", loc);
+					return false;
 				}
 				else
 				{
@@ -861,18 +902,20 @@ void Parser::PreprocessTokens(uint32_t source)
 			}
 			else if (cmd == "error")
 			{
-				PPFWD();
-				EXPECT(STT_StrLit);
+				if (!PPFWD() || !EXPECT(STT_StrLit))
+					return false;
 
 				if (ppOutputEnabled.empty() || (ppOutputEnabled.back() & PPOFLAG_ENABLED))
 				{
-					EmitFatalError(TokenStringData(), loc);
+					EmitError(TokenStringData(), loc);
+					return false;
 				}
 			}
 			else if (cmd == "line")
 			{
-				PPFWD();
-				EXPECT(STT_Int32Lit);
+				if (!PPFWD() || !EXPECT(STT_Int32Lit))
+					return false;
+
 				lineOffset = TokenInt32Data() - (T().loc.line + 1);
 
 				if (curToken + 1 < tokens.size() &&
@@ -885,14 +928,15 @@ void Parser::PreprocessTokens(uint32_t source)
 			}
 			else if (cmd == "include")
 			{
-				PPFWD();
-				EXPECT(STT_StrLit);
+				if (!PPFWD() || !EXPECT(STT_StrLit))
+					return false;
 
 				std::string file = TokenStringData();
 				if (curToken + 1 < tokens.size() &&
 					tokens[curToken].logicalLine == tokens[curToken + 1].logicalLine)
 				{
-					EmitFatalError("unexpected tokens on the same line as #include");
+					EmitError("unexpected tokens on the same line as #include");
+					return false;
 				}
 
 				if (ppOutputEnabled.empty() || (ppOutputEnabled.back() & PPOFLAG_ENABLED))
@@ -900,7 +944,8 @@ void Parser::PreprocessTokens(uint32_t source)
 					char* buf = NULL;
 					if (loadIncludeFilePFN == nullptr)
 					{
-						EmitFatalError("#include not supported for this build", loc);
+						EmitError("#include not supported for this build", loc);
+						return false;
 					}
 					else if (loadIncludeFilePFN(file.c_str(), diag.sourceFiles[source].c_str(), &buf, loadIncludeFileUD) && buf)
 					{
@@ -912,8 +957,10 @@ void Parser::PreprocessTokens(uint32_t source)
 						std::swap(tmpCurToken, curToken);
 
 						uint32_t subsrc = diag.GetSourceID(file);
-						ParseTokens(buf, subsrc);
-						PreprocessTokens(subsrc);
+						if (!ParseTokens(buf, subsrc))
+							return false;
+						if (!PreprocessTokens(subsrc))
+							return false;
 
 						std::swap(tmpTokens, tokens);
 						std::swap(tmpCurToken, curToken);
@@ -926,13 +973,15 @@ void Parser::PreprocessTokens(uint32_t source)
 					}
 					else
 					{
-						EmitFatalError("failed to include '" + file + "'", loc);
+						EmitError("failed to include '" + file + "'", loc);
+						return false;
 					}
 				}
 			}
 			else
 			{
-				EmitFatalError("unknown preprocessor directive: " + cmd, loc);
+				EmitError("unknown preprocessor directive: " + cmd, loc);
+				return false;
 			}
 		}
 		else if (ppOutputEnabled.empty() || (ppOutputEnabled.back() & PPOFLAG_ENABLED))
@@ -940,12 +989,15 @@ void Parser::PreprocessTokens(uint32_t source)
 			if (TT() == STT_Ident)
 			{
 				auto range = FindTokenReplaceRange(tokens, curToken);
+				if (diag.hasFatalErrors)
+					return false;
 				if (range.begin != range.end)
 				{
 					size_t endPos = range.end - tokens.data();
 					while (range.begin != range.end)
 					{
-						ReplaceTokenRangeTo(replacedTokens, range);
+						if (!ReplaceTokenRangeTo(replacedTokens, range))
+							return false;
 
 						tokensToReplace.clear();
 						std::swap(tokensToReplace, replacedTokens);
@@ -955,6 +1007,8 @@ void Parser::PreprocessTokens(uint32_t source)
 						for (size_t i = 0; i < tokensToReplace.size(); ++i)
 						{
 							range = FindTokenReplaceRange(tokensToReplace, i);
+							if (diag.hasFatalErrors)
+								return false;
 							if (range.begin != range.end)
 								break;
 						}
@@ -992,6 +1046,7 @@ void Parser::PreprocessTokens(uint32_t source)
 	// replace token stream, reset iterator
 	std::swap(tokens, ppTokens);
 	curToken = 0;
+	return true;
 }
 
 
@@ -1005,13 +1060,16 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 	size_t bestSplit;
 	int bestScore;
 	size_t curPos = startPos;
-	FindBestSplit(tokenArr, true, curPos, endPos, STT_NULL, bestSplit, bestScore);
+	if (!FindBestSplit(tokenArr, true, curPos, endPos, STT_NULL, bestSplit, bestScore))
+		return 0;
 
 	if (bestSplit == SIZE_MAX)
 	{
 		if (endPos - startPos >= 2)
 		{
 			int sub = EvaluateConstantIntExpr(tokenArr, startPos + 1, endPos);
+			if (diag.hasFatalErrors)
+				return 0;
 			switch (tokenArr[startPos].type)
 			{
 			case STT_OP_Add: return sub;
@@ -1038,7 +1096,11 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 	else
 	{
 		int lft = EvaluateConstantIntExpr(tokenArr, startPos, bestSplit);
+		if (diag.hasFatalErrors)
+			return 0;
 		int rgt = EvaluateConstantIntExpr(tokenArr, bestSplit + 1, endPos);
+		if (diag.hasFatalErrors)
+			return 0;
 		auto tt = tokenArr[bestSplit].type;
 		switch (tt)
 		{
@@ -1068,23 +1130,17 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 }
 
 
-ASTType* Parser::GetType(const std::string& name)
-{
-	if (auto* t = ast.GetTypeByName(name.c_str()))
-		return t;
-	EmitFatalError("type not found: " + name);
-	return nullptr;
-}
-
 ASTType* Parser::ParseType(bool isFuncRet)
 {
-	EXPECT(STT_Ident);
+	if (!EXPECT(STT_Ident))
+		return nullptr;
 	std::string name = TokenStringData();
 	if (isFuncRet == false && name == "void")
 	{
 		EmitError("void type can only be used as function return value");
 	}
-	FWD();
+	if (!FWD())
+		return nullptr;
 
 	if (auto* t = ast.GetTypeByName(name.c_str()))
 		return t;
@@ -1227,7 +1283,7 @@ ASTType* Parser::FindMemberType(ASTType* t, const std::string& name, uint32_t& m
 		EmitError("there are no members for 'void'");
 		return nullptr;
 	default:
-		EmitFatalError("trying to get member value of unknown type");
+		EmitError("trying to get member value of unknown type");
 		return nullptr;
 	}
 }
@@ -1240,12 +1296,12 @@ VoidExpr* Parser::CreateVoidExpr()
 	return e;
 }
 
-void Parser::ParseSemantic(std::string& name, int& index)
+bool Parser::ParseSemantic(std::string& name, int& index)
 {
 	if (TT() == STT_Colon)
 	{
-		FWD();
-		EXPECT(STT_Ident);
+		if (!FWD() || !EXPECT(STT_Ident))
+			return false;
 		name = TokenStringData();
 		if (name.back() >= '0' && name.back() <= '9')
 		{
@@ -1266,14 +1322,16 @@ void Parser::ParseSemantic(std::string& name, int& index)
 			}
 			index = num;
 		}
-		FWD();
+		if (!FWD())
+			return false;
 	}
+	return true;
 }
 
-void Parser::ParseArgList(ASTNode* out)
+bool Parser::ParseArgList(ASTNode* out)
 {
 	if (TT() == STT_RParen)
-		return;
+		return true;
 
 	for (;;)
 	{
@@ -1285,36 +1343,45 @@ void Parser::ParseArgList(ASTNode* out)
 		{
 		case STT_KW_In:
 			vd->flags = VarDecl::ATTR_In;
-			FWD();
+			if (!FWD())
+				return false;
 			break;
 		case STT_KW_Out:
 			vd->flags = VarDecl::ATTR_Out;
-			FWD();
+			if (!FWD())
+				return false;
 			break;
 		case STT_KW_InOut:
 			vd->flags = VarDecl::ATTR_In | VarDecl::ATTR_Out;
-			FWD();
+			if (!FWD())
+				return false;
 			break;
 		default:
 			vd->flags = VarDecl::ATTR_In;
 			break;
 		}
 
-		vd->SetType(ParseType());
-		assert(vd->GetType());
+		if (auto* ty = ParseType())
+			vd->SetType(ty);
+		else
+			return false;
 
-		EXPECT(STT_Ident);
+		if (!EXPECT(STT_Ident))
+			return false;
 		vd->name = TokenStringData();
-		FWD();
+		if (!FWD())
+			return false;
 
-		ParseSemantic(vd->semanticName, vd->semanticIndex);
+		if (!ParseSemantic(vd->semanticName, vd->semanticIndex))
+			return false;
 
 		if (TT() == STT_RParen)
 			break;
 
-		EXPECT(STT_Comma);
-		FWD();
+		if (!EXPECT(STT_Comma) || !FWD())
+			return false;
 	}
+	return true;
 }
 
 static bool EffectivelyEqual(ASTType* a, ASTType* b)
@@ -2112,7 +2179,7 @@ void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
 	EmitError("failed to find function", loc);
 }
 
-void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSplit,
+bool Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSplit,
 	size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore)
 {
 	bestSplit = SIZE_MAX;
@@ -2146,9 +2213,17 @@ void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSpl
 		else if (tt == STT_RParen || tt == STT_RBracket || tt == STT_Colon)
 		{
 			if (braceStack.empty())
-				EmitFatalError("brace mismatch (too many endings)", tokenArr[curPos].loc);
+			{
+				EmitError("brace mismatch (too many endings)", tokenArr[curPos].loc);
+				diag.hasFatalErrors = true;
+				return false;
+			}
 			if (braceStack.back() != tt)
-				EmitFatalError("brace mismatch (started with one type, ended with another)", tokenArr[curPos].loc);
+			{
+				EmitError("brace mismatch (started with one type, ended with another)", tokenArr[curPos].loc);
+				diag.hasFatalErrors = true;
+				return false;
+			}
 			braceStack.pop_back();
 		}
 
@@ -2160,8 +2235,11 @@ void Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSpl
 		Location loc = Location::BAD();
 		if (curPos < tokenArr.size())
 			loc = tokenArr[curPos].loc;
-		EmitFatalError("brace mismatch (too many beginnings)", loc);
+		EmitError("brace mismatch (too many beginnings)", loc);
+		diag.hasFatalErrors = true;
+		return false;
 	}
+	return true;
 }
 
 Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
@@ -2173,7 +2251,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 	size_t bestSplit;
 	int bestScore;
-	FindBestSplit(tokens, false, curToken, endPos, endTokenType, bestSplit, bestScore);
+	if (!FindBestSplit(tokens, false, curToken, endPos, endTokenType, bestSplit, bestScore))
+		return nullptr;
 #if 0
 	if (bestSplit != SIZE_MAX)
 	{
@@ -2227,8 +2306,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 					expr->SetReturnType(ast.GetVoidType());
 				}
 
-				FWD();
-				return expr;
+				return FWD() ? expr : nullptr;
 			}
 			else if (tt == STT_BoolLit)
 			{
@@ -2237,8 +2315,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				expr->SetReturnType(ast.GetBoolType());
 				expr->loc = T().loc;
 				expr->value = TokenBoolData();
-				FWD();
-				return expr;
+				return FWD() ? expr : nullptr;
 			}
 			else if (tt == STT_Int32Lit)
 			{
@@ -2247,8 +2324,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				expr->SetReturnType(ast.GetInt32Type());
 				expr->loc = T().loc;
 				expr->value = TokenInt32Data();
-				FWD();
-				return expr;
+				return FWD() ? expr : nullptr;
 			}
 			else if (tt == STT_Float32Lit)
 			{
@@ -2257,8 +2333,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				expr->SetReturnType(ast.GetFloat32Type());
 				expr->loc = T().loc;
 				expr->value = TokenFloatData();
-				FWD();
-				return expr;
+				return FWD() ? expr : nullptr;
 			}
 		}
 		else if (tokens[start].type == STT_LParen && tokens[curToken - 1].type == STT_RParen)
@@ -2298,7 +2373,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				ilist->loc = tokens[bestSplit].loc;
 
 				curToken = bestSplit + 1;
-				ParseInitList(ilist, ty->GetAccessPointCount(), true);
+				if (!ParseInitList(ilist, ty->GetAccessPointCount(), true))
+					return nullptr;
 
 				if (ty->IsNumericBased() == false)
 				{
@@ -2313,6 +2389,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 		curToken = start;
 		Expr* funcName = ParseExpr(endTokenType, bestSplit);
+		if (!funcName)
+			return nullptr;
 
 		auto* fcall = new OpExpr;
 		ast.unassignedNodes.AppendChild(fcall);
@@ -2320,7 +2398,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		fcall->loc = tokens[bestSplit].loc;
 
 		curToken = bestSplit + 1;
-		ParseExprList(fcall, STT_RParen, endPos);
+		if (!ParseExprList(fcall, STT_RParen, endPos))
+			return nullptr;
 
 		curToken = bkCur;
 		FindFunction(fcall, funcName, tokens[start].loc);
@@ -2337,10 +2416,14 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		idx->loc = tokens[bestSplit].loc;
 
 		curToken = start;
-		idx->AppendChild(ParseExpr(endTokenType, bestSplit));
+		if (auto* idxexpr = ParseExpr(endTokenType, bestSplit))
+			idx->AppendChild(idxexpr);
+		else
+			return nullptr;
 
 		curToken = bestSplit + 1;
-		ParseExprList(idx, STT_RBracket, endPos);
+		if (!ParseExprList(idx, STT_RBracket, endPos))
+			return nullptr;
 
 		if (idx->childCount != 2)
 		{
@@ -2381,14 +2464,24 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		tnop->loc = tokens[bestSplit].loc;
 
 		curToken = start;
-		tnop->AppendChild(ParseExpr(STT_OP_Ternary, bestSplit));
+		if (auto* condexpr = ParseExpr(STT_OP_Ternary, bestSplit))
+			tnop->AppendChild(condexpr);
+		else
+			return nullptr;
 
 		curToken = bestSplit + 1;
-		tnop->AppendChild(ParseExpr(STT_Colon, bkCur));
+		if (auto* trueexpr = ParseExpr(STT_Colon, bkCur))
+			tnop->AppendChild(trueexpr);
+		else
+			return nullptr;
 
-		EXPECT(STT_Colon);
+		if (!EXPECT(STT_Colon))
+			return nullptr;
 		curToken++;
-		tnop->AppendChild(ParseExpr(endTokenType, bkCur));
+		if (auto* falseexpr = ParseExpr(endTokenType, bkCur))
+			tnop->AppendChild(falseexpr);
+		else
+			return nullptr;
 
 		TryCastExprTo(tnop->GetCond(), ast.GetBoolType(), "ternary operator condition");
 
@@ -2426,6 +2519,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				curToken = start + 1;
 				Expr* rtexpr = ParseExpr(STT_NULL, bcp);
+				if (!rtexpr)
+					return nullptr;
 				curToken = bcp;
 
 				if (tt == STT_OP_Add)
@@ -2467,14 +2562,18 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 				curToken = bestSplit + 1;
 				ASTType* tgtType = ParseType();
-				EXPECT(STT_RParen);
+				if (!tgtType || !EXPECT(STT_RParen))
+					return nullptr;
 				curToken++;
 
 				auto* cast = new CastExpr;
 				ast.unassignedNodes.AppendChild(cast);
 				cast->loc = tokens[bestSplit].loc;
 				cast->SetReturnType(tgtType);
-				cast->SetSource(ParseExpr(endTokenType, bcp));
+				if (auto* srcexpr = ParseExpr(endTokenType, bcp))
+					cast->SetSource(srcexpr);
+				else
+					return nullptr;
 				curToken = bcp;
 
 				if (CanCast(cast->GetSource()->GetReturnType(), tgtType, true) == false)
@@ -2493,6 +2592,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 			curToken = start;
 			Expr* rtexpr = ParseExpr(STT_NULL, bestSplit);
+			if (!rtexpr)
+				return nullptr;
 			curToken = bcp;
 
 			auto* idop = new IncDecOpExpr;
@@ -2513,6 +2614,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			isWriteCtx = true;
 		}
 		Expr* lft = ParseExpr(endTokenType, bestSplit);
+		if (!lft)
+			return nullptr;
 		isWriteCtx = prevIsWriteCtx;
 		curToken = bkCur;
 
@@ -2564,7 +2667,10 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			binop->opType = ttSplit;
 			binop->AppendChild(lft); // LFT
 			curToken = bestSplit + 1;
-			binop->AppendChild(ParseExpr(endTokenType, endPos)); // RGT
+			if (auto* rgtexpr = ParseExpr(endTokenType, endPos))
+				binop->AppendChild(rgtexpr); // RGT
+			else
+				return nullptr;
 			assert(binop->childCount == 2);
 
 			ASTType* rt0 = binop->GetLft()->GetReturnType();
@@ -2661,7 +2767,10 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 	else if (na->kind == ASTType::UInt32 || nb->kind == ASTType::UInt32)
 		no = ast.GetUInt32Type();
 	else
-		EmitFatalError("UNHANDLED SCALAR PROMOTION!");
+	{
+		assert(!"unhandled scalar promotion");
+		return nullptr;
+	}
 
 	// both are scalars
 	if (na == a && nb == b)
@@ -2676,7 +2785,7 @@ ASTType* Parser::Promote(ASTType* a, ASTType* b)
 		ASTType* mt = a->IsNumericOrVM1() == false ? a : b;
 		return ast.GetMatrixType(no, mt->sizeX, mt->sizeY);
 	}
-	EmitFatalError("UNHANDLED PROMOTION!");
+	assert(!"unhandled promotion");
 	return nullptr;
 }
 
@@ -2761,24 +2870,28 @@ bool Parser::CanCast(ASTType* from, ASTType* to, bool castExplicitly)
 	return false;
 }
 
-void Parser::ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos)
+bool Parser::ParseExprList(ASTNode* out, SLTokenType endTokenType, size_t endPos)
 {
 	while (curToken < endPos && TT() != endTokenType)
 	{
-		out->AppendChild(ParseExpr(endTokenType, endPos));
+		if (auto* expr = ParseExpr(endTokenType, endPos))
+			out->AppendChild(expr);
+		else
+			return false;
 		if (TT() != endTokenType)
 		{
-			EXPECT(STT_Comma);
-			FWD();
+			if (!EXPECT(STT_Comma) || !FWD())
+				return false;
 		}
 	}
+	return true;
 }
 
-void Parser::ParseInitList(ASTNode* out, int numItems, bool ctor)
+bool Parser::ParseInitList(ASTNode* out, int numItems, bool ctor)
 {
 	if (ctor)
 	{
-		ParseExprList(out, STT_RParen, SIZE_MAX);
+		return ParseExprList(out, STT_RParen, SIZE_MAX);
 	}
 	else
 	{
@@ -2787,24 +2900,30 @@ void Parser::ParseInitList(ASTNode* out, int numItems, bool ctor)
 		{
 			while (TT() == STT_LBrace)
 			{
-				FWD();
+				if (!FWD())
+					return false;
 				level++;
 			}
 
-			out->AppendChild(ParseExpr(STT_RBrace));
+			if (auto* expr = ParseExpr(STT_RBrace))
+				out->AppendChild(expr);
+			else
+				return false;
 
 			while (TT() == STT_Comma || TT() == STT_RBrace)
 			{
 				if (TT() == STT_Comma)
 				{
-					FWD();
+					if (!FWD())
+						return false;
 				}
 				if (TT() == STT_RBrace)
 				{
 					level--;
 					if (level == 0)
 						break;
-					FWD();
+					if (!FWD())
+						return false;
 				}
 			}
 		}
@@ -2827,6 +2946,7 @@ void Parser::ParseInitList(ASTNode* out, int numItems, bool ctor)
 	{
 		EmitError(ctor ? "constructor arguments do not match type" : "initializer does not match type");
 	}
+	return true;
 }
 
 struct VarDeclSaver
@@ -2848,11 +2968,16 @@ Stmt* Parser::ParseStatement()
 		auto* blockStmt = new BlockStmt;
 		ast.unassignedNodes.AppendChild(blockStmt);
 		blockStmt->loc = T().loc;
-		FWD();
+		if (!FWD())
+			return nullptr;
 		while (TT() != STT_RBrace)
 		{
-			blockStmt->AppendChild(ParseStatement());
-			FWD();
+			if (auto* stmt = ParseStatement())
+				blockStmt->AppendChild(stmt);
+			else
+				return nullptr;
+			if (!FWD())
+				return nullptr;
 		}
 		return blockStmt;
 	}
@@ -2861,10 +2986,14 @@ Stmt* Parser::ParseStatement()
 		auto* ret = new ReturnStmt;
 		ast.unassignedNodes.AppendChild(ret);
 		ret->loc = T().loc;
-		FWD();
+		if (!FWD())
+			return nullptr;
 		if (TT() != STT_Semicolon)
 		{
-			ret->SetExpr(ParseExpr());
+			if (auto* expr = ParseExpr())
+				ret->SetExpr(expr);
+			else
+				return nullptr;
 			TryCastExprTo(ret->GetExpr(), funcInfo.func->GetReturnType(), "return expression");
 		}
 		ret->AddToFunction(funcInfo.func);
@@ -2879,8 +3008,8 @@ Stmt* Parser::ParseStatement()
 		auto* dsc = new DiscardStmt;
 		ast.unassignedNodes.AppendChild(dsc);
 		dsc->loc = T().loc;
-		FWD();
-		EXPECT(STT_Semicolon);
+		if (!FWD() || !EXPECT(STT_Semicolon))
+			return nullptr;
 		return dsc;
 	}
 	else if (tt == STT_KW_Break)
@@ -2888,8 +3017,8 @@ Stmt* Parser::ParseStatement()
 		auto* bst = new BreakStmt;
 		ast.unassignedNodes.AppendChild(bst);
 		bst->loc = T().loc;
-		FWD();
-		EXPECT(STT_Semicolon);
+		if (!FWD() || !EXPECT(STT_Semicolon))
+			return nullptr;
 		return bst;
 	}
 	else if (tt == STT_KW_Continue)
@@ -2897,8 +3026,8 @@ Stmt* Parser::ParseStatement()
 		auto* cst = new ContinueStmt;
 		ast.unassignedNodes.AppendChild(cst);
 		cst->loc = T().loc;
-		FWD();
-		EXPECT(STT_Semicolon);
+		if (!FWD() || !EXPECT(STT_Semicolon))
+			return nullptr;
 		return cst;
 	}
 	else if (tt == STT_KW_If)
@@ -2906,10 +3035,12 @@ Stmt* Parser::ParseStatement()
 		auto* ifelse = new IfElseStmt;
 		ast.unassignedNodes.AppendChild(ifelse);
 		ifelse->loc = T().loc;
-		FWD();
-		EXPECT(STT_LParen);
-		FWD();
-		ifelse->AppendChild(ParseExpr(STT_RParen)); // COND
+		if (!FWD() || !EXPECT(STT_LParen) || !FWD())
+			return nullptr;
+		if (auto* cond = ParseExpr(STT_RParen))
+			ifelse->AppendChild(cond); // COND
+		else
+			return nullptr;
 
 		auto* crt = ifelse->GetCond()->GetReturnType();
 		if (crt->kind != ASTType::Bool)
@@ -2920,14 +3051,23 @@ Stmt* Parser::ParseStatement()
 			}
 			CastExprTo(ifelse->GetCond(), ast.GetBoolType());
 		}
-		FWD();
+		if (!FWD())
+			return nullptr;
 
-		ifelse->AppendChild(ParseStatement()); // TRUE
-		FWD();
+		if (auto* trueStmt = ParseStatement())
+			ifelse->AppendChild(trueStmt); // TRUE
+		else
+			return nullptr;
+		if (!FWD())
+			return nullptr;
 		if (TT() == STT_KW_Else)
 		{
-			FWD();
-			ifelse->AppendChild(ParseStatement()); // FALSE
+			if (!FWD())
+				return nullptr;
+			if (auto* falseStmt = ParseStatement())
+				ifelse->AppendChild(falseStmt); // FALSE
+			else
+				return nullptr;
 		}
 		else curToken--;
 
@@ -2938,10 +3078,12 @@ Stmt* Parser::ParseStatement()
 		auto* whst = new WhileStmt;
 		ast.unassignedNodes.AppendChild(whst);
 		whst->loc = T().loc;
-		FWD();
-		EXPECT(STT_LParen);
-		FWD();
-		whst->AppendChild(ParseExpr(STT_RParen)); // COND
+		if (!FWD() || !EXPECT(STT_LParen) || !FWD())
+			return nullptr;
+		if (auto* cond = ParseExpr(STT_RParen))
+			whst->AppendChild(cond); // COND
+		else
+			return nullptr;
 
 		auto* crt = whst->GetCond()->GetReturnType();
 		if (crt->kind != ASTType::Bool)
@@ -2952,9 +3094,13 @@ Stmt* Parser::ParseStatement()
 			}
 			CastExprTo(whst->GetCond(), ast.GetBoolType());
 		}
-		FWD();
+		if (!FWD())
+			return nullptr;
 
-		whst->AppendChild(ParseStatement()); // BODY
+		if (auto* body = ParseStatement())
+			whst->AppendChild(body); // BODY
+		else
+			return nullptr;
 
 		return whst;
 	}
@@ -2963,15 +3109,19 @@ Stmt* Parser::ParseStatement()
 		auto* dwst = new DoWhileStmt;
 		ast.unassignedNodes.AppendChild(dwst);
 		dwst->loc = T().loc;
-		FWD();
+		if (!FWD())
+			return nullptr;
 
-		dwst->PrependChild(ParseStatement()); // BODY
-		FWD();
-		EXPECT(STT_KW_While);
-		FWD();
-		EXPECT(STT_LParen);
-		FWD();
-		dwst->PrependChild(ParseExpr(STT_RParen)); // COND
+		if (auto* body = ParseStatement())
+			dwst->PrependChild(body); // BODY
+		else
+			return nullptr;
+		if (!FWD() || !EXPECT(STT_KW_While) || !FWD() || !EXPECT(STT_LParen) || !FWD())
+			return nullptr;
+		if (auto* cond = ParseExpr(STT_RParen))
+			dwst->PrependChild(cond); // COND
+		else
+			return nullptr;
 
 		auto* crt = dwst->GetCond()->GetReturnType();
 		if (crt->kind != ASTType::Bool)
@@ -2982,8 +3132,8 @@ Stmt* Parser::ParseStatement()
 			}
 			CastExprTo(dwst->GetCond(), ast.GetBoolType());
 		}
-		FWD();
-		EXPECT(STT_Semicolon);
+		if (!FWD() || !EXPECT(STT_Semicolon))
+			return nullptr;
 
 		return dwst;
 	}
@@ -2992,24 +3142,41 @@ Stmt* Parser::ParseStatement()
 		auto* forst = new ForStmt;
 		ast.unassignedNodes.AppendChild(forst);
 		forst->loc = T().loc;
-		FWD();
-		EXPECT(STT_LParen);
-		FWD();
+		if (!FWD() || !EXPECT(STT_LParen) || !FWD())
+			return nullptr;
 
-		forst->AppendChild(ParseExprDeclStatement()); // INIT
-		EXPECT(STT_Semicolon);
-		FWD();
+		if (auto* initStmt = ParseExprDeclStatement())
+			forst->AppendChild(initStmt); // INIT
+		else
+			return nullptr;
+		if (!EXPECT(STT_Semicolon) || !FWD())
+			return nullptr;
 		if (TT() != STT_Semicolon)
-			forst->AppendChild(ParseExpr(STT_Semicolon)); // COND
+		{
+			if (auto* cond = ParseExpr(STT_Semicolon))
+				forst->AppendChild(cond); // COND
+			else
+				return nullptr;
+		}
 		else
 			forst->AppendChild(CreateVoidExpr());
-		FWD();
+		if (!FWD())
+			return nullptr;
 		if (TT() != STT_RParen)
-			forst->AppendChild(ParseExpr(STT_RParen)); // INCR
+		{
+			if (auto* incr = ParseExpr(STT_RParen))
+				forst->AppendChild(incr); // INCR
+			else
+				return nullptr;
+		}
 		else
 			forst->AppendChild(CreateVoidExpr());
-		FWD();
-		forst->AppendChild(ParseStatement()); // BODY
+		if (!FWD())
+			return nullptr;
+		if (auto* body = ParseStatement())
+			forst->AppendChild(body); // BODY
+		else
+			return nullptr;
 
 		auto* crt = forst->GetCond()->GetReturnType();
 		if (crt->kind != ASTType::Bool && crt->kind != ASTType::Void)
@@ -3043,6 +3210,8 @@ Stmt* Parser::ParseExprDeclStatement()
 		varDecl->loc = T().loc;
 
 		ASTType* commonType = ParseType();
+		if (!commonType)
+			return nullptr;
 
 		for (;;)
 		{
@@ -3051,18 +3220,19 @@ Stmt* Parser::ParseExprDeclStatement()
 			vd->loc = T().loc;
 			varDecl->AppendChild(vd);
 
-			EXPECT(STT_Ident);
+			if (!EXPECT(STT_Ident))
+				return nullptr;
 			vd->name = TokenStringData();
-			FWD();
+			if (!FWD())
+				return nullptr;
 
 			if (TT() == STT_LBracket)
 			{
-				FWD();
-				EXPECT(STT_Int32Lit);
+				if (!FWD() || !EXPECT(STT_Int32Lit))
+					return nullptr;
 				int32_t arrSize = TokenInt32Data();
-				FWD();
-				EXPECT(STT_RBracket);
-				FWD();
+				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
+					return nullptr;
 
 				if (arrSize < 1)
 				{
@@ -3078,7 +3248,8 @@ Stmt* Parser::ParseExprDeclStatement()
 
 			if (TT() == STT_OP_Assign)
 			{
-				FWD();
+				if (!FWD())
+					return nullptr;
 
 				if (TT() == STT_LBrace)
 				{
@@ -3086,18 +3257,23 @@ Stmt* Parser::ParseExprDeclStatement()
 					ilist->loc = T().loc;
 					vd->SetInitExpr(ilist);
 
-					FWD();
+					if (!FWD())
+						return nullptr;
 
 					ilist->SetReturnType(curType);
 
-					ParseInitList(ilist, curType->GetAccessPointCount(), false);
+					if (!ParseInitList(ilist, curType->GetAccessPointCount(), false))
+						return nullptr;
 
-					EXPECT(STT_RBrace);
-					FWD();
+					if (!EXPECT(STT_RBrace) || !FWD())
+						return nullptr;
 				}
 				else
 				{
-					vd->SetInitExpr(ParseExpr());
+					if (auto* initExpr = ParseExpr())
+						vd->SetInitExpr(initExpr);
+					else
+						return nullptr;
 					TryCastExprTo(vd->GetInitExpr(), curType, "initialization expression");
 				}
 			}
@@ -3108,13 +3284,15 @@ Stmt* Parser::ParseExprDeclStatement()
 
 			if (TT() == STT_Comma)
 			{
-				FWD();
+				if (!FWD())
+					return nullptr;
 				continue;
 			}
 			else break;
 		}
 
-		EXPECT(STT_Semicolon);
+		if (!EXPECT(STT_Semicolon))
+			return nullptr;
 
 		return varDecl;
 	}
@@ -3123,9 +3301,13 @@ Stmt* Parser::ParseExprDeclStatement()
 		auto* out = new ExprStmt;
 		ast.unassignedNodes.AppendChild(out);
 		out->loc = T().loc;
-		out->SetExpr(ParseExpr());
+		if (auto* expr = ParseExpr())
+			out->SetExpr(expr);
+		else
+			return nullptr;
 
-		EXPECT(STT_Semicolon);
+		if (!EXPECT(STT_Semicolon))
+			return nullptr;
 
 		return out;
 	}
@@ -3161,7 +3343,8 @@ int32_t Parser::ParseRegister(char ch, bool comp, int32_t limit)
 	default: type = "?"; break;
 	}
 
-	EXPECT(STT_Ident);
+	if (!EXPECT(STT_Ident))
+		return -1;
 	std::string regname = TokenStringData();
 	if (regname.size() < 2 || regname[0] != ch)
 	{
@@ -3194,13 +3377,14 @@ int32_t Parser::ParseRegister(char ch, bool comp, int32_t limit)
 			return -1;
 		}
 	}
-	FWD();
+	if (!FWD())
+		return -1;
 	if (comp)
 		num *= 4;
 	if (comp && TT() == STT_OP_Member)
 	{
-		FWD();
-		EXPECT(STT_Ident);
+		if (!FWD() || !EXPECT(STT_Ident))
+			return -1;
 		if (TokenStringDataEquals(STRLIT_SIZE("x")));
 		else if (TokenStringDataEquals(STRLIT_SIZE("y"))) num += 1;
 		else if (TokenStringDataEquals(STRLIT_SIZE("z"))) num += 2;
@@ -3210,26 +3394,26 @@ int32_t Parser::ParseRegister(char ch, bool comp, int32_t limit)
 			EmitError("bad packoffset component");
 			return -1;
 		}
-		FWD();
+		if (!FWD())
+			return -1;
 	}
-	return num;
+	return (int32_t) num;
 }
 
-void Parser::ParseDecl()
+bool Parser::ParseDecl()
 {
 	auto tt = TT();
 	if (tt == STT_KW_Struct)
 	{
-		FWD();
-		EXPECT(STT_Ident);
+		if (!FWD() || !EXPECT(STT_Ident))
+			return false;
 
 		std::string name = TokenStringData();
 		if (ast.IsTypeName(name.c_str()))
 			EmitError("type name already used: " + name);
 
-		FWD();
-		EXPECT(STT_LBrace);
-		FWD();
+		if (!FWD() || !EXPECT(STT_LBrace) || !FWD())
+			return false;
 
 		uint32_t totalAPCount = 0;
 		std::vector<AccessPointDecl> members;
@@ -3238,16 +3422,21 @@ void Parser::ParseDecl()
 			AccessPointDecl member;
 
 			member.type = ParseType();
+			if (!member.type)
+				return false;
 			totalAPCount += member.type->GetAccessPointCount();
 
-			EXPECT(STT_Ident);
+			if (!EXPECT(STT_Ident))
+				return false;
 			member.name = TokenStringData();
-			FWD();
+			if (!FWD())
+				return false;
 
-			ParseSemantic(member.semanticName, member.semanticIndex);
+			if (!ParseSemantic(member.semanticName, member.semanticIndex))
+				return false;
 
-			EXPECT(STT_Semicolon);
-			FWD();
+			if (!EXPECT(STT_Semicolon) || !FWD())
+				return false;
 
 			members.push_back(std::move(member));
 		}
@@ -3256,35 +3445,39 @@ void Parser::ParseDecl()
 		stc->totalAccessPointCount = totalAPCount;
 		std::swap(stc->members, members);
 
-		FWD();
-		EXPECT(STT_Semicolon);
+		if (!FWD() || !EXPECT(STT_Semicolon))
+			return false;
 		curToken++;
 	}
 	else if (tt == STT_KW_CBuffer)
 	{
-		FWD();
-		EXPECT(STT_Ident);
+		if (!FWD() || !EXPECT(STT_Ident))
+			return false;
 
 		auto* cb = new CBufferDecl;
 		cb->name = TokenStringData();
 		cb->loc = T().loc;
 		ast.globalVars.AppendChild(cb);
 
-		FWD();
+		if (!FWD())
+			return false;
 		if (TT() == STT_Colon)
 		{
-			FWD();
-			EXPECT(STT_KW_Register);
-			FWD();
-			EXPECT(STT_LParen);
-			FWD();
+			if (!FWD() ||
+				!EXPECT(STT_KW_Register) ||
+				!FWD() ||
+				!EXPECT(STT_LParen) ||
+				!FWD())
+				return false;
 			cb->bufRegID = ParseRegister('b', false, 14);
-			EXPECT(STT_RParen);
-			FWD();
+			if (diag.hasFatalErrors)
+				return false;
+			if (!EXPECT(STT_RParen) || !FWD())
+				return false;
 		}
 
-		EXPECT(STT_LBrace);
-		FWD();
+		if (!EXPECT(STT_LBrace) || !FWD())
+			return false;
 
 		while (TT() != STT_RBrace)
 		{
@@ -3297,26 +3490,33 @@ void Parser::ParseDecl()
 
 			vd->loc = T().loc;
 			vd->type = ParseType();
+			if (!vd->type)
+				return false;
 			vd->flags |= VarDecl::ATTR_Uniform | VarDecl::ATTR_Global;
 
-			EXPECT(STT_Ident);
+			if (!EXPECT(STT_Ident))
+				return false;
 			vd->name = TokenStringData();
-			FWD();
+			if (!FWD())
+				return false;
 
 			if (TT() == STT_Colon)
 			{
-				FWD();
-				EXPECT(STT_KW_PackOffset);
-				FWD();
-				EXPECT(STT_LParen);
-				FWD();
+				if (!FWD() ||
+					!EXPECT(STT_KW_PackOffset) ||
+					!FWD() ||
+					!EXPECT(STT_LParen) ||
+					!FWD())
+					return false;
 				vd->regID = ParseRegister('c', true, 0x7ffffff);
-				EXPECT(STT_RParen);
-				FWD();
+				if (diag.hasFatalErrors)
+					return false;
+				if (!EXPECT(STT_RParen) || !FWD())
+					return false;
 			}
 
-			EXPECT(STT_Semicolon);
-			FWD();
+			if (!EXPECT(STT_Semicolon) || !FWD())
+				return false;
 		}
 		curToken++;
 	}
@@ -3330,30 +3530,38 @@ void Parser::ParseDecl()
 		{
 			EmitError("use 'static const' to create a compile-time constant");
 			flags |= VarDecl::ATTR_Const;
-			FWD();
+			if (!FWD())
+				return false;
 		}
 		else if (tt == STT_KW_Uniform)
 		{
 			flags |= VarDecl::ATTR_Uniform;
-			FWD();
+			if (!FWD())
+				return false;
 		}
 		else if (tt == STT_KW_Static)
 		{
 			flags |= VarDecl::ATTR_Static;
-			FWD();
+			if (!FWD())
+				return false;
 			if (TT() == STT_KW_Const)
 			{
 				flags |= VarDecl::ATTR_Const;
-				FWD();
+				if (!FWD())
+					return false;
 			}
 		}
 
 		auto loc = T().loc;
 		ASTType* commonType = ParseType(true);
+		if (!commonType)
+			return false;
 
-		EXPECT(STT_Ident);
+		if (!EXPECT(STT_Ident))
+			return false;
 		std::string name = TokenStringData();
-		FWD();
+		if (!FWD())
+			return false;
 
 		if (TT() == STT_LParen)
 		{
@@ -3370,12 +3578,14 @@ void Parser::ParseDecl()
 				ast.entryPoint = func;
 			}
 
-			FWD();
+			if (!FWD())
+				return false;
 
-			ParseArgList(func);
+			if (!ParseArgList(func))
+				return false;
 
-			EXPECT(STT_RParen);
-			FWD();
+			if (!EXPECT(STT_RParen) || !FWD())
+				return false;
 
 			VarDeclSaver vds(this);
 			std::string mangledName = "F" + std::to_string(name.size()) + name;
@@ -3390,12 +3600,20 @@ void Parser::ParseDecl()
 			// demangle entry point name since it's unique
 			func->mangledName = ast.entryPoint == func ? entryPointName : mangledName;
 
-			ParseSemantic(func->returnSemanticName, func->returnSemanticIndex);
+			if (!ParseSemantic(func->returnSemanticName, func->returnSemanticIndex))
+				return false;
 
-			EXPECT(STT_LBrace);
+			if (!EXPECT(STT_LBrace))
+				return false;
 
 			funcInfo.func = func;
-			func->GetCode()->ReplaceWith(ParseStatement());
+			if (auto* body = ParseStatement())
+				func->GetCode()->ReplaceWith(body);
+			else
+			{
+				assert(diag.hasErrors || diag.hasFatalErrors);
+				return false;
+			}
 			funcInfo.func = nullptr;
 
 			auto& funcsWithName = functions[name];
@@ -3419,12 +3637,11 @@ void Parser::ParseDecl()
 
 			while (TT() == STT_LBracket)
 			{
-				FWD();
-				EXPECT(STT_Int32Lit);
+				if (!FWD() || !EXPECT(STT_Int32Lit))
+					return false;
 				int32_t arrSize = TokenInt32Data();
-				FWD();
-				EXPECT(STT_RBracket);
-				FWD();
+				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
+					return false;
 
 				if (arrSize < 1)
 				{
@@ -3448,7 +3665,8 @@ void Parser::ParseDecl()
 				}
 				else
 				{
-					FWD();
+					if (!FWD())
+						return false;
 					if (TT() == STT_LBrace)
 					{
 						auto* ile = new InitListExpr;
@@ -3456,15 +3674,22 @@ void Parser::ParseDecl()
 						ile->SetReturnType(type);
 						gvardef->AppendChild(ile);
 
-						FWD();
-						ParseInitList(ile, type->GetAccessPointCount(), false);
+						if (!FWD())
+							return false;
+						if (!ParseInitList(ile, type->GetAccessPointCount(), false))
+							return false;
 
-						EXPECT(STT_RBrace);
-						FWD();
+						if (!EXPECT(STT_RBrace))
+							return false;
+						if (!FWD())
+							return false;
 					}
 					else
 					{
-						gvardef->AppendChild(ParseExpr());
+						if (auto* initExpr = ParseExpr())
+							gvardef->AppendChild(initExpr);
+						else
+							return false;
 					}
 				}
 			}
@@ -3480,29 +3705,37 @@ void Parser::ParseDecl()
 
 			if (TT() == STT_Colon)
 			{
-				FWD();
-				EXPECT(STT_KW_Register);
-				FWD();
-				EXPECT(STT_LParen);
-				FWD();
+				if (!FWD() ||
+					!EXPECT(STT_KW_Register) ||
+					!FWD() ||
+					!EXPECT(STT_LParen) ||
+					!FWD())
+					return false;
+
 				gvardef->regID = gvardef->type->IsSampler() ?
 					ParseRegister('s', false, 16) :
 					ParseRegister('c', false, 0x7ffffff);
-				EXPECT(STT_RParen);
-				FWD();
+				if (diag.hasFatalErrors)
+					return false;
+
+				if (!EXPECT(STT_RParen) || !FWD())
+					return false;
 			}
 
 			gvardef->prevScopeDecl = funcInfo.scopeVars;
 			funcInfo.scopeVars = gvardef;
 
-			EXPECT(STT_Semicolon);
+			if (!EXPECT(STT_Semicolon))
+				return false;
 			curToken++;
 		}
 	}
 	else
 	{
-		EmitFatalError("unexpected token: " + TokenToString());
+		EmitError("unexpected token: " + TokenToString());
+		return false;
 	}
+	return true;
 }
 
 

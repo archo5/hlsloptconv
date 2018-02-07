@@ -7,6 +7,11 @@
 
 
 #ifdef _MSC_VER
+#pragma warning(disable:4996)
+#endif
+
+
+#ifdef _MSC_VER
 #  define FINLINE __forceinline
 #else
 #  define FINLINE __attribute__((always_inline))
@@ -103,8 +108,6 @@ struct Diagnostic
 	uint32_t GetSourceID(const std::string& src);
 	void PrintMessage(const char* type, const std::string& msg, const Location& loc);
 	void EmitError(const std::string& msg, const Location& loc);
-	void EmitFatalError(const std::string& msg, const Location& loc);
-	void CheckNonFatalErrors();
 
 	void PrintError(const std::string& msg, const Location& loc) { PrintMessage("error", msg, loc); }
 	void PrintWarning(const std::string& msg, const Location& loc) { PrintMessage("warning", msg, loc); }
@@ -112,6 +115,7 @@ struct Diagnostic
 	OutStream* errorOutputStream;
 	std::vector<std::string> sourceFiles;
 	bool hasErrors = false;
+	bool hasFatalErrors = false;
 };
 
 
