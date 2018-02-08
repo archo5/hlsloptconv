@@ -1011,14 +1011,27 @@ struct Compiler
 	bool CompileFile(const char* name, const char* code);
 
 	const char* entryPoint = "main";
-	ShaderMacro* defines = nullptr;
 	ShaderStage stage = ShaderStage_Vertex;
 	OutputShaderFormat outputFmt = OSF_HLSL_SM3;
+
+	// preprocessor
+	ShaderMacro* defines = nullptr;
 	LoadIncludeFilePFN loadIncludeFilePFN = nullptr;
 	void* loadIncludeFileUD = nullptr;
+
+	// I/O
 	OutStream* errorOutputStream = nullptr; // set to &FILEStream(stderr) to write to output
-	OutStream* codeOutputStream = nullptr; // set to &FILEStream(stdout) to write to output
-	OutStream* ASTDumpStream = nullptr;
+	OutStream* codeOutputStream  = nullptr; // set to &FILEStream(stdout) to write to output
+	OutStream* ASTDumpStream     = nullptr;
+
+	// interface output
+	ShaderVariable* outVarBuf = nullptr;
+	size_t outVarBufSize = 0;     // changed to output data size after compilation
+	char* outVarStrBuf = nullptr; // string buffer for names/semantics in ShaderVariable array
+	size_t outVarStrBufSize = 0;  // changed to output data size after compilation
+	bool outVarOverflowAlloc = true;
+	bool outVarDidOverflowVar = false;
+	bool outVarDidOverflowStr = false;
 };
 
 

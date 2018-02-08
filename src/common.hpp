@@ -137,6 +137,59 @@ struct ShaderMacro
 	const char* value;
 };
 
+enum ShaderVarType
+{
+	SVT_StructBegin       = 1, /* nested structs are possible */
+	SVT_StructEnd         = 2,
+	SVT_Uniform           = 3, /* only numeric SDT_* types */
+	SVT_UniformBlockBegin = 4, /* there cannot be any nesting */
+	SVT_UniformBlockEnd   = 5,
+	SVT_VSInput           = 6, /* only numeric SDT_* types */
+	SVT_Sampler           = 7, /* only SDT_Sampler* types */
+	SVT_PSOutputDepth     = 19, /* only scalar types */
+	SVT_PSOutputColor0    = 20, /* only vector types */
+	SVT_PSOutputColor1    = 21,
+	SVT_PSOutputColor2    = 22,
+	SVT_PSOutputColor3    = 23,
+	SVT_PSOutputColor4    = 24,
+	SVT_PSOutputColor5    = 25,
+	SVT_PSOutputColor6    = 26,
+	SVT_PSOutputColor7    = 27,
+
+	SVT_PSOutput_First    = SVT_PSOutputDepth,
+	SVT_PSOutput_Last     = SVT_PSOutputColor7,
+};
+
+enum ShaderDataType
+{
+	SDT_None    = 0,
+	SDT_Bool    = 1,
+	SDT_Int32   = 2,
+	SDT_UInt32  = 3,
+	SDT_Float16 = 4,
+	SDT_Float32 = 5,
+
+	SDT_Sampler1D       = 20,
+	SDT_Sampler2D       = 21,
+	SDT_Sampler3D       = 22,
+	SDT_SamplerCube     = 23,
+	SDT_Sampler1DComp   = 24,
+	SDT_Sampler2DComp   = 25,
+	SDT_SamplerCubeComp = 26,
+};
+
+struct ShaderVariable   /* 20 bytes */
+{
+	uint32_t name;      /* offset from beginning of string buffer */
+	uint32_t semantic;  /* offset from beginning of string buffer; only for VS input */
+	uint32_t regSemIdx; /* register number/semantic index */
+	uint32_t arraySize; /* 0 if no array */
+	uint8_t  svType;    /* ShaderVarType */
+	uint8_t  dataType;  /* ShaderDataType */
+	uint8_t  sizeX;     /* 0 if scalar, 1-4 for vector/matrix */
+	uint8_t  sizeY;     /* 0 if scalar/vector, 1-4 for matrix */
+};
+
 
 // API
 // loads include file
