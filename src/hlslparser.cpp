@@ -2059,124 +2059,116 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	/// transpose
 	DEF_INTRIN_SSF(Op_Trunc, trunc),
 };
-void Parser::FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc)
+void Parser::FindFunction(OpExpr* fcall, const std::string& name, const Location& loc)
 {
-	if (fnexpr)
+	auto bit = g_BuiltinIntrinsics.find(name.c_str());
+	if (bit != g_BuiltinIntrinsics.end())
 	{
-		if (auto ie = dyn_cast<DeclRefExpr>(fnexpr))
+		ASTType* retType = bit->second(this, fcall);
+		if (retType)
 		{
-			auto bit = g_BuiltinIntrinsics.find(ie->name.c_str());
-			if (bit != g_BuiltinIntrinsics.end())
+			fcall->SetReturnType(retType);
+			auto op = fcall->opKind;
+			if (op == Op_DDX || op == Op_DDY || op == Op_FWidth)
 			{
-				ASTType* retType = bit->second(this, fcall);
-				if (retType)
+				ast.usingDerivatives = true;
+			}
+			if (op == Op_Tex1DLOD || op == Op_Tex2DLOD ||
+				op == Op_Tex3DLOD || op == Op_TexCubeLOD)
+			{
+				ast.usingLODTextureSampling = true;
+			}
+			if (op == Op_Tex1DGrad || op == Op_Tex2DGrad ||
+				op == Op_Tex3DGrad || op == Op_TexCubeGrad)
+			{
+				ast.usingGradTextureSampling = true;
+			}
+		}
+		// otherwise error already printed
+		return;
+	}
+
+	auto it = functions.find(name);
+	if (it != functions.end())
+	{
+		// find the right function
+		if (it->second.size() == 1)
+		{
+			ASTFunction* fn = *it->second.begin();
+			if (CalcOverloadMatchFactor(fn, fcall, nullptr, true) != MAX_OVERLOAD)
+			{
+				fcall->resolvedFunc = fn;
+				fcall->opKind = Op_FCall;
+				fcall->SetReturnType(fn->GetReturnType());
+			}
+		}
+		else
+		{
+			ASTType* voidTy = ast.GetVoidType();
+			std::vector<ASTType*> equalArgs;
+			equalArgs.resize(fcall->GetArgCount(), voidTy);
+
+			for (ASTFunction* fn : it->second)
+			{
+				size_t i = 0;
+				for (ASTNode* arg = fn->GetFirstArg(); arg; ++i, arg = arg->next)
 				{
-					fcall->SetReturnType(retType);
-					auto op = fcall->opKind;
-					if (op == Op_DDX || op == Op_DDY || op == Op_FWidth)
-					{
-						ast.usingDerivatives = true;
-					}
-					if (op == Op_Tex1DLOD || op == Op_Tex2DLOD ||
-						op == Op_Tex3DLOD || op == Op_TexCubeLOD)
-					{
-						ast.usingLODTextureSampling = true;
-					}
-					if (op == Op_Tex1DGrad || op == Op_Tex2DGrad ||
-						op == Op_Tex3DGrad || op == Op_TexCubeGrad)
-					{
-						ast.usingGradTextureSampling = true;
-					}
+					if (equalArgs[i] == voidTy)
+						equalArgs[i] = arg->ToVarDecl()->GetType();
+					else if (equalArgs[i] != arg->ToVarDecl()->GetType())
+						equalArgs[i] = nullptr;
 				}
-				// otherwise error already printed
-				return;
 			}
 
-			auto it = functions.find(ie->name);
-			if (it != functions.end())
+			ASTFunction* lastMF = nullptr;
+			int32_t bestOMF = MAX_OVERLOAD;
+			int numOverloads = 0;
+
+			for (ASTFunction* fn : it->second)
 			{
-				// find the right function
-				if (it->second.size() == 1)
+				int32_t curOMF = CalcOverloadMatchFactor(fn, fcall, equalArgs.data(), false);
+				if (curOMF < bestOMF)
 				{
-					ASTFunction* fn = *it->second.begin();
-					if (CalcOverloadMatchFactor(fn, fcall, nullptr, true) != MAX_OVERLOAD)
-					{
-						fcall->resolvedFunc = fn;
-						fcall->opKind = Op_FCall;
-						fcall->SetReturnType(fn->GetReturnType());
-					}
+					bestOMF = curOMF;
+					lastMF = fn;
+					numOverloads = 1;
 				}
-				else
+				else if (curOMF == bestOMF)
 				{
-					ASTType* voidTy = ast.GetVoidType();
-					std::vector<ASTType*> equalArgs;
-					equalArgs.resize(fcall->GetArgCount(), voidTy);
-
-					for (ASTFunction* fn : it->second)
-					{
-						size_t i = 0;
-						for (ASTNode* arg = fn->GetFirstArg(); arg; ++i, arg = arg->next)
-						{
-							if (equalArgs[i] == voidTy)
-								equalArgs[i] = arg->ToVarDecl()->GetType();
-							else if (equalArgs[i] != arg->ToVarDecl()->GetType())
-								equalArgs[i] = nullptr;
-						}
-					}
-
-					ASTFunction* lastMF = nullptr;
-					int32_t bestOMF = MAX_OVERLOAD;
-					int numOverloads = 0;
-
-					for (ASTFunction* fn : it->second)
-					{
-						int32_t curOMF = CalcOverloadMatchFactor(fn, fcall, equalArgs.data(), false);
-						if (curOMF < bestOMF)
-						{
-							bestOMF = curOMF;
-							lastMF = fn;
-							numOverloads = 1;
-						}
-						else if (curOMF == bestOMF)
-						{
-							numOverloads++;
-						}
-					}
-					if (numOverloads == 0)
-					{
-						EmitError("none of the overloads for '" + ie->name + "' match the given arguments");
-					}
-					else if (numOverloads > 1)
-					{
-						EmitError("ambiguous call to '" + ie->name + "', "
-							"multiple overloads match the given arguments equally");
-					}
-					else
-					{
-						fcall->resolvedFunc = lastMF;
-						fcall->opKind = Op_FCall;
-						fcall->SetReturnType(lastMF->GetReturnType());
-					}
+					numOverloads++;
 				}
-
-				// adjust arguments
-				if (auto* fn = fcall->resolvedFunc)
-				{
-					int i = 0;
-					for (ASTNode *arg = fcall->GetFirstArg(), *argdecl = fn->GetFirstArg();
-						arg && argdecl;
-						arg = arg->next, argdecl = argdecl->next)
-						arg = CastExprTo(arg->ToExpr(), argdecl->ToVarDecl()->GetType());
-				}
+			}
+			if (numOverloads == 0)
+			{
+				EmitError("none of the overloads for '" + name + "' match the given arguments");
+			}
+			else if (numOverloads > 1)
+			{
+				EmitError("ambiguous call to '" + name + "', "
+					"multiple overloads match the given arguments equally");
 			}
 			else
 			{
-				EmitError("failed to find function named '" + ie->name + "'", loc);
+				fcall->resolvedFunc = lastMF;
+				fcall->opKind = Op_FCall;
+				fcall->SetReturnType(lastMF->GetReturnType());
 			}
-			return;
+		}
+
+		// adjust arguments
+		if (auto* fn = fcall->resolvedFunc)
+		{
+			int i = 0;
+			for (ASTNode *arg = fcall->GetFirstArg(), *argdecl = fn->GetFirstArg();
+				arg && argdecl;
+				arg = arg->next, argdecl = argdecl->next)
+				arg = CastExprTo(arg->ToExpr(), argdecl->ToVarDecl()->GetType());
 		}
 	}
-	EmitError("failed to find function", loc);
+	else
+	{
+		EmitError("failed to find function named '" + name + "'", loc);
+	}
 }
 
 bool Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSplit,
@@ -2280,12 +2272,12 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			{
 				auto* expr = new DeclRefExpr;
 				ast.unassignedNodes.AppendChild(expr);
-				expr->name = TokenStringData();
+				std::string name = TokenStringData();
 				expr->loc = T().loc;
 
 				for (VarDecl* vd = funcInfo.scopeVars; vd; vd = vd->prevScopeDecl)
 				{
-					if (vd->name == expr->name)
+					if (vd->name == name)
 					{
 						expr->decl = vd;
 						expr->SetReturnType(vd->GetType());
@@ -2294,15 +2286,15 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 				}
 				if (!expr->GetReturnType())
 				{
-					if (functions.find(expr->name) != functions.end() ||
-						g_BuiltinIntrinsics.find(expr->name.c_str()) != g_BuiltinIntrinsics.end())
+					if (functions.find(name) != functions.end() ||
+						g_BuiltinIntrinsics.find(name.c_str()) != g_BuiltinIntrinsics.end())
 					{
 						expr->SetReturnType(ast.GetFunctionType());
 					}
 				}
 				if (!expr->GetReturnType())
 				{
-					EmitError("could not find variable '" + expr->name + "'");
+					EmitError("could not find variable '" + name + "'");
 					expr->SetReturnType(ast.GetVoidType());
 				}
 
@@ -2388,9 +2380,16 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		}
 
 		curToken = start;
-		Expr* funcName = ParseExpr(endTokenType, bestSplit);
-		if (!funcName)
+		if (!EXPECT(STT_Ident))
 			return nullptr;
+		std::string funcName = TokenStringData();
+		if (!FWD())
+			return nullptr;
+		if (curToken != bestSplit)
+		{
+			EmitError("too many tokens preceding the function");
+			return nullptr;
+		}
 
 		auto* fcall = new OpExpr;
 		ast.unassignedNodes.AppendChild(fcall);
@@ -2639,7 +2638,6 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 					ast.unassignedNodes.AppendChild(mmb);
 					mmb->loc = tokens[bestSplit].loc;
 					mmb->SetSource(lft);
-					mmb->memberName = memberName;
 					mmb->memberID = memberID;
 					mmb->swizzleComp = swizzleComp;
 					mmb->SetReturnType(mmbTy);

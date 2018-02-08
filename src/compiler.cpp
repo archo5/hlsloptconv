@@ -648,7 +648,7 @@ void CBufferDecl::Dump(OutStream& out, int level) const
 
 void DeclRefExpr::Dump(OutStream& out, int level) const
 {
-	out << "declref(" << name << ") [";
+	out << "declref(" << (decl ? decl->name.c_str() : "NULL") << ") [";
 	GetReturnType()->Dump(out);
 	out << "]\n";
 }
@@ -870,9 +870,51 @@ void MemberExpr::Dump(OutStream& out, int level) const
 {
 	GetSource()->Dump(out, level);
 	LVL(out, level + 1);
-	out << "." << memberName << " [";
+	out << ".";
+	WriteName(out);
+	out << " [";
 	GetReturnType()->Dump(out);
 	out << "]" << "\n";
+}
+
+static const char* g_MtxSwizzle[] =
+{
+	"_11", "_21", "_31", "_41",
+	"_12", "_22", "_32", "_42",
+	"_13", "_23", "_33", "_43",
+	"_14", "_24", "_34", "_44",
+};
+void MemberExpr::WriteName(OutStream& out) const
+{
+	auto* srcTy = GetSource()->GetReturnType();
+	switch (srcTy->kind)
+	{
+	case ASTType::Structure:
+		out << srcTy->ToStructType()->members[memberID].name;
+		break;
+	case ASTType::Array:
+		assert(false);
+		break;
+	case ASTType::Matrix:
+		for (int i = 0; i < swizzleComp; ++i)
+		{
+			out << g_MtxSwizzle[(memberID >> (i * 4)) & 0xf];
+		}
+		break;
+	case ASTType::Vector:
+		for (int i = 0; i < swizzleComp; ++i)
+		{
+			out << "xyzw"[(memberID >> (i * 2)) & 0x3];
+		}
+		break;
+	case ASTType::Void:
+	case ASTType::Function:
+		break;
+	default:
+		// scalar swizzle
+		out << &"xxxx"[4 - swizzleComp];
+		break;
+	}
 }
 
 void IndexExpr::Dump(OutStream& out, int level) const
@@ -2213,7 +2255,6 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 		{
 			auto* dre = new DeclRefExpr;
 			dre->decl = vd;
-			dre->name = vd->name;
 			dre->SetReturnType(vd->GetType());
 			mmbIndices.back().levILE->AppendChild(dre);
 		}
@@ -2233,10 +2274,8 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 				auto* dreout = new DeclRefExpr;
 				auto* drestruct = new DeclRefExpr;
 				dreout->decl = vd;
-				dreout->name = vd->name;
 				dreout->SetReturnType(vd->GetType());
 				drestruct->decl = inSRC->ToVarDecl();
-				drestruct->name = drestruct->decl->name;
 				drestruct->SetReturnType(drestruct->decl->GetType());
 				ret->InsertBeforeMe(exprst);
 				exprst->AppendChild(assign);
@@ -2251,7 +2290,6 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 					const auto& mmbinfo = mmbIndices[i].strTy->members[mmbIndices[i].mmbID];
 
 					auto* mmbexpr = new MemberExpr;
-					mmbexpr->memberName = mmbinfo.name;
 					mmbexpr->memberID = mmbIndices[i].mmbID;
 					mmbexpr->SetReturnType(mmbinfo.type);
 					tgtexpr->AppendChild(mmbexpr);
@@ -2384,7 +2422,6 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat sha
 			auto* exprst = new ExprStmt;
 			auto* assign = new BinaryOpExpr;
 			auto* dre = new DeclRefExpr;
-			dre->name = vd->name;
 			dre->decl = vd;
 			dre->SetReturnType(vd->type);
 			ret->InsertBeforeMe(exprst);
@@ -2915,7 +2952,6 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 					auto* mmbexpr = new MemberExpr;
 					mmbexpr->SetSource(src);
 					mmbexpr->SetReturnType(strTy->members[i].type);
-					mmbexpr->memberName = strTy->members[i].name;
 					mmbexpr->memberID = i;
 					return GetReferenceToElement(ast, mmbexpr, accessPointNum - offset);
 				}
@@ -3389,11 +3425,9 @@ struct SplitTexSampleArgsPass : ASTWalker<SplitTexSampleArgsPass>
 		auto* coordSwizzle = new MemberExpr;
 		coordSwizzle->swizzleComp = dims;
 		coordSwizzle->memberID = 0 | (1<<2) | (2<<4);
-		coordSwizzle->memberName = dims == 3 ? "xyz" : (dims == 2 ? "xy" : "x");
 		auto* WSwizzle = new MemberExpr;
 		WSwizzle->memberID = 3;
 		WSwizzle->swizzleComp = 1;
-		WSwizzle->memberName = "w";
 		argcoord->ReplaceWith(coordSwizzle);
 		argW->ReplaceWith(WSwizzle);
 		coordSwizzle->SetReturnType(ast.CastToVector(argcoord->GetReturnType(), dims, true));

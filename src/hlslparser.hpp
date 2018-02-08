@@ -48,7 +48,7 @@ struct Parser
 	bool ParseSemantic(std::string& name, int& index);
 	bool ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTType** equalArgs, bool err);
-	void FindFunction(OpExpr* fcall, Expr* fnexpr, const Location& loc);
+	void FindFunction(OpExpr* fcall, const std::string& name, const Location& loc);
 	bool FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);

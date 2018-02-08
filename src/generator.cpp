@@ -334,7 +334,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 		if (!supportsScalarSwizzle && mbe->GetSource()->GetReturnType()->IsNumeric())
 		{
 			if (mbe->swizzleComp > 1) // 1-component swizzles could otherwise generate vec1-like types
-				EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->memberName.size()));
+				EmitTypeRef(ast.GetVectorType(mbe->GetSource()->GetReturnType(), mbe->swizzleComp));
 			out << "(";
 			EmitExpr(mbe->GetSource());
 			out << ")";
@@ -342,7 +342,8 @@ void SLGenerator::EmitExpr(const Expr* node)
 		else
 		{
 			EmitExpr(mbe->GetSource());
-			out << "." << mbe->memberName;
+			out << ".";
+			mbe->WriteName(out);
 		}
 		return;
 	}
@@ -356,10 +357,7 @@ void SLGenerator::EmitExpr(const Expr* node)
 	}
 	else if (auto* dre = dyn_cast<const DeclRefExpr>(node))
 	{
-		if (dre->decl)
-			out << dre->decl->name;
-		else
-			out << dre->name;
+		out << dre->decl->name;
 		return;
 	}
 	else if (dyn_cast<const VoidExpr>(node))

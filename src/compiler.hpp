@@ -409,7 +409,6 @@ struct DeclRefExpr : Expr
 	IMPLEMENT_NODE(DeclRefExpr);
 	void Dump(OutStream& out, int) const override;
 
-	std::string name;
 	VarDecl* decl = nullptr;
 };
 
@@ -636,8 +635,8 @@ struct MemberExpr : SubValExpr
 {
 	IMPLEMENT_NODE(MemberExpr);
 	void Dump(OutStream& out, int level) const override;
+	void WriteName(OutStream& out) const;
 
-	std::string memberName;
 	uint32_t memberID = 0;
 	int swizzleComp = 0; // 0 - not a swizzle
 };
