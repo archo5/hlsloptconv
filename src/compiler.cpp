@@ -81,7 +81,7 @@ ASTType::Kind ASTType::GetNVMKind() const
 	}
 }
 
-void ASTType::GetMangling(std::string& out) const
+void ASTType::GetMangling(String& out) const
 {
 	char bfr[32];
 	switch (kind)
@@ -158,7 +158,7 @@ void ASTType::Dump(OutStream& out) const
 	}
 }
 
-std::string ASTType::GetName() const
+String ASTType::GetName() const
 {
 	switch (kind)
 	{
@@ -170,7 +170,7 @@ std::string ASTType::GetName() const
 	case Float32:     return "float";
 	case Vector:      return subType->GetName() + gVecNumbers[sizeX - 1];
 	case Matrix:      return subType->GetName() + gMtxNumbers[sizeX - 1 + (sizeY - 1) * 4];
-	case Array:       return subType->GetName() + "[" + std::to_string(elementCount) + "]";
+	case Array:       return subType->GetName() + "[" + StdToString(elementCount) + "]";
 	case Structure:   return "struct(" + static_cast<const ASTStructType*>(this)->name + ")";
 	case Function:    return "function";
 	case Sampler1D:   return "sampler1D";
@@ -253,7 +253,7 @@ bool TokenIsOpCompare(SLTokenType tt)
 	return false;
 }
 
-std::string TokenTypeToString(SLTokenType tt)
+String TokenTypeToString(SLTokenType tt)
 {
 	const char* str;
 	switch (tt)
@@ -579,7 +579,7 @@ void VarDecl::SetType(ASTType* t)
 	_ChangeUsedType(type, t);
 }
 
-void VarDecl::GetMangling(std::string& out) const
+void VarDecl::GetMangling(String& out) const
 {
 	if ((flags & (ATTR_In | ATTR_Out)) == (ATTR_In | ATTR_Out))
 		out += "Q";
@@ -1312,7 +1312,7 @@ ASTType* TypeSystem::GetArrayType(ASTType* t, uint32_t size)
 	return nat;
 }
 
-ASTStructType* TypeSystem::CreateStructType(const std::string& name)
+ASTStructType* TypeSystem::CreateStructType(const String& name)
 {
 	auto* stc = new ASTStructType;
 	stc->name = name;
@@ -2004,7 +2004,7 @@ void VariableAccessValidator::ValidateCheckOutputElementsWritten(Location loc)
 	{
 		if (elementsWritten[i] == 0)
 		{
-			std::string err = "not all outputs have been assigned before 'return':";
+			String err = "not all outputs have been assigned before 'return':";
 			for (ASTNode* arg = curASTFunction->GetFirstArg(); arg; arg = arg->next)
 			{
 				auto* argvd = arg->ToVarDecl();
@@ -2021,7 +2021,7 @@ void VariableAccessValidator::ValidateCheckOutputElementsWritten(Location loc)
 static const char* g_VecSuffixStr[4] = { ".x", ".y", ".z", ".w" };
 static const char* g_Arr4SuffixStr[4] = { "[0]", "[1]", "[2]", "[3]" };
 void VariableAccessValidator::AddMissingOutputAccessPoints(
-	std::string& outerr, ASTType* type, int from, std::string pfx /* TODO twine */)
+	String& outerr, ASTType* type, int from, String pfx /* TODO twine */)
 {
 	switch (type->kind)
 	{
@@ -2073,7 +2073,7 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 	case ASTType::Array:
 		for (uint32_t i = 0; i < type->elementCount; ++i)
 		{
-			AddMissingOutputAccessPoints(outerr, type->subType, from, pfx + "[" + std::to_string(i) + "]");
+			AddMissingOutputAccessPoints(outerr, type->subType, from, pfx + "[" + StdToString(i) + "]");
 			from += type->subType->GetAccessPointCount();
 		}
 		break;
@@ -2195,7 +2195,7 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 			if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
 				((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
 			{
-				vd->name = "attr" + vd->semanticName + std::to_string(vd->GetSemanticIndex());
+				vd->name = "attr" + vd->semanticName + StdToString(vd->GetSemanticIndex());
 			}
 		}
 
@@ -3742,7 +3742,7 @@ bool Compiler::CompileFile(const char* name, const char* code)
 	Diagnostic diag(errorOutputStream, name);
 	Parser p(diag, stage, entryPoint, loadIncludeFilePFN, loadIncludeFileUD);
 
-	std::string codeWithDefines;
+	String codeWithDefines;
 	if (defines)
 	{
 		ShaderMacro* d = defines;

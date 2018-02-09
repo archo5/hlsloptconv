@@ -8,11 +8,11 @@
 
 struct PreprocMacro
 {
-	std::vector<std::string> args;
+	std::vector<String> args;
 	std::vector<SLToken> tokens;
 	bool isFunc = false;
 };
-typedef std::unordered_map<std::string, PreprocMacro> PreprocMacroMap;
+typedef std::unordered_map<String, PreprocMacro> PreprocMacroMap;
 
 struct CurFunctionInfo
 {
@@ -22,7 +22,7 @@ struct CurFunctionInfo
 
 struct Parser
 {
-	Parser(Diagnostic& d, ShaderStage s, const std::string& ep, LoadIncludeFilePFN lifpfn, void* lifud) :
+	Parser(Diagnostic& d, ShaderStage s, const String& ep, LoadIncludeFilePFN lifpfn, void* lifud) :
 		diag(d),
 		entryPointName(ep),
 		loadIncludeFilePFN(lifpfn),
@@ -43,12 +43,12 @@ struct Parser
 	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
 
 	ASTType* ParseType(bool isFuncRet = false);
-	ASTType* FindMemberType(ASTType* t, const std::string& name, uint32_t& memberID, int& swizzleComp);
+	ASTType* FindMemberType(ASTType* t, const String& name, uint32_t& memberID, int& swizzleComp);
 	VoidExpr* CreateVoidExpr(); // for errors
-	bool ParseSemantic(std::string& name, int& index);
+	bool ParseSemantic(String& name, int& index);
 	bool ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTType** equalArgs, bool err);
-	void FindFunction(OpExpr* fcall, const std::string& name, const Location& loc);
+	void FindFunction(OpExpr* fcall, const String& name, const Location& loc);
 	bool FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);
@@ -103,27 +103,27 @@ struct Parser
 	}
 	bool EXPECT(SLTokenType tt) { return EXPECT(T(), tt); }
 
-	void EXPECTERR(const SLToken& t, const std::string& exp)
+	void EXPECTERR(const SLToken& t, const String& exp)
 	{
 		EmitError("expected " + exp + ", got '" + TokenToString(t) + "'");
 		diag.hasFatalErrors = true;
 	}
-	void EXPECTERR(const std::string& exp) { EXPECTERR(T(), exp); }
+	void EXPECTERR(const String& exp) { EXPECTERR(T(), exp); }
 
-	void EmitError(const std::string& msg, const Location& loc)
+	void EmitError(const String& msg, const Location& loc)
 	{
 		diag.EmitError(msg, loc);
 	}
-	void EmitError(const std::string& msg, bool withLoc = true)
+	void EmitError(const String& msg, bool withLoc = true)
 	{
 		diag.EmitError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
 	}
-	void EmitFatalError(const std::string& msg, const Location& loc)
+	void EmitFatalError(const String& msg, const Location& loc)
 	{
 		diag.EmitError(msg, loc);
 		diag.hasFatalErrors = true;
 	}
-	void EmitFatalError(const std::string& msg, bool withLoc = true)
+	void EmitFatalError(const String& msg, bool withLoc = true)
 	{
 		diag.EmitError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
 		diag.hasFatalErrors = true;
@@ -135,27 +135,27 @@ struct Parser
 
 	bool TokenStringDataEquals(const SLToken& t, const char* comp, size_t compsz) const;
 	const char* TokenStringC(const SLToken& t) const;
-	std::string TokenStringData(const SLToken& t) const;
+	String TokenStringData(const SLToken& t) const;
 	bool TokenBoolData(const SLToken& t) const;
 	int32_t TokenInt32Data(const SLToken& t) const;
 	double TokenFloatData(const SLToken& t) const;
-	std::string TokenToString(const SLToken& t) const;
+	String TokenToString(const SLToken& t) const;
 
 	bool TokenStringDataEquals(size_t i, const char* comp, size_t compsz) const;
 	const char* TokenStringC(size_t i) const;
-	std::string TokenStringData(size_t i) const;
+	String TokenStringData(size_t i) const;
 	bool TokenBoolData(size_t i) const;
 	int32_t TokenInt32Data(size_t i) const;
 	double TokenFloatData(size_t i) const;
-	std::string TokenToString(size_t i) const;
+	String TokenToString(size_t i) const;
 
 	bool TokenStringDataEquals(const char* comp, size_t compsz) const;
 	const char* TokenStringC() const;
-	std::string TokenStringData() const;
+	String TokenStringData() const;
 	bool TokenBoolData() const;
 	int32_t TokenInt32Data() const;
 	double TokenFloatData() const;
-	std::string TokenToString() const;
+	String TokenToString() const;
 
 
 	bool IsAttrib() const
@@ -170,7 +170,7 @@ struct Parser
 	void* loadIncludeFileUD;
 
 
-	std::vector<std::string> filenames;
+	std::vector<String> filenames;
 	std::vector<char> tokenData;
 	std::vector<SLToken> tokens;
 	PreprocMacroMap macros;
@@ -179,8 +179,8 @@ struct Parser
 
 	CurFunctionInfo funcInfo;
 	typedef std::vector<ASTFunction*> ASTFuncList;
-	std::unordered_map<std::string, ASTFuncList> functions;
-	std::string entryPointName;
+	std::unordered_map<String, ASTFuncList> functions;
+	String entryPointName;
 	int entryPointCount = 0;
 
 	AST ast;

@@ -470,7 +470,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 		notThisOper:;
 		}
 
-		EmitError("unexpected character: '" + std::string(text, 1) + "'", LOC(text));
+		EmitError("unexpected character: '" + String(text, 1) + "'", LOC(text));
 		return false;
 
 	continueParsing:;
@@ -750,12 +750,12 @@ notfound:
 				EXPECTERR("preprocessor command identifier");
 				return false;
 			}
-			std::string cmd = TokenToString();
+			String cmd = TokenToString();
 			if (cmd == "define")
 			{
 				if (!PPFWD() || !EXPECT(STT_Ident))
 					return false;
-				std::string name = TokenStringData();
+				String name = TokenStringData();
 				uint32_t logicalLine = T().logicalLine;
 
 				PreprocMacro macro;
@@ -797,7 +797,7 @@ notfound:
 			{
 				if (!PPFWD() || !EXPECT(STT_Ident))
 					return false;
-				std::string name = TokenStringData();
+				String name = TokenStringData();
 
 				if (macros.erase(name) == 0)
 				{
@@ -846,7 +846,7 @@ notfound:
 			{
 				if (!PPFWD() || !EXPECT(STT_Ident))
 					return false;
-				std::string name = TokenStringData();
+				String name = TokenStringData();
 
 				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
 				{
@@ -863,7 +863,7 @@ notfound:
 			{
 				if (!PPFWD() || !EXPECT(STT_Ident))
 					return false;
-				std::string name = TokenStringData();
+				String name = TokenStringData();
 
 				ppOutputEnabled.push_back(macros.find(name) == macros.end() ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
 			}
@@ -931,7 +931,7 @@ notfound:
 				if (!PPFWD() || !EXPECT(STT_StrLit))
 					return false;
 
-				std::string file = TokenStringData();
+				String file = TokenStringData();
 				if (curToken + 1 < tokens.size() &&
 					tokens[curToken].logicalLine == tokens[curToken + 1].logicalLine)
 				{
@@ -1134,7 +1134,7 @@ ASTType* Parser::ParseType(bool isFuncRet)
 {
 	if (!EXPECT(STT_Ident))
 		return nullptr;
-	std::string name = TokenStringData();
+	String name = TokenStringData();
 	if (isFuncRet == false && name == "void")
 	{
 		EmitError("void type can only be used as function return value");
@@ -1149,7 +1149,7 @@ ASTType* Parser::ParseType(bool isFuncRet)
 	return ast.GetVoidType();
 }
 
-ASTType* Parser::FindMemberType(ASTType* t, const std::string& name, uint32_t& memberID, int& swizzleComp)
+ASTType* Parser::FindMemberType(ASTType* t, const String& name, uint32_t& memberID, int& swizzleComp)
 {
 	switch (t->kind)
 	{
@@ -1296,7 +1296,7 @@ VoidExpr* Parser::CreateVoidExpr()
 	return e;
 }
 
-bool Parser::ParseSemantic(std::string& name, int& index)
+bool Parser::ParseSemantic(String& name, int& index)
 {
 	if (TT() == STT_Colon)
 	{
@@ -1419,7 +1419,7 @@ int32_t Parser::CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTTyp
 		{
 			if (err)
 			{
-				EmitError("cannot implicitly cast argument " + std::to_string(i + 1)
+				EmitError("cannot implicitly cast argument " + StdToString(i + 1)
 					+ " from '" + inty->GetName() + "' to '" + expty->GetName() + "'");
 			}
 			return MAX_OVERLOAD;
@@ -1450,9 +1450,9 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 	if (fcall->GetArgCount() != args)
 	{
 		if (args > 1)
-			parser->EmitError("'" + std::string(name) + "' requires " + std::to_string(args) + " arguments");
+			parser->EmitError("'" + String(name) + "' requires " + StdToString(args) + " arguments");
 		else
-			parser->EmitError("'" + std::string(name) + "' requires 1 argument");
+			parser->EmitError("'" + String(name) + "' requires 1 argument");
 		return nullptr;
 	}
 
@@ -1488,7 +1488,7 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 
 	if (notMatch)
 	{
-		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
@@ -1507,9 +1507,9 @@ static ASTType* VectorIntrin(Parser* parser, OpExpr* fcall,
 	if (fcall->GetArgCount() != args)
 	{
 		if (args > 1)
-			parser->EmitError("'" + std::string(name) + "' requires " + std::to_string(args) + " arguments");
+			parser->EmitError("'" + String(name) + "' requires " + StdToString(args) + " arguments");
 		else
-			parser->EmitError("'" + std::string(name) + "' requires 1 argument");
+			parser->EmitError("'" + String(name) + "' requires 1 argument");
 		return nullptr;
 	}
 
@@ -1553,7 +1553,7 @@ static ASTType* VectorIntrin(Parser* parser, OpExpr* fcall,
 	if (notMatch)
 	{
 unmatched:
-		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
@@ -1567,7 +1567,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 {
 	if (fcall->GetArgCount() != numArgs)
 	{
-		parser->EmitError("'" + std::string(name) + "' requires " + std::to_string(numArgs) + " arguments");
+		parser->EmitError("'" + String(name) + "' requires " + StdToString(numArgs) + " arguments");
 		return nullptr;
 	}
 	ASTType* rt0 = fcall->GetFirstArg()->ToExpr()->GetReturnType();
@@ -1605,7 +1605,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 
 	if (notMatch)
 	{
-		parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
 		return nullptr;
 	}
 
@@ -1618,7 +1618,7 @@ static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 {
 	if (fcall->GetArgCount() != 3)
 	{
-		parser->EmitError("'" + std::string(name) + "' requires 3 arguments");
+		parser->EmitError("'" + String(name) + "' requires 3 arguments");
 		return nullptr;
 	}
 	auto* arg = fcall->GetFirstArg();
@@ -1656,7 +1656,7 @@ static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 	return parser->ast.GetFloat32Type();
 
 mismatch:
-	parser->EmitError("none of '" + std::string(name) + "' overloads matched the argument list");
+	parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
 	return nullptr;
 }
 
@@ -2059,7 +2059,7 @@ std::unordered_map<const char*, IntrinsicValidatorFP, ConstCharHash, ConstCharEq
 	/// transpose
 	DEF_INTRIN_SSF(Op_Trunc, trunc),
 };
-void Parser::FindFunction(OpExpr* fcall, const std::string& name, const Location& loc)
+void Parser::FindFunction(OpExpr* fcall, const String& name, const Location& loc)
 {
 	auto bit = g_BuiltinIntrinsics.find(name.c_str());
 	if (bit != g_BuiltinIntrinsics.end())
@@ -2272,7 +2272,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			{
 				auto* expr = new DeclRefExpr;
 				ast.unassignedNodes.AppendChild(expr);
-				std::string name = TokenStringData();
+				String name = TokenStringData();
 				expr->loc = T().loc;
 
 				for (VarDecl* vd = funcInfo.scopeVars; vd; vd = vd->prevScopeDecl)
@@ -2382,7 +2382,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		curToken = start;
 		if (!EXPECT(STT_Ident))
 			return nullptr;
-		std::string funcName = TokenStringData();
+		String funcName = TokenStringData();
 		if (!FWD())
 			return nullptr;
 		if (curToken != bestSplit)
@@ -2622,7 +2622,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		{
 			if (bkCur - bestSplit == 2 && tokens[bestSplit + 1].type == STT_Ident)
 			{
-				std::string memberName = TokenStringData(bestSplit + 1);
+				String memberName = TokenStringData(bestSplit + 1);
 				uint32_t memberID = 0;
 				int swizzleComp = 0;
 				if (auto* mmbTy = FindMemberType(lft->GetReturnType(), memberName, memberID, swizzleComp))
@@ -3321,7 +3321,7 @@ bool Parser::TryCastExprTo(Expr* expr, ASTType* tty, const char* what)
 	}
 	else
 	{
-		EmitError("cannot cast " + std::string(what) + " from '"
+		EmitError("cannot cast " + String(what) + " from '"
 			+ expr->GetReturnType()->GetName() + "' to '"
 			+ tty->GetName() + "'");
 		return false;
@@ -3343,7 +3343,7 @@ int32_t Parser::ParseRegister(char ch, bool comp, int32_t limit)
 
 	if (!EXPECT(STT_Ident))
 		return -1;
-	std::string regname = TokenStringData();
+	String regname = TokenStringData();
 	if (regname.size() < 2 || regname[0] != ch)
 	{
 		sprintf(errbuf, "bad %s register, expected %c<number>%s",
@@ -3406,7 +3406,7 @@ bool Parser::ParseDecl()
 		if (!FWD() || !EXPECT(STT_Ident))
 			return false;
 
-		std::string name = TokenStringData();
+		String name = TokenStringData();
 		if (ast.IsTypeName(name.c_str()))
 			EmitError("type name already used: " + name);
 
@@ -3557,7 +3557,7 @@ bool Parser::ParseDecl()
 
 		if (!EXPECT(STT_Ident))
 			return false;
-		std::string name = TokenStringData();
+		String name = TokenStringData();
 		if (!FWD())
 			return false;
 
@@ -3586,7 +3586,7 @@ bool Parser::ParseDecl()
 				return false;
 
 			VarDeclSaver vds(this);
-			std::string mangledName = "F" + std::to_string(name.size()) + name;
+			String mangledName = "F" + StdToString(name.size()) + name;
 			for (ASTNode* arg = func->GetFirstArg(); arg; arg = arg->next)
 			{
 				auto* vd = arg->ToVarDecl();
@@ -3833,14 +3833,14 @@ const char* Parser::TokenStringC(const SLToken& t) const
 	return (const char*) &tokenData[t.dataOff + 4];
 }
 
-std::string Parser::TokenStringData(const SLToken& t) const
+String Parser::TokenStringData(const SLToken& t) const
 {
 	auto tt = t.type;
 	if (tt != STT_Ident && tt != STT_StrLit)
 		return {};
 	int32_t	len = 0;
 	memcpy(&len, &tokenData[t.dataOff], 4);
-	return std::string((const char*) &tokenData[t.dataOff + 4], len);
+	return String((const char*) &tokenData[t.dataOff + 4], len);
 }
 
 bool Parser::TokenBoolData(const SLToken& t) const
@@ -3868,7 +3868,7 @@ double Parser::TokenFloatData(const SLToken& t) const
 	return data;
 }
 
-std::string Parser::TokenToString(const SLToken& t) const
+String Parser::TokenToString(const SLToken& t) const
 {
 	char bfr[32];
 	switch (t.type)
@@ -3892,21 +3892,21 @@ bool Parser::TokenStringDataEquals(size_t i, const char* comp, size_t compsz) co
 	return TokenStringDataEquals(tokens[i], comp, compsz);
 }
 const char* Parser::TokenStringC(size_t i) const { return TokenStringC(tokens[i]); }
-std::string Parser::TokenStringData(size_t i) const { return TokenStringData(tokens[i]); }
+String Parser::TokenStringData(size_t i) const { return TokenStringData(tokens[i]); }
 bool Parser::TokenBoolData(size_t i) const { return TokenBoolData(tokens[i]); }
 int32_t Parser::TokenInt32Data(size_t i) const { return TokenInt32Data(tokens[i]); }
 double Parser::TokenFloatData(size_t i) const { return TokenFloatData(tokens[i]); }
-std::string Parser::TokenToString(size_t i) const { return TokenToString(tokens[i]); }
+String Parser::TokenToString(size_t i) const { return TokenToString(tokens[i]); }
 
 bool Parser::TokenStringDataEquals(const char* comp, size_t compsz) const
 {
 	return TokenStringDataEquals(tokens[curToken], comp, compsz);
 }
 const char* Parser::TokenStringC() const { return TokenStringC(tokens[curToken]); }
-std::string Parser::TokenStringData() const { return TokenStringData(tokens[curToken]); }
+String Parser::TokenStringData() const { return TokenStringData(tokens[curToken]); }
 bool Parser::TokenBoolData() const { return TokenBoolData(tokens[curToken]); }
 int32_t Parser::TokenInt32Data() const { return TokenInt32Data(tokens[curToken]); }
 double Parser::TokenFloatData() const { return TokenFloatData(tokens[curToken]); }
-std::string Parser::TokenToString() const { return TokenToString(tokens[curToken]); }
+String Parser::TokenToString() const { return TokenToString(tokens[curToken]); }
 
 

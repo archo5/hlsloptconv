@@ -113,7 +113,7 @@ static void PrintHelp()
 	fprintf(stderr, "    - jsstr           - convert to a JavaScript string\n");
 }
 
-static void Stringify(std::string& out, const std::string& in, bool jsconcat)
+static void Stringify(String& out, const String& in, bool jsconcat)
 {
 	out = "\"";
 	// jsconcat = add '+' after each line except the last
@@ -229,14 +229,14 @@ int main(int argc, char** argv)
 		compiler.defines = macros.data();
 	}
 
-	std::string inCode = GetFileContents(inputFileName, true);
+	String inCode = GetFileContents(inputFileName, true);
 	if (!compiler.CompileFile(inputFileName, inCode.c_str()))
 	{
 		fprintf(stderr, "compilation failed, no output generated\n");
 		return 1;
 	}
 
-	std::string outCode;
+	String outCode;
 	if (strcmp(xform, "cstr") == 0)
 	{
 		Stringify(outCode, codeStream.str(), false);

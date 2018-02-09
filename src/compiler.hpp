@@ -90,7 +90,7 @@ enum SLTokenType
 
 bool TokenIsOpAssign(SLTokenType tt);
 bool TokenIsOpCompare(SLTokenType tt);
-std::string TokenTypeToString(SLTokenType tt);
+String TokenTypeToString(SLTokenType tt);
 
 struct SLToken
 {
@@ -148,9 +148,9 @@ struct ASTType
 	unsigned GetAccessPointCount() const;
 	SubTypeCount CountSubTypes() const;
 	Kind GetNVMKind() const;
-	void GetMangling(std::string& out) const;
+	void GetMangling(String& out) const;
 	virtual void Dump(OutStream& out) const;
-	std::string GetName() const;
+	String GetName() const;
 	ASTStructType* ToStructType();
 	const ASTStructType* ToStructType() const { return const_cast<ASTType*>(this)->ToStructType(); }
 	
@@ -202,9 +202,9 @@ struct AccessPointDecl
 	void Dump(OutStream& out) const;
 	int GetSemanticIndex() const { return semanticIndex >= 0 ? semanticIndex : 0; }
 
-	std::string name;
+	String name;
 	ASTType* type = nullptr;
-	std::string semanticName;
+	String semanticName;
 	int semanticIndex = -1;
 };
 
@@ -214,7 +214,7 @@ struct ASTStructType : ASTType
 
 	void Dump(OutStream& out) const;
 
-	std::string name;
+	String name;
 	std::vector<AccessPointDecl> members;
 	uint32_t totalAccessPointCount = 0;
 	ASTStructType* prevStructType = nullptr;
@@ -377,7 +377,7 @@ struct VarDecl : ASTNode, AccessPointDecl
 	FINLINE ASTType* GetType() const { return type; }
 	void SetType(ASTType* t);
 
-	void GetMangling(std::string& out) const;
+	void GetMangling(String& out) const;
 	void Dump(OutStream& out, int level = 0) const;
 
 	uint32_t flags = 0;
@@ -400,7 +400,7 @@ struct CBufferDecl : ASTNode
 	IMPLEMENT_NODE(CBufferDecl);
 	void Dump(OutStream& out, int) const override;
 
-	std::string name;
+	String name;
 	int32_t bufRegID = -1;
 };
 
@@ -766,10 +766,10 @@ struct ASTFunction : ASTNode
 	int GetReturnSemanticIndex() const { return returnSemanticIndex >= 0 ? returnSemanticIndex : 0; }
 
 	ASTType* returnType = nullptr;
-	std::string returnSemanticName;
+	String returnSemanticName;
 	int returnSemanticIndex = -1;
-	std::string name;
-	std::string mangledName;
+	String name;
+	String mangledName;
 	ReturnStmt* firstRetStmt = nullptr;
 	ReturnStmt* lastRetStmt = nullptr;
 	std::vector<VarDecl*> tmpVars;
@@ -794,7 +794,7 @@ struct TypeSystem
 		return const_cast<TypeSystem*>(this)->GetMatrixType(t, sizeX, sizeY); }
 	ASTType* GetArrayType(ASTType* t, uint32_t size);
 
-	ASTStructType* CreateStructType(const std::string& name);
+	ASTStructType* CreateStructType(const String& name);
 
 	ASTType* _GetSVMTypeByName(ASTType* t, const char* sub);
 	ASTType* GetBaseTypeByName(const char* name);
@@ -987,7 +987,7 @@ struct VariableAccessValidator
 
 	void ValidateSetupFunc(const ASTFunction* fn);
 	void ValidateCheckOutputElementsWritten(Location loc);
-	void AddMissingOutputAccessPoints(std::string& outerr, ASTType* type, int from, std::string pfx);
+	void AddMissingOutputAccessPoints(String& outerr, ASTType* type, int from, String pfx);
 	void ValidateCheckVariableInitialized(const DeclRefExpr* dre);
 	void ValidateCheckVariableError(const DeclRefExpr* dre);
 

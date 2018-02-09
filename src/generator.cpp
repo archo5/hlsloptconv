@@ -7,7 +7,7 @@ struct SLGenerator
 {
 	SLGenerator(const AST& a, OutStream& o, OutputShaderFormat osf) : ast(a), out(o), shaderFormat(osf) {}
 	virtual void EmitTypeRef(const ASTType* type) = 0;
-	virtual void EmitAccessPointTypeAndName(ASTType* type, const std::string& name);
+	virtual void EmitAccessPointTypeAndName(ASTType* type, const String& name);
 	virtual void EmitAccessPointDecl(const AccessPointDecl& apd);
 	virtual void EmitVarDecl(const VarDecl* vd);
 	virtual void EmitExpr(const Expr* node);
@@ -69,7 +69,7 @@ struct GLSLGenerator : SLGenerator
 };
 
 
-void SLGenerator::EmitAccessPointTypeAndName(ASTType* type, const std::string& name)
+void SLGenerator::EmitAccessPointTypeAndName(ASTType* type, const String& name)
 {
 	if (type->kind == ASTType::Array)
 	{

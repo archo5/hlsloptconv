@@ -244,7 +244,7 @@ namespace D3D9
 		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D9", "1" }, { nullptr, nullptr } };
 		compiler.defines = macros;
-		std::string inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -393,7 +393,7 @@ namespace D3D11
 		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D11", "1" }, { nullptr, nullptr } };
 		compiler.defines = macros;
-		std::string inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -752,7 +752,7 @@ namespace GL20
 		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "GL20", "1" }, { nullptr, nullptr } };
 		compiler.defines = macros;
-		std::string inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -771,7 +771,7 @@ namespace GL20
 		{
 			GLint infoLogLength;
 			GLCHK(glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetShaderInfoLog(shader, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL compilation failed:\n%s\n", log.c_str());
@@ -848,7 +848,7 @@ namespace GL20
 		{
 			GLint infoLogLength;
 			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL program linking failed:\n%s\n", log.c_str());
@@ -861,7 +861,7 @@ namespace GL20
 		{
 			GLint infoLogLength;
 			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL program validation failed:\n%s\n", log.c_str());
@@ -1033,7 +1033,7 @@ namespace GL31
 		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "GL31", "1" }, { nullptr, nullptr } };
 		compiler.defines = macros;
-		std::string inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -1052,7 +1052,7 @@ namespace GL31
 		{
 			GLint infoLogLength;
 			GLCHK(glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetShaderInfoLog(shader, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL compilation failed:\n%s\n", log.c_str());
@@ -1157,7 +1157,7 @@ namespace GL31
 		{
 			GLint infoLogLength;
 			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL program linking failed:\n%s\n", log.c_str());
@@ -1170,7 +1170,7 @@ namespace GL31
 		{
 			GLint infoLogLength;
 			GLCHK(glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLength));
-			std::string log;
+			String log;
 			log.resize(infoLogLength);
 			GLCHK(glGetProgramInfoLog(prog, infoLogLength, nullptr, &log[0]));
 			fprintf(stderr, "GLSL program validation failed:\n%s\n", log.c_str());

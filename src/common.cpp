@@ -97,7 +97,7 @@ OutStream& OutStream::operator << (const void* v)
 	return *this;
 }
 
-OutStream& OutStream::operator << (const std::string& v)
+OutStream& OutStream::operator << (const String& v)
 {
 	Write(v.c_str(), v.size());
 	return *this;
@@ -139,7 +139,7 @@ double GetTime()
 #endif
 }
 
-std::string GetFileContents(const char* filename, bool text)
+String GetFileContents(const char* filename, bool text)
 {
 	FILE* fp = fopen(filename, text ? "r" : "rb");
 	if (!fp)
@@ -149,7 +149,7 @@ std::string GetFileContents(const char* filename, bool text)
 		exit(1);
 	}
 
-	std::string contents;
+	String contents;
 	fseek(fp, 0, SEEK_END);
 	contents.resize(ftell(fp));
 	rewind(fp);
@@ -169,7 +169,7 @@ std::string GetFileContents(const char* filename, bool text)
 	return contents;
 }
 
-void SetFileContents(const char* filename, const std::string& contents, bool text)
+void SetFileContents(const char* filename, const String& contents, bool text)
 {
 	FILE* fp = fopen(filename, text ? "w" : "wb");
 	if (!fp)
@@ -195,7 +195,7 @@ Diagnostic::Diagnostic(OutStream* eos, const char* src)
 	sourceFiles.push_back(src);
 }
 
-uint32_t Diagnostic::GetSourceID(const std::string& src)
+uint32_t Diagnostic::GetSourceID(const String& src)
 {
 	for (size_t i = 0; i < sourceFiles.size(); ++i)
 		if (sourceFiles[i] == src)
@@ -204,7 +204,7 @@ uint32_t Diagnostic::GetSourceID(const std::string& src)
 	return sourceFiles.size() - 1;
 }
 
-void Diagnostic::PrintMessage(const char* type, const std::string& msg, const Location& loc)
+void Diagnostic::PrintMessage(const char* type, const String& msg, const Location& loc)
 {
 	if (!errorOutputStream)
 		return;
@@ -216,7 +216,7 @@ void Diagnostic::PrintMessage(const char* type, const std::string& msg, const Lo
 	*errorOutputStream << " " << type << ": " << msg << "\n";
 }
 
-void Diagnostic::EmitError(const std::string& msg, const Location& loc)
+void Diagnostic::EmitError(const String& msg, const Location& loc)
 {
 	hasErrors = true;
 	PrintError(msg, loc);
