@@ -184,12 +184,56 @@ static int LoadIncludeFileTest(const char* file, const char* requester, char** o
 	return 0;
 }
 
+const char* ShaderVarTypeToString(ShaderVarType svt)
+{
+	switch (svt)
+	{
+	case SVT_StructBegin:       return "StructBegin";
+	case SVT_StructEnd:         return "StructEnd";
+	case SVT_Uniform:           return "Uniform";
+	case SVT_UniformBlockBegin: return "UniformBlockBegin";
+	case SVT_UniformBlockEnd:   return "UniformBlockEnd";
+	case SVT_VSInput:           return "VSInput";
+	case SVT_Sampler:           return "Sampler";
+	case SVT_PSOutputDepth:     return "PSOutputDepth";
+	case SVT_PSOutputColor:     return "PSOutputColor";
+	default:                    return "[UNKNOWN SHADER VAR TYPE]";
+	}
+}
+
+const char* ShaderDataTypeToString(ShaderDataType sdt)
+{
+	switch (sdt)
+	{
+	case SDT_None:            return "None";
+	case SDT_Bool:            return "Bool";
+	case SDT_Int32:           return "Int32";
+	case SDT_UInt32:          return "UInt32";
+	case SDT_Float16:         return "Float16";
+	case SDT_Float32:         return "Float32";
+	case SDT_Sampler1D:       return "Sampler1D";
+	case SDT_Sampler2D:       return "Sampler2D";
+	case SDT_Sampler3D:       return "Sampler3D";
+	case SDT_SamplerCube:     return "SamplerCube";
+	case SDT_Sampler1DComp:   return "Sampler1DComp";
+	case SDT_Sampler2DComp:   return "Sampler2DComp";
+	case SDT_SamplerCubeComp: return "SamplerCubeComp";
+	default:                  return "[UNKNOWN SHADER DATA TYPE]";
+	}
+}
+
 String longestMyBuildShader = "<none?";
 String longestFXCBuildShader = "<none?>";
 String longestGLSLVBuildShader = "<none?>";
 double longestMyBuildTime = 0;
 double longestFXCBuildTime = 0;
 double longestGLSLVBuildTime = 0;
+
+ShaderVariable shaderVarBuf[32];
+char shaderVarStrBuf[1024];
+size_t nextBuildVarBufSize = 0;
+size_t nextBuildVarStrBufSize = 0;
+bool nextBuildVarRequest = false;
 
 static void exec_test(const char* fname, const char* nameonly)
 {
@@ -211,6 +255,7 @@ static void exec_test(const char* fname, const char* nameonly)
 		String lastByprod;
 		String lastShader;
 		String lastErrors;
+		StringStream lastVarDump;
 		char testName[64] = "<unknown>";
 		String testFile = GetFileContents(fname);
 		/* parse contents
@@ -318,10 +363,56 @@ static void exec_test(const char* fname, const char* nameonly)
 				C.ASTDumpStream = &ssByprod;
 				C.outputFmt = outputFmt;
 				C.stage = stage;
+				if (nextBuildVarRequest)
+				{
+					C.outVarGenerate = nextBuildVarRequest;
+					C.outVarBuf = shaderVarBuf;
+					C.outVarBufSize = nextBuildVarBufSize;
+					C.outVarStrBuf = shaderVarStrBuf;
+					C.outVarStrBufSize = nextBuildVarStrBufSize;
+				}
 				lastExec = C.CompileFile("<memory>", bc);
 				lastShader = ssCode.str();
 				lastErrors = ssErrors.str();
 				lastByprod = ssByprod.str();
+				if (nextBuildVarRequest)
+				{
+					nextBuildVarRequest = false;
+
+					lastVarDump.strbuf = "\n";
+					if (lastExec)
+					{
+						for (size_t i = 0; i < C.outVarBufSize; ++i)
+						{
+							const ShaderVariable& sv = C.outVarBuf[i];
+							lastVarDump << ShaderVarTypeToString((ShaderVarType)sv.svType);
+							lastVarDump << " ";
+							lastVarDump << ShaderDataTypeToString((ShaderDataType)sv.dataType);
+							if (sv.sizeX)
+							{
+								lastVarDump << "x" << int(sv.sizeX);
+								if (sv.sizeY)
+								{
+									lastVarDump << "x" << int(sv.sizeY);
+								}
+							}
+							if (sv.arraySize)
+							{
+								lastVarDump << "[" << sv.arraySize << "]";
+							}
+							lastVarDump << " " << &C.outVarStrBuf[sv.name];
+							if (sv.svType == SVT_VSInput)
+							{
+								lastVarDump << " :" << &C.outVarStrBuf[sv.semantic];
+							}
+							if (sv.regSemIdx >= 0)
+							{
+								lastVarDump << " #" << sv.regSemIdx;
+							}
+							lastVarDump << "\n";
+						}
+					}
+				}
 				double tm2 = GetTime();
 				fprintf(fp, "\ncompile time: %f seconds | %s\n",
 					tm2 - tm1, lastExec ? "SUCCESS" : "FAILURE");
@@ -562,6 +653,31 @@ static void exec_test(const char* fname, const char* nameonly)
 			else if (ident == "rminc")
 			{
 				includes.clear();
+			}
+			else if (ident == "request_vars")
+			{
+				nextBuildVarRequest = true;
+				int vbs = 32, vsbs = 1024;
+				sscanf(decoded_value.c_str(), " %d %d", &vbs, &vsbs);
+				if (vbs < 0)
+					vbs = 0;
+				else if (vbs > 32)
+					vbs = 32;
+				if (vsbs < 0)
+					vsbs = 0;
+				else if (vsbs > 1024)
+					vsbs = 1024;
+				nextBuildVarBufSize = vbs;
+				nextBuildVarStrBufSize = vsbs;
+			}
+			else if (ident == "verify_vars")
+			{
+				if (!memstreq_nnl(lastVarDump.str().c_str(), decoded_value.c_str()))
+				{
+					printf("[%s] ERROR in 'verify_vars': expected '%s', got '%s'\n",
+						testName, decoded_value.c_str(), lastVarDump.str().c_str());
+					hasErrors = true;
+				}
 			}
 			else if (ident == "source")
 			{

@@ -3875,16 +3875,12 @@ bool Compiler::CompileFile(const char* name, const char* code)
 
 		if (outVarOverflowAlloc)
 		{
+			outVarBufSize = bufSizes[0];
 			if (outVarDidOverflowVar)
-			{
-				outVarBufSize = bufSizes[0];
 				outVarBuf = new ShaderVariable[bufSizes[0]];
-			}
+			outVarStrBufSize = bufSizes[1];
 			if (outVarDidOverflowStr)
-			{
-				outVarStrBufSize = bufSizes[1];
 				outVarStrBuf = new char[bufSizes[1]];
-			}
 		}
 		else
 		{
@@ -3934,6 +3930,74 @@ void Compiler::_IterateVariables(
 	size_t measureBufSizes[2])
 {
 	char* outsbp = outStrBuf;
+
+	auto AppendVarDecl = [&](const VarDecl* vd)
+	{
+		ShaderVarType svt;
+		int32_t regSemIdx = -1;
+		bool needSemantic = false;
+		if ((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Vertex)
+		{
+			svt = SVT_VSInput;
+			regSemIdx = vd->semanticIndex >= 0 ? vd->semanticIndex : 0;
+			needSemantic = true;
+		}
+		else if ((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Pixel)
+		{
+			if (vd->semanticName == "COLOR" || vd->semanticName == "SV_TARGET")
+			{
+				svt = SVT_PSOutputColor;
+				regSemIdx = vd->semanticIndex >= 0 ? vd->semanticIndex : 0;
+			}
+			else if (vd->semanticName == "DEPTH" || vd->semanticName == "SV_DEPTH")
+				svt = SVT_PSOutputDepth;
+			else
+				return;
+		}
+		else if (vd->flags & VarDecl::ATTR_Uniform)
+		{
+			svt = vd->type->IsSampler() ? SVT_Sampler : SVT_Uniform;
+			regSemIdx = vd->regID;
+		}
+		else
+			return;
+
+		if (measureBufSizes)
+		{
+			measureBufSizes[0]++;
+			measureBufSizes[1] += vd->name.size() + 1;
+			if (needSemantic)
+				measureBufSizes[1] += vd->semanticName.size() + 1;
+		}
+		else
+		{
+			auto* vmTy = vd->type;
+			if (vmTy->kind == ASTType::Array)
+				vmTy = vmTy->subType;
+			auto* valTy = vmTy;
+			if (valTy->kind == ASTType::Vector || valTy->kind == ASTType::Matrix)
+				valTy = valTy->subType;
+
+			outVars->name      = outsbp - outStrBuf;
+			memcpy(outsbp, vd->name.c_str(), vd->name.size() + 1);
+			outsbp += vd->name.size() + 1;
+			outVars->semantic  = 0;
+			if (needSemantic)
+			{
+				outVars->semantic = outsbp - outStrBuf;
+				memcpy(outsbp, vd->semanticName.c_str(), vd->semanticName.size() + 1);
+				outsbp += vd->semanticName.size() + 1;
+			}
+			outVars->regSemIdx = regSemIdx;
+			outVars->arraySize = vd->type->kind == ASTType::Array ? vd->type->elementCount : 0;
+			outVars->svType    = svt;
+			outVars->dataType  = ASTTypeKindToShaderDataType(valTy->kind);
+			outVars->sizeX     = vmTy != valTy ? vmTy->sizeX : 0;
+			outVars->sizeY     = vmTy != valTy && vmTy->kind == ASTType::Matrix ? vmTy->sizeY : 0;
+			outVars++;
+		}
+	};
+
 	for (const ASTNode* gv = ast.globalVars.firstChild; gv; gv = gv->next)
 	{
 		if (auto* cbuf = dyn_cast<const CBufferDecl>(gv))
@@ -3962,33 +4026,7 @@ void Compiler::_IterateVariables(
 
 			for (const ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
 			{
-				auto* vd = dyn_cast<const VarDecl>(cbv);
-				if (measureBufSizes)
-				{
-					measureBufSizes[0]++;
-					measureBufSizes[1] += vd->name.size() + 1;
-				}
-				else
-				{
-					auto* vmTy = vd->type;
-					if (vmTy->kind == ASTType::Array)
-						vmTy = vmTy->subType;
-					auto* valTy = vmTy;
-					if (valTy->kind == ASTType::Vector || valTy->kind == ASTType::Matrix)
-						valTy = valTy->subType;
-
-					outVars->name      = outsbp - outStrBuf;
-					memcpy(outsbp, vd->name.c_str(), vd->name.size() + 1);
-					outsbp += vd->name.size() + 1;
-					outVars->semantic  = 0;
-					outVars->regSemIdx = vd->regID;
-					outVars->arraySize = vd->type->kind == ASTType::Array ? vd->type->elementCount : 0;
-					outVars->svType    = SVT_Uniform;
-					outVars->dataType  = ASTTypeKindToShaderDataType(valTy->kind);
-					outVars->sizeX     = vmTy != valTy ? vmTy->sizeX : 0;
-					outVars->sizeY     = vmTy != valTy && vmTy->kind == ASTType::Matrix ? vmTy->sizeY : 0;
-					outVars++;
-				}
+				AppendVarDecl(dyn_cast<const VarDecl>(cbv));
 			}
 
 			// end of uniform block
@@ -4003,7 +4041,7 @@ void Compiler::_IterateVariables(
 				outVars->semantic  = 0;
 				outVars->regSemIdx = cbuf->bufRegID;
 				outVars->arraySize = 0;
-				outVars->svType    = SVT_UniformBlockBegin;
+				outVars->svType    = SVT_UniformBlockEnd;
 				outVars->dataType  = SDT_None;
 				outVars->sizeX     = 0;
 				outVars->sizeY     = 0;
@@ -4012,7 +4050,13 @@ void Compiler::_IterateVariables(
 		}
 		else if (auto* vd = dyn_cast<const VarDecl>(gv))
 		{
+			AppendVarDecl(vd);
 		}
+	}
+
+	for (const ASTNode* arg = ast.entryPoint->GetFirstArg(); arg; arg = arg->next)
+	{
+		AppendVarDecl(dyn_cast<const VarDecl>(arg));
 	}
 }
 

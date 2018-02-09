@@ -188,6 +188,37 @@ compile_glsl ``
 source_replace `float4x3=>float4x4`
 compile_glsl_es100 ``
 
+// `basic I/O`
+source `float4 main(float4 p : POSITION) : POSITION { return p; }`
+request_vars ``
+compile_hlsl_before_after ``
+in_shader `POSITION`
+verify_vars `
+VSInput Float32x4 p :POSITION #0
+`
+compile_hlsl4 ``
+in_shader `SV_POSITION`
+compile_glsl ``
+in_shader `gl_Position`
+compile_glsl_es100 ``
+in_shader `gl_Position`
+
+// `basic I/O 2 vars`
+source `float4 main(float4 p : POSITION, float2 tex : TEXCOORD3) : POSITION { return p + tex.y; }`
+request_vars ``
+compile_hlsl_before_after ``
+in_shader `POSITION`
+verify_vars `
+VSInput Float32x4 p :POSITION #0
+VSInput Float32x2 tex :TEXCOORD #3
+`
+compile_hlsl4 ``
+in_shader `SV_POSITION`
+compile_glsl ``
+in_shader `gl_Position`
+compile_glsl_es100 ``
+in_shader `gl_Position`
+
 // `struct I/O 1`
 source `
 struct v2p { float4 Position : POSITION; };
@@ -196,6 +227,7 @@ void main( out v2p OUT )
 	OUT.Position = 0.0;
 }`
 compile_hlsl_before_after ``
+in_shader `POSITION`
 compile_hlsl4 ``
 in_shader `SV_POSITION`
 compile_glsl ``
@@ -213,6 +245,7 @@ void main( in a2v IN, out v2p OUT )
 	OUT.Position = IN.Position;
 }`
 compile_hlsl_before_after ``
+in_shader `POSITION`
 compile_hlsl4 ``
 in_shader `SV_POSITION`
 compile_glsl ``
@@ -229,6 +262,7 @@ void main( in vdata IN, out vdata OUT )
 	OUT = IN;
 }`
 compile_hlsl_before_after ``
+in_shader `POSITION`
 compile_hlsl4 ``
 in_shader `SV_POSITION`
 compile_glsl ``
@@ -246,6 +280,7 @@ void main( in vdataw IN, out vdataw OUT )
 	OUT = IN;
 }`
 compile_hlsl_before_after ``
+in_shader `POSITION`
 compile_hlsl4 ``
 in_shader `SV_POSITION`
 compile_glsl ``
@@ -257,7 +292,11 @@ in_shader `gl_Position`
 source `
 uniform float4 outval;
 float4 main() : POSITION { return outval; }`
+request_vars ``
 compile_hlsl_before_after ``
+verify_vars `
+Uniform Float32x4 outval
+`
 compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
@@ -266,7 +305,11 @@ compile_glsl_es100 ``
 source `
 uniform float4 outval[4];
 float4 main() : POSITION { return outval[1]; }`
+request_vars `0 1`
 compile_hlsl_before_after ``
+verify_vars `
+Uniform Float32x4[4] outval
+`
 compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
@@ -341,10 +384,19 @@ cbuffer mybuf
 }
 cbuffer mybuf2
 {
-	float4 ou2val;
+	float4 ou2val[1];
 }
-float4 main() : POSITION { return outval + ou2val; }`
+float4 main() : POSITION { return outval + ou2val[0]; }`
+request_vars ``
 compile_hlsl_before_after ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval
+UniformBlockEnd None mybuf
+UniformBlockBegin None mybuf2
+Uniform Float32x4[1] ou2val
+UniformBlockEnd None mybuf2
+`
 compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``

@@ -53,10 +53,11 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * [`sampler1D`, `tex1D`] are converted to [`sampler2D`, `texture2D`] for GLSL ES 1.0 (there are no 1D textures).
 * `tex3D*` intrinsics are not supported for GLSL ES 1.0 (there are no 3D textures).
 * Floating point `%` (modulus) works differently in GLSL than in HLSL (see differences.md), though the main guarantee (defined values when both signs are equal) still holds.
+* Storage addressing features are often incompatible. It is the responsibility of the user to link attributes by semantic/name and uniforms or buffers to their slots where the shader cannot, using the data provided.
 
 #### Other planned improvements:
 
 * C API
-* possibility to predetermine and export location of uniform data
+* possibility to predetermine location of uniform/sampler data
 * removal of STL to improve compile times
 * improved optimization capabilities

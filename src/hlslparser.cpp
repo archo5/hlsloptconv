@@ -1584,7 +1584,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 			}
 			if (vecSize == 1)
 			{
-				if (rtN->IsNumeric() == false)
+				if (rtN->IsNumericOrVM1() == false)
 				{
 					notMatch = true;
 					break;
@@ -1632,7 +1632,7 @@ static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 			goto mismatch;
 		if (vecSize == 1)
 		{
-			if (rtN->IsNumeric() == false)
+			if (rtN->IsNumericOrVM1() == false)
 				goto mismatch;
 		}
 		else if (rtN->kind == ASTType::Vector && !(rtN->sizeX == 1 || rtN->sizeX == vecSize))
@@ -3497,6 +3497,24 @@ bool Parser::ParseDecl()
 			vd->name = TokenStringData();
 			if (!FWD())
 				return false;
+
+			while (TT() == STT_LBracket)
+			{
+				if (!FWD() || !EXPECT(STT_Int32Lit))
+					return false;
+				int32_t arrSize = TokenInt32Data();
+				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
+					return false;
+
+				if (arrSize < 1)
+				{
+					EmitError("expected positive (>= 1) array size");
+				}
+				else
+				{
+					vd->type = ast.GetArrayType(vd->type, arrSize);
+				}
+			}
 
 			if (TT() == STT_Colon)
 			{

@@ -4,7 +4,7 @@ source `
 sampler1D Sampler;
 float4 main(float p : TEXCOORD) : COLOR
 {
-	return tex1D(Sampler, 4) + tex1D(Sampler, true) + tex1D(Sampler, p);
+	return tex1D(Sampler, 4) + tex1D(Sampler, true) + tex1D(Sampler, p) + tex1D(Sampler, p.x);
 }`
 compile_hlsl_before_after `/T ps_3_0`
 in_shader `tex1D(`
@@ -405,7 +405,8 @@ source `
 sampler1Dcmp Sampler;
 float4 main(float p : TEXCOORD) : COLOR
 {
-	return tex1Dcmp(Sampler, 4, p) + tex1Dcmp(Sampler, true, 1) + tex1Dcmp(Sampler, p, false);
+	return tex1Dcmp(Sampler, 4, p) + tex1Dcmp(Sampler, true, 1)
+		+ tex1Dcmp(Sampler, p, false) + tex1Dcmp(Sampler, p.x, p.x);
 }`
 compile_fail_hlsl `pixel`
 compile_hlsl4 `/T ps_4_0`
@@ -486,3 +487,50 @@ compile_glsl `-S frag`
 in_shader `texture(`
 in_shader `,-32)`
 compile_fail_glsl_es100 `pixel`
+
+// `all types of samplers into multiple outputs`
+source `
+sampler1D s1d;
+sampler2D s2d;
+sampler3D s3d : register(s2);
+samplerCUBE scb;
+sampler1Dcmp s1dc;
+sampler2Dcmp s2dc;
+samplerCUBEcmp scbc;
+void main(
+	float3 p : TEXCOORD,
+	out float4 c1d : COLOR0,
+	out float4 c2d : COLOR1,
+	out float4 c3d : COLOR2,
+	out float4 ccb : COLOR3,
+	out float4 c1dc : COLOR4,
+	out float4 c2dc : COLOR5,
+	out float4 ccbc : COLOR6
+)
+{
+	c1d = tex1D(s1d, p.x);
+	c2d = tex2D(s2d, p.xy);
+	c3d = tex3D(s3d, p);
+	ccb = texCUBE(scb, p);
+	c1dc = tex1Dcmp(s1dc, p.x, p.z);
+	c2dc = tex2Dcmp(s2dc, p.xy, p.z);
+	ccbc = texCUBEcmp(scbc, p, p.z);
+}`
+request_vars ``
+compile_hlsl4 `/T ps_4_0`
+verify_vars `
+Sampler Sampler1D s1d
+Sampler Sampler2D s2d
+Sampler Sampler3D s3d #2
+Sampler SamplerCube scb
+Sampler Sampler1DComp s1dc
+Sampler Sampler2DComp s2dc
+Sampler SamplerCubeComp scbc
+PSOutputColor Float32x4 c1d #0
+PSOutputColor Float32x4 c2d #1
+PSOutputColor Float32x4 c3d #2
+PSOutputColor Float32x4 ccb #3
+PSOutputColor Float32x4 c1dc #4
+PSOutputColor Float32x4 c2dc #5
+PSOutputColor Float32x4 ccbc #6
+`

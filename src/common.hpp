@@ -76,6 +76,11 @@ struct String
 	FINLINE const char* begin() const         { return _str; }
 	FINLINE char* end()                       { return _str + _size; }
 	FINLINE const char* end() const           { return _str + _size; }
+	void clear()
+	{
+		_size = 0;
+		_str[0] = 0;
+	}
 	void reserve(size_t nsz)
 	{
 		if (nsz < SMALL_STRING_BUFSZ || nsz < _cap)
@@ -380,18 +385,8 @@ enum ShaderVarType
 	SVT_UniformBlockEnd   = 5,
 	SVT_VSInput           = 6, /* only numeric SDT_* types */
 	SVT_Sampler           = 7, /* only SDT_Sampler* types */
-	SVT_PSOutputDepth     = 19, /* only scalar types */
-	SVT_PSOutputColor0    = 20, /* only vector types */
-	SVT_PSOutputColor1    = 21,
-	SVT_PSOutputColor2    = 22,
-	SVT_PSOutputColor3    = 23,
-	SVT_PSOutputColor4    = 24,
-	SVT_PSOutputColor5    = 25,
-	SVT_PSOutputColor6    = 26,
-	SVT_PSOutputColor7    = 27,
-
-	SVT_PSOutput_First    = SVT_PSOutputDepth,
-	SVT_PSOutput_Last     = SVT_PSOutputColor7,
+	SVT_PSOutputDepth     = 8, /* only scalar types */
+	SVT_PSOutputColor     = 9, /* only vector types */
 };
 
 enum ShaderDataType
