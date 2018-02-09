@@ -1007,7 +1007,13 @@ enum OutputShaderFormat
 
 struct Compiler
 {
+	~Compiler();
 	bool CompileFile(const char* name, const char* code);
+	void _IterateVariables(
+		const AST& ast,
+		ShaderVariable* outVars,
+		char* outStrBuf,
+		size_t measureBufSizes[2]);
 
 	const char* entryPoint = "main";
 	ShaderStage stage = ShaderStage_Vertex;
@@ -1028,6 +1034,7 @@ struct Compiler
 	size_t outVarBufSize = 0;     // changed to output data size after compilation
 	char* outVarStrBuf = nullptr; // string buffer for names/semantics in ShaderVariable array
 	size_t outVarStrBufSize = 0;  // changed to output data size after compilation
+	bool outVarGenerate = false;
 	bool outVarOverflowAlloc = true;
 	bool outVarDidOverflowVar = false;
 	bool outVarDidOverflowStr = false;

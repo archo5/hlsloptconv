@@ -3737,6 +3737,17 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 };
 
 
+Compiler::~Compiler()
+{
+	if (outVarGenerate && outVarOverflowAlloc)
+	{
+		if (outVarDidOverflowVar && outVarBuf && outVarBufSize)
+			delete [] outVarBuf;
+		if (outVarDidOverflowStr && outVarStrBuf && outVarStrBufSize)
+			delete [] outVarStrBuf;
+	}
+}
+
 bool Compiler::CompileFile(const char* name, const char* code)
 {
 	Diagnostic diag(errorOutputStream, name);
@@ -3850,6 +3861,158 @@ bool Compiler::CompileFile(const char* name, const char* code)
 			break;
 		}
 	}
+
+	if (outVarGenerate)
+	{
+		size_t bufSizes[2] = { 0, 0 };
+
+		_IterateVariables(p.ast, nullptr, nullptr, bufSizes);
+
+		if (bufSizes[0] > outVarBufSize)
+			outVarDidOverflowVar = true;
+		if (bufSizes[1] > outVarStrBufSize)
+			outVarDidOverflowStr = true;
+
+		if (outVarOverflowAlloc)
+		{
+			if (outVarDidOverflowVar)
+			{
+				outVarBufSize = bufSizes[0];
+				outVarBuf = new ShaderVariable[bufSizes[0]];
+			}
+			if (outVarDidOverflowStr)
+			{
+				outVarStrBufSize = bufSizes[1];
+				outVarStrBuf = new char[bufSizes[1]];
+			}
+		}
+		else
+		{
+			if (outVarBufSize > bufSizes[0])
+				outVarBufSize = bufSizes[0];
+			if (outVarStrBufSize > bufSizes[1])
+				outVarStrBufSize = bufSizes[1];
+		}
+
+		_IterateVariables(p.ast, outVarBuf, outVarStrBuf, nullptr);
+	}
+
 	return true;
+}
+
+static ShaderDataType ASTTypeKindToShaderDataType(ASTType::Kind k)
+{
+	switch (k)
+	{
+	case ASTType::Bool:    return SDT_Bool;
+	case ASTType::Int32:   return SDT_Int32;
+	case ASTType::UInt32:  return SDT_UInt32;
+	case ASTType::Float16: return SDT_Float16;
+	case ASTType::Float32: return SDT_Float32;
+	case ASTType::Sampler1D:      return SDT_Sampler1D;
+	case ASTType::Sampler2D:      return SDT_Sampler2D;
+	case ASTType::Sampler3D:      return SDT_Sampler3D;
+	case ASTType::SamplerCube:    return SDT_SamplerCube;
+	case ASTType::Sampler1DCmp:   return SDT_Sampler1DComp;
+	case ASTType::Sampler2DCmp:   return SDT_Sampler2DComp;
+	case ASTType::SamplerCubeCmp: return SDT_SamplerCubeComp;
+	case ASTType::Void:
+	case ASTType::Function:
+	case ASTType::Vector:
+	case ASTType::Matrix:
+	case ASTType::Array:
+	case ASTType::Structure:
+		return SDT_None;
+	}
+	return SDT_None;
+}
+
+void Compiler::_IterateVariables(
+	const AST& ast,
+	ShaderVariable* outVars,
+	char* outStrBuf,
+	size_t measureBufSizes[2])
+{
+	char* outsbp = outStrBuf;
+	for (const ASTNode* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+	{
+		if (auto* cbuf = dyn_cast<const CBufferDecl>(gv))
+		{
+			// beginning of uniform block
+			uint32_t bufNameOff = outsbp - outStrBuf;
+			if (measureBufSizes)
+			{
+				measureBufSizes[0]++;
+				measureBufSizes[1] += cbuf->name.size() + 1;
+			}
+			else
+			{
+				outVars->name      = bufNameOff;
+				memcpy(outsbp, cbuf->name.c_str(), cbuf->name.size() + 1);
+				outsbp += cbuf->name.size() + 1;
+				outVars->semantic  = 0;
+				outVars->regSemIdx = cbuf->bufRegID;
+				outVars->arraySize = 0;
+				outVars->svType    = SVT_UniformBlockBegin;
+				outVars->dataType  = SDT_None;
+				outVars->sizeX     = 0;
+				outVars->sizeY     = 0;
+				outVars++;
+			}
+
+			for (const ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
+			{
+				auto* vd = dyn_cast<const VarDecl>(cbv);
+				if (measureBufSizes)
+				{
+					measureBufSizes[0]++;
+					measureBufSizes[1] += vd->name.size() + 1;
+				}
+				else
+				{
+					auto* vmTy = vd->type;
+					if (vmTy->kind == ASTType::Array)
+						vmTy = vmTy->subType;
+					auto* valTy = vmTy;
+					if (valTy->kind == ASTType::Vector || valTy->kind == ASTType::Matrix)
+						valTy = valTy->subType;
+
+					outVars->name      = outsbp - outStrBuf;
+					memcpy(outsbp, vd->name.c_str(), vd->name.size() + 1);
+					outsbp += vd->name.size() + 1;
+					outVars->semantic  = 0;
+					outVars->regSemIdx = vd->regID;
+					outVars->arraySize = vd->type->kind == ASTType::Array ? vd->type->elementCount : 0;
+					outVars->svType    = SVT_Uniform;
+					outVars->dataType  = ASTTypeKindToShaderDataType(valTy->kind);
+					outVars->sizeX     = vmTy != valTy ? vmTy->sizeX : 0;
+					outVars->sizeY     = vmTy != valTy && vmTy->kind == ASTType::Matrix ? vmTy->sizeY : 0;
+					outVars++;
+				}
+			}
+
+			// end of uniform block
+			if (measureBufSizes)
+			{
+				measureBufSizes[0]++;
+				// name reused from beginning
+			}
+			else
+			{
+				outVars->name      = bufNameOff;
+				outVars->semantic  = 0;
+				outVars->regSemIdx = cbuf->bufRegID;
+				outVars->arraySize = 0;
+				outVars->svType    = SVT_UniformBlockBegin;
+				outVars->dataType  = SDT_None;
+				outVars->sizeX     = 0;
+				outVars->sizeY     = 0;
+				outVars++;
+			}
+		}
+		else if (auto* vd = dyn_cast<const VarDecl>(gv))
+		{
+		}
+	}
 }
 

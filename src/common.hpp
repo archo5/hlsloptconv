@@ -72,6 +72,10 @@ struct String
 	FINLINE const char* c_str() const         { return _str; }
 	FINLINE size_t size() const               { return _size; }
 	FINLINE bool empty() const                { return !_size; }
+	FINLINE char* begin()                     { return _str; }
+	FINLINE const char* begin() const         { return _str; }
+	FINLINE char* end()                       { return _str + _size; }
+	FINLINE const char* end() const           { return _str + _size; }
 	void reserve(size_t nsz)
 	{
 		if (nsz < SMALL_STRING_BUFSZ || nsz < _cap)
@@ -412,7 +416,7 @@ struct ShaderVariable   /* 20 bytes */
 {
 	uint32_t name;      /* offset from beginning of string buffer */
 	uint32_t semantic;  /* offset from beginning of string buffer; only for VS input */
-	uint32_t regSemIdx; /* register number/semantic index */
+	int32_t  regSemIdx; /* register number/semantic index, -1 when not determined by the shader */
 	uint32_t arraySize; /* 0 if no array */
 	uint8_t  svType;    /* ShaderVarType */
 	uint8_t  dataType;  /* ShaderDataType */
