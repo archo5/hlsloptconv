@@ -95,7 +95,7 @@ struct Parser
 	{
 		if (t.type != tt)
 		{
-			EmitError("expected '" + TokenTypeToString(tt) + "', got '" + TokenToString(t) + "'");
+			EmitError(Twine("expected '") + TokenTypeToString(tt) + "', got '" + TokenToString(t) + "'");
 			diag.hasFatalErrors = true;
 			return false;
 		}
@@ -103,27 +103,27 @@ struct Parser
 	}
 	bool EXPECT(SLTokenType tt) { return EXPECT(T(), tt); }
 
-	void EXPECTERR(const SLToken& t, const String& exp)
+	void EXPECTERR(const SLToken& t, const Twine& exp)
 	{
 		EmitError("expected " + exp + ", got '" + TokenToString(t) + "'");
 		diag.hasFatalErrors = true;
 	}
-	void EXPECTERR(const String& exp) { EXPECTERR(T(), exp); }
+	void EXPECTERR(const Twine& exp) { EXPECTERR(T(), exp); }
 
-	void EmitError(const String& msg, const Location& loc)
+	void EmitError(const Twine& msg, const Location& loc)
 	{
 		diag.EmitError(msg, loc);
 	}
-	void EmitError(const String& msg, bool withLoc = true)
+	void EmitError(const Twine& msg, bool withLoc = true)
 	{
 		diag.EmitError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
 	}
-	void EmitFatalError(const String& msg, const Location& loc)
+	void EmitFatalError(const Twine& msg, const Location& loc)
 	{
 		diag.EmitError(msg, loc);
 		diag.hasFatalErrors = true;
 	}
-	void EmitFatalError(const String& msg, bool withLoc = true)
+	void EmitFatalError(const Twine& msg, bool withLoc = true)
 	{
 		diag.EmitError(msg, withLoc && curToken < tokens.size() ? T().loc : Location::BAD());
 		diag.hasFatalErrors = true;

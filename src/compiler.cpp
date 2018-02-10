@@ -253,7 +253,7 @@ bool TokenIsOpCompare(SLTokenType tt)
 	return false;
 }
 
-String TokenTypeToString(SLTokenType tt)
+const char* TokenTypeToString(SLTokenType tt)
 {
 	const char* str;
 	switch (tt)
@@ -2021,7 +2021,7 @@ void VariableAccessValidator::ValidateCheckOutputElementsWritten(Location loc)
 static const char* g_VecSuffixStr[4] = { ".x", ".y", ".z", ".w" };
 static const char* g_Arr4SuffixStr[4] = { "[0]", "[1]", "[2]", "[3]" };
 void VariableAccessValidator::AddMissingOutputAccessPoints(
-	String& outerr, ASTType* type, int from, String pfx /* TODO twine */)
+	String& outerr, ASTType* type, int from, Twine pfx)
 {
 	switch (type->kind)
 	{
@@ -2041,7 +2041,7 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 		if (elementsWritten[from] == 0)
 		{
 			outerr += "\n - ";
-			outerr += pfx;
+			pfx.append_to(outerr);
 		}
 		break;
 	case ASTType::Vector:
@@ -2073,7 +2073,9 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 	case ASTType::Array:
 		for (uint32_t i = 0; i < type->elementCount; ++i)
 		{
-			AddMissingOutputAccessPoints(outerr, type->subType, from, pfx + "[" + StdToString(i) + "]");
+			char idxstr[16];
+			sprintf(idxstr, "%u", unsigned(i));
+			AddMissingOutputAccessPoints(outerr, type->subType, from, pfx + "[" + idxstr + "]");
 			from += type->subType->GetAccessPointCount();
 		}
 		break;
@@ -2179,6 +2181,7 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 					}
 					else
 					{
+						// TODO toggle
 						char bfr[32];
 						sprintf(bfr, "_PSCOLOR%d", vd->GetSemanticIndex());
 						vd->name = bfr;
@@ -2195,7 +2198,9 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 			if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
 				((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
 			{
-				vd->name = "attr" + vd->semanticName + StdToString(vd->GetSemanticIndex());
+				StringStream nmss(vd->semanticName.size() + 16);
+				nmss << "attr" << vd->semanticName << vd->GetSemanticIndex();
+				vd->name = std::move(nmss.str());
 			}
 		}
 
@@ -3939,7 +3944,7 @@ void Compiler::_IterateVariables(
 		if ((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Vertex)
 		{
 			svt = SVT_VSInput;
-			regSemIdx = vd->semanticIndex >= 0 ? vd->semanticIndex : 0;
+			regSemIdx = vd->GetSemanticIndex();
 			needSemantic = true;
 		}
 		else if ((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Pixel)
@@ -3947,7 +3952,7 @@ void Compiler::_IterateVariables(
 			if (vd->semanticName == "COLOR" || vd->semanticName == "SV_TARGET")
 			{
 				svt = SVT_PSOutputColor;
-				regSemIdx = vd->semanticIndex >= 0 ? vd->semanticIndex : 0;
+				regSemIdx = vd->GetSemanticIndex();
 			}
 			else if (vd->semanticName == "DEPTH" || vd->semanticName == "SV_DEPTH")
 				svt = SVT_PSOutputDepth;

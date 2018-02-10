@@ -1123,7 +1123,7 @@ int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t
 		case STT_OP_Lsh: return lft << rgt;
 		case STT_OP_Rsh: return lft >> rgt;
 		default:
-			EmitError("unsupported #if operator: '" + TokenTypeToString(tt) + "'");
+			EmitError(Twine("unsupported #if operator: '") + TokenTypeToString(tt) + "'");
 			return 0;
 		}
 	}
@@ -1445,14 +1445,14 @@ static Expr* CastExprTo(Expr* val, ASTType* to)
 }
 
 static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
-	OpKind opKind, const char* name, bool alsoInt, int args = 1)
+	OpKind opKind, const Twine& name, bool alsoInt, int args = 1)
 {
 	if (fcall->GetArgCount() != args)
 	{
 		if (args > 1)
-			parser->EmitError("'" + String(name) + "' requires " + StdToString(args) + " arguments");
+			parser->EmitError("'" + name + "' requires " + StdToString(args) + " arguments");
 		else
-			parser->EmitError("'" + String(name) + "' requires 1 argument");
+			parser->EmitError("'" + name + "' requires 1 argument");
 		return nullptr;
 	}
 
@@ -1488,7 +1488,7 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 
 	if (notMatch)
 	{
-		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + name + "' overloads matched the argument list");
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
@@ -1502,14 +1502,14 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 	{ return ScalableSymmetricIntrin(parser, fcall, opKind, #name, false); }}
 
 static ASTType* VectorIntrin(Parser* parser, OpExpr* fcall,
-	OpKind opKind, const char* name, bool alsoInt, bool returnScalar, int args = 1)
+	OpKind opKind, const Twine& name, bool alsoInt, bool returnScalar, int args = 1)
 {
 	if (fcall->GetArgCount() != args)
 	{
 		if (args > 1)
-			parser->EmitError("'" + String(name) + "' requires " + StdToString(args) + " arguments");
+			parser->EmitError("'" + name + "' requires " + StdToString(args) + " arguments");
 		else
-			parser->EmitError("'" + String(name) + "' requires 1 argument");
+			parser->EmitError("'" + name + "' requires 1 argument");
 		return nullptr;
 	}
 
@@ -1553,7 +1553,7 @@ static ASTType* VectorIntrin(Parser* parser, OpExpr* fcall,
 	if (notMatch)
 	{
 unmatched:
-		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + name + "' overloads matched the argument list");
 		return nullptr;
 	}
 	for (ASTNode* arg = fcall->GetFirstArg(); arg; arg = arg->next)
@@ -1563,11 +1563,11 @@ unmatched:
 }
 
 static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
-	const char* name, ASTType::Kind smpType, int vecSize, int numArgs)
+	const Twine& name, ASTType::Kind smpType, int vecSize, int numArgs)
 {
 	if (fcall->GetArgCount() != numArgs)
 	{
-		parser->EmitError("'" + String(name) + "' requires " + StdToString(numArgs) + " arguments");
+		parser->EmitError("'" + name + "' requires " + StdToString(numArgs) + " arguments");
 		return nullptr;
 	}
 	ASTType* rt0 = fcall->GetFirstArg()->ToExpr()->GetReturnType();
@@ -1605,7 +1605,7 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 
 	if (notMatch)
 	{
-		parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
+		parser->EmitError("none of '" + name + "' overloads matched the argument list");
 		return nullptr;
 	}
 
@@ -1614,11 +1614,11 @@ static ASTType* TexSampleIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 }
 
 static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
-	const char* name, ASTType::Kind smpType, int vecSize)
+	const Twine& name, ASTType::Kind smpType, int vecSize)
 {
 	if (fcall->GetArgCount() != 3)
 	{
-		parser->EmitError("'" + String(name) + "' requires 3 arguments");
+		parser->EmitError("'" + name + "' requires 3 arguments");
 		return nullptr;
 	}
 	auto* arg = fcall->GetFirstArg();
@@ -1656,7 +1656,7 @@ static ASTType* TexSampleCmpIntrin(Parser* parser, OpExpr* fcall, OpKind opKind,
 	return parser->ast.GetFloat32Type();
 
 mismatch:
-	parser->EmitError("none of '" + String(name) + "' overloads matched the argument list");
+	parser->EmitError("none of '" + name + "' overloads matched the argument list");
 	return nullptr;
 }
 
@@ -3321,7 +3321,7 @@ bool Parser::TryCastExprTo(Expr* expr, ASTType* tty, const char* what)
 	}
 	else
 	{
-		EmitError("cannot cast " + String(what) + " from '"
+		EmitError(Twine("cannot cast ") + what + " from '"
 			+ expr->GetReturnType()->GetName() + "' to '"
 			+ tty->GetName() + "'");
 		return false;

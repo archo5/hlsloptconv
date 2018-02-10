@@ -259,6 +259,62 @@ struct std::hash<String>
 };
 
 
+struct Twine
+{
+	const char* _cstr  = nullptr;
+	const String* _str = nullptr;
+	const Twine* _lft  = nullptr;
+	const Twine* _rgt  = nullptr;
+
+	FINLINE Twine(){}
+	FINLINE Twine(const char* cs) : _cstr(cs) {}
+	FINLINE Twine(const String& s) : _str(&s) {}
+
+	size_t size() const
+	{
+		size_t out = 0;
+		if (_cstr)
+			out += strlen(_cstr);
+		if (_str)
+			out += _str->size();
+		if (_lft)
+			out += _lft->size();
+		if (_rgt)
+			out += _rgt->size();
+		return out;
+	}
+	String str() const
+	{
+		String out;
+		append_to(out);
+		return out;
+	}
+	void append_to(String& out) const
+	{
+		out.reserve(out.size() + size());
+		_append_to_nsz(out);
+	}
+	void _append_to_nsz(String& out) const
+	{
+		if (_cstr)
+			out.append(_cstr);
+		if (_str)
+			out.append(*_str);
+		if (_lft)
+			_lft->_append_to_nsz(out);
+		if (_rgt)
+			_rgt->_append_to_nsz(out);
+	}
+};
+FINLINE Twine operator + (const Twine& a, const Twine& b)
+{
+	Twine out;
+	out._lft = &a;
+	out._rgt = &b;
+	return out;
+}
+
+
 struct OutStream
 {
 	virtual void Write(const char* str, size_t size) = 0;
@@ -281,13 +337,17 @@ struct OutStream
 	OutStream& operator << (bool v);
 	OutStream& operator << (const void* v);
 	OutStream& operator << (const String& v);
+	OutStream& operator << (const Twine& v);
 };
 
 struct StringStream : OutStream
 {
+	StringStream(size_t sz = 0) { strbuf.reserve(sz); }
 	void Write(const char* str, size_t size) override;
 	void Write(const char* str) override;
 	void Flush() override {}
+	StringStream& Reserve(size_t sz) { strbuf.reserve(sz); return *this; }
+	String& str() { return strbuf; }
 	const String& str() const { return strbuf; }
 
 	String strbuf;
@@ -336,11 +396,11 @@ struct Diagnostic
 {
 	Diagnostic(OutStream* eos, const char* src);
 	uint32_t GetSourceID(const String& src);
-	void PrintMessage(const char* type, const String& msg, const Location& loc);
-	void EmitError(const String& msg, const Location& loc);
+	void PrintMessage(const char* type, const Twine& msg, const Location& loc);
+	void EmitError(const Twine& msg, const Location& loc);
 
-	void PrintError(const String& msg, const Location& loc) { PrintMessage("error", msg, loc); }
-	void PrintWarning(const String& msg, const Location& loc) { PrintMessage("warning", msg, loc); }
+	void PrintError(const Twine& msg, const Location& loc) { PrintMessage("error", msg, loc); }
+	void PrintWarning(const Twine& msg, const Location& loc) { PrintMessage("warning", msg, loc); }
 
 	OutStream* errorOutputStream;
 	std::vector<String> sourceFiles;

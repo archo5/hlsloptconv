@@ -90,7 +90,7 @@ enum SLTokenType
 
 bool TokenIsOpAssign(SLTokenType tt);
 bool TokenIsOpCompare(SLTokenType tt);
-String TokenTypeToString(SLTokenType tt);
+const char* TokenTypeToString(SLTokenType tt);
 
 struct SLToken
 {
@@ -987,7 +987,7 @@ struct VariableAccessValidator
 
 	void ValidateSetupFunc(const ASTFunction* fn);
 	void ValidateCheckOutputElementsWritten(Location loc);
-	void AddMissingOutputAccessPoints(String& outerr, ASTType* type, int from, String pfx);
+	void AddMissingOutputAccessPoints(String& outerr, ASTType* type, int from, Twine pfx);
 	void ValidateCheckVariableInitialized(const DeclRefExpr* dre);
 	void ValidateCheckVariableError(const DeclRefExpr* dre);
 

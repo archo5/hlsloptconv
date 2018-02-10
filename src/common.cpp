@@ -103,6 +103,19 @@ OutStream& OutStream::operator << (const String& v)
 	return *this;
 }
 
+OutStream& OutStream::operator << (const Twine& v)
+{
+	if (v._cstr)
+		*this << v._cstr;
+	if (v._str)
+		*this << *v._str;
+	if (v._lft)
+		*this << *v._lft;
+	if (v._rgt)
+		*this << *v._rgt;
+	return *this;
+}
+
 void StringStream::Write(const char* str, size_t size)
 {
 	strbuf.append(str, size);
@@ -204,7 +217,7 @@ uint32_t Diagnostic::GetSourceID(const String& src)
 	return sourceFiles.size() - 1;
 }
 
-void Diagnostic::PrintMessage(const char* type, const String& msg, const Location& loc)
+void Diagnostic::PrintMessage(const char* type, const Twine& msg, const Location& loc)
 {
 	if (!errorOutputStream)
 		return;
@@ -216,7 +229,7 @@ void Diagnostic::PrintMessage(const char* type, const String& msg, const Locatio
 	*errorOutputStream << " " << type << ": " << msg << "\n";
 }
 
-void Diagnostic::EmitError(const String& msg, const Location& loc)
+void Diagnostic::EmitError(const Twine& msg, const Location& loc)
 {
 	hasErrors = true;
 	PrintError(msg, loc);
