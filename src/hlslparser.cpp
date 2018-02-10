@@ -3224,23 +3224,8 @@ Stmt* Parser::ParseExprDeclStatement()
 			if (!FWD())
 				return nullptr;
 
-			if (TT() == STT_LBracket)
-			{
-				if (!FWD() || !EXPECT(STT_Int32Lit))
-					return nullptr;
-				int32_t arrSize = TokenInt32Data();
-				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
-					return nullptr;
-
-				if (arrSize < 1)
-				{
-					EmitError("expected positive (>= 1) array size");
-				}
-				else
-				{
-					curType = ast.GetArrayType(curType, arrSize);
-				}
-			}
+			if (!ParseTypeArray(curType))
+				return nullptr;
 
 			vd->SetType(curType);
 
@@ -3309,6 +3294,28 @@ Stmt* Parser::ParseExprDeclStatement()
 
 		return out;
 	}
+}
+
+bool Parser::ParseTypeArray(ASTType*& type)
+{
+	while (TT() == STT_LBracket)
+	{
+		if (!FWD() || !EXPECT(STT_Int32Lit))
+			return false;
+		int32_t arrSize = TokenInt32Data();
+		if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
+			return false;
+
+		if (arrSize < 1)
+		{
+			EmitError("expected positive (>= 1) array size");
+		}
+		else
+		{
+			type = ast.GetArrayType(type, arrSize);
+		}
+	}
+	return true;
 }
 
 bool Parser::TryCastExprTo(Expr* expr, ASTType* tty, const char* what)
@@ -3422,13 +3429,16 @@ bool Parser::ParseDecl()
 			member.type = ParseType();
 			if (!member.type)
 				return false;
-			totalAPCount += member.type->GetAccessPointCount();
 
 			if (!EXPECT(STT_Ident))
 				return false;
 			member.name = TokenStringData();
 			if (!FWD())
 				return false;
+
+			if (!ParseTypeArray(member.type))
+				return false;
+			totalAPCount += member.type->GetAccessPointCount();
 
 			if (!ParseSemantic(member.semanticName, member.semanticIndex))
 				return false;
@@ -3498,23 +3508,8 @@ bool Parser::ParseDecl()
 			if (!FWD())
 				return false;
 
-			while (TT() == STT_LBracket)
-			{
-				if (!FWD() || !EXPECT(STT_Int32Lit))
-					return false;
-				int32_t arrSize = TokenInt32Data();
-				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
-					return false;
-
-				if (arrSize < 1)
-				{
-					EmitError("expected positive (>= 1) array size");
-				}
-				else
-				{
-					vd->type = ast.GetArrayType(vd->type, arrSize);
-				}
-			}
+			if (!ParseTypeArray(vd->type))
+				return false;
 
 			if (TT() == STT_Colon)
 			{
@@ -3651,23 +3646,8 @@ bool Parser::ParseDecl()
 			if (type->IsVoid())
 				EmitError("void type can only be used as function return value");
 
-			while (TT() == STT_LBracket)
-			{
-				if (!FWD() || !EXPECT(STT_Int32Lit))
-					return false;
-				int32_t arrSize = TokenInt32Data();
-				if (!FWD() || !EXPECT(STT_RBracket) || !FWD())
-					return false;
-
-				if (arrSize < 1)
-				{
-					EmitError("expected positive (>= 1) array size");
-				}
-				else
-				{
-					type = ast.GetArrayType(type, arrSize);
-				}
-			}
+			if (!ParseTypeArray(type))
+				return false;
 
 			auto* gvardef = ast.CreateGlobalVar();
 			gvardef->SetType(type);

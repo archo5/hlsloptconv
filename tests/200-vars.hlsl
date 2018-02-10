@@ -188,6 +188,24 @@ compile_glsl ``
 source_replace `float4x3=>float4x4`
 compile_glsl_es100 ``
 
+// `struct`
+source `
+struct tmp { float4 val; };
+float4 main() : POSITION { tmp v; v.val = 1; return v.val; }`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `array in struct`
+source `
+struct tmp { float4 val[2]; };
+float4 main() : POSITION { tmp v; v.val[1] = 1; return v.val[1]; }`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `basic I/O`
 source `float4 main(float4 p : POSITION) : POSITION { return p; }`
 request_vars ``
@@ -244,14 +262,30 @@ void main( in a2v IN, out v2p OUT )
 {
 	OUT.Position = IN.Position;
 }`
+request_vars ``
 compile_hlsl_before_after ``
 in_shader `POSITION`
+verify_vars `
+VSInput Float32x4 IN_Position :POSITION #0
+`
+request_vars ``
 compile_hlsl4 ``
 in_shader `SV_POSITION`
+verify_vars `
+VSInput Float32x4 IN_Position :POSITION #0
+`
+request_vars ``
 compile_glsl ``
 in_shader `gl_Position`
+verify_vars `
+VSInput Float32x4 IN_Position :POSITION #0
+`
+request_vars ``
 compile_glsl_es100 ``
 in_shader `gl_Position`
+verify_vars `
+VSInput Float32x4 IN_Position :POSITION #0
+`
 
 // `struct I/O 3a`
 source `
@@ -261,8 +295,12 @@ void main( in vdata IN, out vdata OUT )
 {
 	OUT = IN;
 }`
+request_vars ``
 compile_hlsl_before_after ``
 in_shader `POSITION`
+verify_vars `
+VSInput Float32x4 IN_Position :POSITION #0
+`
 compile_hlsl4 ``
 in_shader `SV_POSITION`
 compile_glsl ``
@@ -310,9 +348,21 @@ compile_hlsl_before_after ``
 verify_vars `
 Uniform Float32x4[4] outval
 `
+request_vars ``
 compile_hlsl4 ``
+verify_vars `
+Uniform Float32x4[4] outval
+`
+request_vars ``
 compile_glsl ``
+verify_vars `
+Uniform Float32x4[4] outval
+`
+request_vars ``
 compile_glsl_es100 ``
+verify_vars `
+Uniform Float32x4[4] outval
+`
 
 // `explicit constant`
 source `
@@ -359,10 +409,34 @@ cbuffer mybuf
 	float4 outval;
 }
 float4 main() : POSITION { return outval; }`
+request_vars ``
 compile_hlsl_before_after ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval
+UniformBlockEnd None mybuf
+`
+request_vars ``
 compile_hlsl4 ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval
+UniformBlockEnd None mybuf
+`
+request_vars ``
 compile_glsl ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval
+UniformBlockEnd None mybuf
+`
+request_vars ``
 compile_glsl_es100 ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval
+UniformBlockEnd None mybuf
+`
 
 // `cbuffer w/ registers`
 source `
@@ -372,7 +446,13 @@ cbuffer mybuf : register(b3)
 }
 float4 main() : POSITION { return outval.xyxy; }`
 compile_hlsl_before_after ``
+request_vars ``
 compile_hlsl4 ``
+verify_vars `
+UniformBlockBegin None mybuf #3
+Uniform Float32x2 outval #14
+UniformBlockEnd None mybuf #3
+`
 compile_glsl ``
 compile_glsl_es100 ``
 
@@ -396,6 +476,30 @@ UniformBlockEnd None mybuf
 UniformBlockBegin None mybuf2
 Uniform Float32x4[1] ou2val
 UniformBlockEnd None mybuf2
+`
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `cbuffer containing array of structs`
+source `
+struct STR
+{
+	float4 a;
+	float4 b[2];
+};
+cbuffer mybuf
+{
+	STR base;
+	STR extra[3];
+}
+float4 main() : POSITION { return base.a + base.b[1] + extra[2].a + extra[1].b[0]; }`
+request_vars ``
+compile_hlsl_before_after ``
+verify_vars `
+UniformBlockBegin None mybuf
+TODO
+UniformBlockEnd None mybuf
 `
 compile_hlsl4 ``
 compile_glsl ``

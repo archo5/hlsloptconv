@@ -405,6 +405,13 @@ static void exec_test(const char* fname, const char* nameonly)
 							{
 								lastVarDump << " :" << &C.outVarStrBuf[sv.semantic];
 							}
+							else if (sv.svType == SVT_Uniform)
+							{
+								if (sv.semantic != 0xffffffff)
+								{
+									lastVarDump << " @" << sv.semantic;
+								}
+							}
 							if (sv.regSemIdx >= 0)
 							{
 								lastVarDump << " #" << sv.regSemIdx;

@@ -383,7 +383,12 @@ struct Location
 {
 	static Location BAD() { return { 0xffffffffU, 0xffffffffU, 0xffffffffU }; }
 
-	bool operator == (const Location& o) const { return source == o.source && line == o.line && off == o.off; }
+	bool operator == (const Location& o) const
+	{
+		return source == o.source
+			&& line == o.line
+			&& off == o.off;
+	}
 	bool operator != (const Location& o) const { return !(*this == o); }
 
 	uint32_t source;
@@ -440,7 +445,7 @@ enum ShaderVarType
 {
 	SVT_StructBegin       = 1, /* nested structs are possible */
 	SVT_StructEnd         = 2,
-	SVT_Uniform           = 3, /* only numeric SDT_* types */
+	SVT_Uniform           = 3, /* only numeric SDT_* types, if inside block - register quad=/4, comp=%4 */
 	SVT_UniformBlockBegin = 4, /* there cannot be any nesting */
 	SVT_UniformBlockEnd   = 5,
 	SVT_VSInput           = 6, /* only numeric SDT_* types */
@@ -471,6 +476,7 @@ struct ShaderVariable   /* 20 bytes */
 {
 	uint32_t name;      /* offset from beginning of string buffer */
 	uint32_t semantic;  /* offset from beginning of string buffer; only for VS input */
+	/*       ^ for uniforms @ HLSL3/D3D9 - the assigned shader slot or 0xffffffff if none is assigned */
 	int32_t  regSemIdx; /* register number/semantic index, -1 when not determined by the shader */
 	uint32_t arraySize; /* 0 if no array */
 	uint8_t  svType;    /* ShaderVarType */
@@ -482,7 +488,8 @@ struct ShaderVariable   /* 20 bytes */
 
 // API
 // loads include file
-// - file is the exact string in #include, requester is the exact string used to load file that contains #include
+// - file is the exact string in #include
+//   requester is the exact string used to load file that contains #include
 // - called with file=NULL to free memory pointed to by *outbuf
 // - return nonzero for success, zero for failure
 typedef int(*LoadIncludeFilePFN)(const char* file, const char* requester, char** outbuf, void* userdata);

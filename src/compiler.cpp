@@ -2396,9 +2396,6 @@ template <class F> void SortNodes(ASTNode* first, ASTNode* last, const F& comp)
 
 static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
 {
-	if (shaderFormat == OSF_HLSL_SM3)
-		return; // same as input, no need to edit
-
 	auto* F = ast.entryPoint;
 	// extract return value
 	if (F->GetReturnType()->IsVoid() == false)
@@ -3940,12 +3937,10 @@ void Compiler::_IterateVariables(
 	{
 		ShaderVarType svt;
 		int32_t regSemIdx = -1;
-		bool needSemantic = false;
 		if ((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Vertex)
 		{
 			svt = SVT_VSInput;
 			regSemIdx = vd->GetSemanticIndex();
-			needSemantic = true;
 		}
 		else if ((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Pixel)
 		{
@@ -3971,7 +3966,7 @@ void Compiler::_IterateVariables(
 		{
 			measureBufSizes[0]++;
 			measureBufSizes[1] += vd->name.size() + 1;
-			if (needSemantic)
+			if (svt == SVT_VSInput)
 				measureBufSizes[1] += vd->semanticName.size() + 1;
 		}
 		else
@@ -3987,11 +3982,16 @@ void Compiler::_IterateVariables(
 			memcpy(outsbp, vd->name.c_str(), vd->name.size() + 1);
 			outsbp += vd->name.size() + 1;
 			outVars->semantic  = 0;
-			if (needSemantic)
+			if (svt == SVT_VSInput)
 			{
 				outVars->semantic = outsbp - outStrBuf;
 				memcpy(outsbp, vd->semanticName.c_str(), vd->semanticName.size() + 1);
 				outsbp += vd->semanticName.size() + 1;
+			}
+			else if (svt == SVT_Uniform)
+			{
+				// TODO assigned position
+				outVars->semantic = 0xffffffff;
 			}
 			outVars->regSemIdx = regSemIdx;
 			outVars->arraySize = vd->type->kind == ASTType::Array ? vd->type->elementCount : 0;
