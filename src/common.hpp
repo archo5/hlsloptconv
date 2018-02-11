@@ -1,6 +1,7 @@
 
 
 #pragma once
+#define _HAS_EXCEPTIONS 0
 #include <assert.h>
 #include <vector>
 

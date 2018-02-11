@@ -31,10 +31,10 @@ hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 obj/%.obj: src/%.cpp $(HEADERS) | obj
-	cl /nologo /W3 /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
+	cl /nologo /W3 /Fo$@ /MDd /GR- /D_DEBUG /Zi /c $<
 
 obj/%.obj: src/tools/%.cpp $(HEADERS) | obj
-	cl /nologo /W3 /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
+	cl /nologo /W3 /Fo$@ /MDd /GR- /D_DEBUG /Zi /c $<
 
 obj:
 	mkdir obj

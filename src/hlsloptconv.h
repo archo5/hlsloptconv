@@ -158,6 +158,9 @@ struct HOC_Config
 		entryPoint = "main";
 		stage = HOC_(ShaderStage_Vertex);
 		outputFmt = HOC_(OSF_HLSL_SM3);
+		outputFlags =
+			HOC_OF_GLSL_RENAME_PSOUT |
+			HOC_OF_GLSL_RENAME_CBUFS;
 		loadIncludeFileFunc = NULL;
 		loadIncludeFileUserData = NULL;
 		defines = NULL;

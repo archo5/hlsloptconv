@@ -1000,6 +1000,18 @@ struct VariableAccessValidator
 	int endOfOutputElements = 0;
 };
 
+struct Info
+{
+	Info(Diagnostic& d, ShaderStage s, OutputShaderFormat of, uint32_t fl)
+		: diag(d), stage(s), outputFmt(of), outputFlags(fl)
+	{}
+
+	Diagnostic& diag;
+	ShaderStage stage;
+	OutputShaderFormat outputFmt;
+	uint32_t outputFlags;
+};
+
 
 // optimizer.cpp
 struct ConstantPropagation : ASTWalker<ConstantPropagation>

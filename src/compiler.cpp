@@ -2135,25 +2135,25 @@ struct ContentValidator : ASTWalker<ContentValidator>
 };
 
 
-static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShaderFormat shaderFormat)
+static void InOutFixSemanticsAndNames(VarDecl* vd, const Info& info)
 {
 	bool out = !!(vd->flags & VarDecl::ATTR_Out);
-	switch (shaderFormat)
+	switch (info.outputFmt)
 	{
 	case OSF_HLSL_SM3:
 		return;
 	case OSF_HLSL_SM4:
-		if (out && stage == ShaderStage_Pixel && vd->semanticName == "COLOR")
+		if (out && info.stage == ShaderStage_Pixel && vd->semanticName == "COLOR")
 		{
 			vd->semanticName = "SV_TARGET";
 			return;
 		}
-		if (out && stage == ShaderStage_Pixel && vd->semanticName == "DEPTH")
+		if (out && info.stage == ShaderStage_Pixel && vd->semanticName == "DEPTH")
 		{
 			vd->semanticName = "SV_DEPTH";
 			return;
 		}
-		if (out && stage == ShaderStage_Vertex && vd->semanticName == "POSITION")
+		if (out && info.stage == ShaderStage_Vertex && vd->semanticName == "POSITION")
 		{
 			vd->semanticName = "SV_POSITION";
 			return;
@@ -2163,7 +2163,7 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 	case OSF_GLSL_140:
 		if (out)
 		{
-			if (stage == ShaderStage_Vertex)
+			if (info.stage == ShaderStage_Vertex)
 			{
 				if (vd->semanticName == "POSITION")
 				{
@@ -2172,21 +2172,28 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 					return;
 				}
 			}
-			if (stage == ShaderStage_Pixel)
+			if (info.stage == ShaderStage_Pixel)
 			{
 				if (vd->semanticName == "COLOR")
 				{
-					if (shaderFormat == OSF_GLSL_ES_100)
+					if (info.outputFmt == OSF_GLSL_ES_100)
 					{
-						vd->name = "gl_FragColor";
-						vd->flags |= VarDecl::ATTR_Hidden;
+						if (vd->GetSemanticIndex() == 0)
+						{
+							vd->name = "gl_FragColor";
+							vd->flags |= VarDecl::ATTR_Hidden;
+						}
+						else
+						{
+							info.diag.EmitError("multiple render targets are not supported,"
+								" cannot write to outputs other than 0", vd->loc);
+						}
 						return;
 					}
-					else
+					else if (info.outputFlags & HOC_OF_GLSL_RENAME_PSOUT)
 					{
-						// TODO toggle
 						char bfr[32];
-						sprintf(bfr, "_PSCOLOR%d", vd->GetSemanticIndex());
+						sprintf(bfr, "PSCOLOR%d", vd->GetSemanticIndex());
 						vd->name = bfr;
 					}
 					return;
@@ -2195,11 +2202,11 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, ShaderStage stage, OutputShad
 		}
 
 		// TODO geometry shaders?
-	//	if (shaderFormat == OSF_GLSL_ES_100)
+	//	if (info.outputFmt == OSF_GLSL_ES_100)
 		{
 			// force rename varyings to semantics to automate linkage
-			if (((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Vertex) ||
-				((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Pixel))
+			if (((vd->flags & VarDecl::ATTR_Out) && info.stage == ShaderStage_Vertex) ||
+				((vd->flags & VarDecl::ATTR_In) && info.stage == ShaderStage_Pixel))
 			{
 				StringStream nmss(vd->semanticName.size() + 16);
 				nmss << "attr" << vd->semanticName << vd->GetSemanticIndex();
@@ -2221,8 +2228,7 @@ struct StructLevel
 	uint32_t mmbID;
 	ASTNode* levILE;
 };
-static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
-	ShaderStage stage, OutputShaderFormat shaderFormat,
+static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, const Info& info,
 	ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
 {
 	std::vector<StructLevel> mmbIndices;
@@ -2257,7 +2263,7 @@ static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F,
 		vd->flags = (outILE ? VarDecl::ATTR_In : VarDecl::ATTR_Out) | VarDecl::ATTR_StageIO;
 		vd->semanticName = mmb.semanticName;
 		vd->semanticIndex = mmb.semanticIndex;
-		InOutFixSemanticsAndNames(vd, stage, shaderFormat);
+		InOutFixSemanticsAndNames(vd, info);
 
 		if (outILE)
 		{
@@ -2397,7 +2403,7 @@ template <class F> void SortNodes(ASTNode* first, ASTNode* last, const F& comp)
 	}
 }
 
-static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat shaderFormat)
+static void UnpackEntryPoint(AST& ast, const Info& info)
 {
 	auto* F = ast.entryPoint;
 	// extract return value
@@ -2411,7 +2417,7 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat sha
 		F->returnSemanticIndex = -1;
 		vd->SetType(F->GetReturnType());
 		vd->flags |= VarDecl::ATTR_Out | VarDecl::ATTR_StageIO;
-		InOutFixSemanticsAndNames(vd, stage, shaderFormat);
+		InOutFixSemanticsAndNames(vd, info);
 
 		F->SetReturnType(ast.GetVoidType());
 
@@ -2452,7 +2458,7 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat sha
 
 		if (argvd->GetType()->kind != ASTType::Structure)
 		{
-			InOutFixSemanticsAndNames(argvd, stage, shaderFormat);
+			InOutFixSemanticsAndNames(argvd, info);
 		}
 		else
 		{
@@ -2472,18 +2478,18 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat sha
 				ile->SetReturnType(argvd->GetType());
 				argvd->SetInitExpr(ile);
 
-				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat,
+				GLSLAppendShaderIOVar(ast, F, info,
 					ile, argvd, argvd->GetType()->ToStructType());
 			}
 			else
-				GLSLAppendShaderIOVar(ast, F, stage, shaderFormat,
+				GLSLAppendShaderIOVar(ast, F, info,
 					nullptr, argvd, argvd->GetType()->ToStructType());
 
 			vds->PrependChild(argvd);
 		}
 	}
 
-	if (shaderFormat == OSF_HLSL_SM4)
+	if (info.outputFmt == OSF_HLSL_SM4)
 	{
 		// sort the arguments by type (in,out), then by class (normal,special), then by semantic
 		assert(dyn_cast<const VarDecl>(F->GetFirstArg()));
@@ -2513,7 +2519,7 @@ static void UnpackEntryPoint(AST& ast, ShaderStage stage, OutputShaderFormat sha
 		});
 	//	F->Dump(FILEStream(stderr),0);
 	}
-	if (shaderFormat == OSF_GLSL_140 || shaderFormat == OSF_GLSL_ES_100)
+	if (info.outputFmt == OSF_GLSL_140 || info.outputFmt == OSF_GLSL_ES_100)
 	{
 		while (F->GetFirstArg())
 			ast.globalVars.AppendChild(F->GetFirstArg());
@@ -3412,9 +3418,24 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 	OutputShaderFormat outputFmt;
 };
 
-static void GLSLConvert(AST& ast, Diagnostic& diag, OutputShaderFormat outputFmt)
+static void GLSLConvert(AST& ast, const Info& info)
 {
-	GLSLConversionPass(ast, diag, outputFmt).VisitAST(ast);
+	if (info.outputFlags & HOC_OF_GLSL_RENAME_CBUFS)
+	{
+		for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
+		{
+			if (auto* cbuf = dyn_cast<CBufferDecl>(g))
+			{
+				if (cbuf->bufRegID >= 0)
+				{
+					char bfr[32];
+					sprintf(bfr, "CBUF%d", int(cbuf->bufRegID));
+					cbuf->name = bfr;
+				}
+			}
+		}
+	}
+	GLSLConversionPass(ast, info.diag, info.outputFmt).VisitAST(ast);
 }
 
 
@@ -3930,6 +3951,7 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 		: (OutStream*) &errStream;
 
 	Diagnostic diag(errorStream, name);
+	Info info(diag, stage, outputFmt, config->outputFlags);
 	Parser p(
 		diag,
 		stage,
@@ -4011,7 +4033,7 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 
 	// output-specific transformations (emulation/feature mapping)
 	PadAPI(p.ast, diag, outputFmt);
-	UnpackEntryPoint(p.ast, stage, outputFmt);
+	UnpackEntryPoint(p.ast, info);
 	if (outputFmt != OSF_HLSL_SM3)
 	{
 		SplitTexSampleArgs(p.ast, diag, outputFmt);
@@ -4023,7 +4045,7 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 		UnpackMatrixSwizzle(p.ast);
 		RemoveVM1AndM1DTypes(p.ast);
 		RemoveArraysOfArrays(p.ast);
-		GLSLConvert(p.ast, diag, outputFmt);
+		GLSLConvert(p.ast, info);
 		break;
 	}
 
