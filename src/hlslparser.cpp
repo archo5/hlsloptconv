@@ -6,6 +6,9 @@
 #include <cmath>
 
 
+using namespace HOC;
+
+
 static inline bool isStr(const char* begin, const char* end, const char* str, size_t sz)
 {
 	return end - begin == sz && memcmp(begin, str, sz) == 0;
@@ -221,10 +224,15 @@ static const OperatorInfo g_allOperatorsResolveOrder[] =
 	{ STT_OP_Ternary, "?" },
 };
 
-bool Parser::ParseCode(const char* text)
+bool Parser::ParseCode(const char* text, const char** featureDefs)
 {
 	if (!ParseTokens(text, 0))
 		return false;
+
+	auto oneMacro = RequestIntBoolMacro(true);
+	while (*featureDefs)
+		macros.insert({ *featureDefs++, oneMacro });
+
 	if (!PreprocessTokens(0))
 		return false;
 
@@ -1053,6 +1061,13 @@ notfound:
 SLToken Parser::RequestIntBoolToken(bool v)
 {
 	return { STT_Int32Lit, Location::BAD(), 0U, v ? 4U : 0U };
+}
+
+PreprocMacro Parser::RequestIntBoolMacro(bool v)
+{
+	PreprocMacro out;
+	out.tokens.push_back(RequestIntBoolToken(v));
+	return out;
 }
 
 int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos)

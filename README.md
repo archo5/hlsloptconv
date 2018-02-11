@@ -57,7 +57,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 #### Other planned improvements:
 
-* C API
 * possibility to predetermine location of uniform/sampler data
 * removal of STL to improve compile times
 * improved optimization capabilities

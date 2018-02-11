@@ -6,6 +6,9 @@
 #include <algorithm>
 
 
+using namespace HOC;
+
+
 static void LVL(OutStream& out, int level)
 {
 	while (level-- > 0)
@@ -218,7 +221,7 @@ void ASTStructType::Dump(OutStream& out) const
 
 
 
-bool TokenIsOpAssign(SLTokenType tt)
+bool HOC::TokenIsOpAssign(SLTokenType tt)
 {
 	switch (tt)
 	{
@@ -238,7 +241,7 @@ bool TokenIsOpAssign(SLTokenType tt)
 	return false;
 }
 
-bool TokenIsOpCompare(SLTokenType tt)
+bool HOC::TokenIsOpCompare(SLTokenType tt)
 {
 	switch (tt)
 	{
@@ -253,7 +256,7 @@ bool TokenIsOpCompare(SLTokenType tt)
 	return false;
 }
 
-const char* TokenTypeToString(SLTokenType tt)
+const char* HOC::TokenTypeToString(SLTokenType tt)
 {
 	const char* str;
 	switch (tt)
@@ -806,7 +809,7 @@ static_assert(
 	sizeof(g_OpKindNames) / sizeof(g_OpKindNames[0]) == Op_COUNT,
 	"op kind name count != op kind count"
 );
-const char* OpKindToString(OpKind kind)
+const char* HOC::OpKindToString(OpKind kind)
 {
 	if (kind >= 0 && kind < Op_COUNT)
 		return g_OpKindNames[kind];
@@ -2906,7 +2909,7 @@ static Expr* CastExprTo(Expr* val, ASTType* to)
 	return val;
 }
 
-static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
+static Expr* GetReferenceToElement(AST& ast, Expr* src, unsigned accessPointNum)
 {
 	ASTType* t = src->GetReturnType();
 	assert(accessPointNum >= 0 && accessPointNum < t->GetAccessPointCount());
@@ -2945,10 +2948,10 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, int accessPointNum)
 	case ASTType::Structure:
 		{
 			auto* strTy = t->ToStructType();
-			int offset = 0;
+			unsigned offset = 0;
 			for (size_t i = 0; i < strTy->members.size(); ++i)
 			{
-				int apc = strTy->members[i].type->GetAccessPointCount();
+				unsigned apc = strTy->members[i].type->GetAccessPointCount();
 				if (accessPointNum - offset < apc)
 				{
 					auto* mmbexpr = new MemberExpr;
@@ -3739,165 +3742,6 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 };
 
 
-Compiler::~Compiler()
-{
-	if (outVarGenerate && outVarOverflowAlloc)
-	{
-		if (outVarDidOverflowVar && outVarBuf && outVarBufSize)
-			delete [] outVarBuf;
-		if (outVarDidOverflowStr && outVarStrBuf && outVarStrBufSize)
-			delete [] outVarStrBuf;
-	}
-}
-
-bool Compiler::CompileFile(const char* name, const char* code)
-{
-	Diagnostic diag(errorOutputStream, name);
-	Parser p(diag, stage, entryPoint, loadIncludeFilePFN, loadIncludeFileUD);
-
-	String codeWithDefines;
-	if (defines)
-	{
-		ShaderMacro* d = defines;
-		codeWithDefines += "#line 1 \"<arguments>\"\n";
-		while (d->name)
-		{
-			codeWithDefines += "#define ";
-			size_t pos = codeWithDefines.size();
-			codeWithDefines += d->name;
-			if (const char* eqsp = strchr(d->name, '='))
-			{
-				codeWithDefines[pos + (eqsp - d->name)] = ' ';
-			}
-			if (d->value)
-			{
-				codeWithDefines += " ";
-				codeWithDefines += d->value;
-			}
-			codeWithDefines += "\n";
-			d++;
-		}
-		codeWithDefines += "#line 1 \"";
-		codeWithDefines += name;
-		codeWithDefines += "\"\n";
-		codeWithDefines += code;
-
-		code = codeWithDefines.c_str();
-	}
-//	FILEStream(stderr) << code;
-
-	if (!p.ParseCode(code))
-		return false;
-	p.ast.MarkUsed(diag);
-	if (diag.hasErrors)
-		return false;
-
-	if (ASTDumpStream)
-	{
-		*ASTDumpStream << "AST before optimization:\n";
-		p.ast.Dump(*ASTDumpStream);
-		ASTDumpStream->Flush();
-	}
-
-	// ignore unused functions entirely
-	RemoveUnusedFunctions().RunOnAST(p.ast);
-
-	// validate all
-	VariableAccessValidator(diag).RunOnAST(p.ast);
-	if (diag.hasErrors)
-		return false;
-	ContentValidator(diag, outputFmt).RunOnAST(p.ast);
-	if (diag.hasErrors)
-		return false;
-
-	// output-specific transformations (emulation/feature mapping)
-	PadAPI(p.ast, diag, outputFmt);
-	UnpackEntryPoint(p.ast, stage, outputFmt);
-	if (outputFmt != OSF_HLSL_SM3)
-	{
-		SplitTexSampleArgs(p.ast, diag, outputFmt);
-	}
-	switch (outputFmt)
-	{
-	case OSF_GLSL_140:
-	case OSF_GLSL_ES_100:
-		UnpackMatrixSwizzle(p.ast);
-		RemoveVM1AndM1DTypes(p.ast);
-		RemoveArraysOfArrays(p.ast);
-		GLSLConvert(p.ast, diag, outputFmt);
-		break;
-	}
-
-	if (diag.hasErrors)
-		return false;
-
-	// optimizations
-	ConstantPropagation().RunOnAST(p.ast);
-	MarkUnusedVariables().RunOnAST(p.ast);
-	RemoveUnusedVariables().RunOnAST(p.ast);
-
-	AssignVarDeclNames().VisitAST(p.ast);
-
-	if (ASTDumpStream)
-	{
-		*ASTDumpStream << "AST after optimization:\n";
-		p.ast.Dump(*ASTDumpStream);
-		ASTDumpStream->Flush();
-	}
-
-	if (codeOutputStream)
-	{
-		switch (outputFmt)
-		{
-		case OSF_HLSL_SM3:
-			GenerateHLSL_SM3(p.ast, *codeOutputStream);
-			break;
-		case OSF_HLSL_SM4:
-			GenerateHLSL_SM4(p.ast, *codeOutputStream);
-			break;
-		case OSF_GLSL_140:
-			GenerateGLSL_140(p.ast, *codeOutputStream);
-			break;
-		case OSF_GLSL_ES_100:
-			GenerateGLSL_ES_100(p.ast, *codeOutputStream);
-			break;
-		}
-	}
-
-	if (outVarGenerate)
-	{
-		size_t bufSizes[2] = { 0, 0 };
-
-		_IterateVariables(p.ast, nullptr, nullptr, bufSizes);
-
-		if (bufSizes[0] > outVarBufSize)
-			outVarDidOverflowVar = true;
-		if (bufSizes[1] > outVarStrBufSize)
-			outVarDidOverflowStr = true;
-
-		if (outVarOverflowAlloc)
-		{
-			outVarBufSize = bufSizes[0];
-			if (outVarDidOverflowVar)
-				outVarBuf = new ShaderVariable[bufSizes[0]];
-			outVarStrBufSize = bufSizes[1];
-			if (outVarDidOverflowStr)
-				outVarStrBuf = new char[bufSizes[1]];
-		}
-		else
-		{
-			if (outVarBufSize > bufSizes[0])
-				outVarBufSize = bufSizes[0];
-			if (outVarStrBufSize > bufSizes[1])
-				outVarStrBufSize = bufSizes[1];
-		}
-
-		_IterateVariables(p.ast, outVarBuf, outVarStrBuf, nullptr);
-	}
-
-	return true;
-}
-
 static ShaderDataType ASTTypeKindToShaderDataType(ASTType::Kind k)
 {
 	switch (k)
@@ -3925,12 +3769,14 @@ static ShaderDataType ASTTypeKindToShaderDataType(ASTType::Kind k)
 	return SDT_None;
 }
 
-void Compiler::_IterateVariables(
+static void IFO_IterateVariables(
+	HOC_Config* config,
 	const AST& ast,
 	ShaderVariable* outVars,
 	char* outStrBuf,
 	size_t measureBufSizes[2])
 {
+	auto stage = (ShaderStage) config->stage;
 	char* outsbp = outStrBuf;
 
 	auto AppendVarDecl = [&](const VarDecl* vd)
@@ -4062,6 +3908,206 @@ void Compiler::_IterateVariables(
 	for (const ASTNode* arg = ast.entryPoint->GetFirstArg(); arg; arg = arg->next)
 	{
 		AppendVarDecl(dyn_cast<const VarDecl>(arg));
+	}
+}
+
+
+
+HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* config)
+{
+	auto stage = (ShaderStage) config->stage;
+	auto outputFmt = (OutputShaderFormat) config->outputFmt;
+
+	FILEStream outStream(stdout);
+	FILEStream errStream(stderr);
+	CallbackStream cbCodeStream(config->codeOutputStream);
+	CallbackStream cbErrStream(config->errorOutputStream);
+	auto* codeStream = config->codeOutputStream
+		? (OutStream*) &cbCodeStream
+		: (OutStream*) &outStream;
+	auto* errorStream = config->errorOutputStream
+		? (OutStream*) &cbErrStream
+		: (OutStream*) &errStream;
+
+	Diagnostic diag(errorStream, name);
+	Parser p(
+		diag,
+		stage,
+		config->entryPoint,
+		config->loadIncludeFileFunc,
+		config->loadIncludeFileUserData
+	);
+
+	String codeWithDefines;
+	if (config->defines)
+	{
+		ShaderMacro* d = config->defines;
+		codeWithDefines += "#line 1 \"<arguments>\"\n";
+		while (d->name)
+		{
+			codeWithDefines += "#define ";
+			size_t pos = codeWithDefines.size();
+			codeWithDefines += d->name;
+			if (const char* eqsp = strchr(d->name, '='))
+			{
+				codeWithDefines[pos + (eqsp - d->name)] = ' ';
+			}
+			if (d->value)
+			{
+				codeWithDefines += " ";
+				codeWithDefines += d->value;
+			}
+			codeWithDefines += "\n";
+			d++;
+		}
+		codeWithDefines += "#line 1 \"";
+		codeWithDefines += name;
+		codeWithDefines += "\"\n";
+		codeWithDefines += code;
+
+		code = codeWithDefines.c_str();
+	}
+//	FILEStream(stderr) << code;
+
+	const char* featureDefs[3] = {};
+	const char** fdWP = featureDefs;
+	switch (stage)
+	{
+	case ShaderStage_Vertex: *fdWP++ = "__VERTEX_SHADER__"; break;
+	case ShaderStage_Pixel:  *fdWP++ = "__PIXEL_SHADER__";  break;
+	}
+	switch (outputFmt)
+	{
+	case OSF_HLSL_SM3:    *fdWP++ = "__HLSL_SM3__";    break;
+	case OSF_HLSL_SM4:    *fdWP++ = "__HLSL_SM4__";    break;
+	case OSF_GLSL_140:    *fdWP++ = "__GLSL_140__";    break;
+	case OSF_GLSL_ES_100: *fdWP++ = "__GLSL_ES_100__"; break;
+	}
+	assert(fdWP < std::end(featureDefs));
+
+	if (!p.ParseCode(code, featureDefs))
+		return false;
+	p.ast.MarkUsed(diag);
+	if (diag.hasErrors)
+		return false;
+
+	if (config->ASTDumpStream)
+	{
+		CallbackStream cbASTStream(config->ASTDumpStream);
+		cbASTStream << "AST before optimization:\n";
+		p.ast.Dump(cbASTStream);
+	}
+
+	// ignore unused functions entirely
+	RemoveUnusedFunctions().RunOnAST(p.ast);
+
+	// validate all
+	VariableAccessValidator(diag).RunOnAST(p.ast);
+	if (diag.hasErrors)
+		return false;
+	ContentValidator(diag, outputFmt).RunOnAST(p.ast);
+	if (diag.hasErrors)
+		return false;
+
+	// output-specific transformations (emulation/feature mapping)
+	PadAPI(p.ast, diag, outputFmt);
+	UnpackEntryPoint(p.ast, stage, outputFmt);
+	if (outputFmt != OSF_HLSL_SM3)
+	{
+		SplitTexSampleArgs(p.ast, diag, outputFmt);
+	}
+	switch (outputFmt)
+	{
+	case OSF_GLSL_140:
+	case OSF_GLSL_ES_100:
+		UnpackMatrixSwizzle(p.ast);
+		RemoveVM1AndM1DTypes(p.ast);
+		RemoveArraysOfArrays(p.ast);
+		GLSLConvert(p.ast, diag, outputFmt);
+		break;
+	}
+
+	if (diag.hasErrors)
+		return false;
+
+	// optimizations
+	ConstantPropagation().RunOnAST(p.ast);
+	MarkUnusedVariables().RunOnAST(p.ast);
+	RemoveUnusedVariables().RunOnAST(p.ast);
+
+	AssignVarDeclNames().VisitAST(p.ast);
+
+	if (config->ASTDumpStream)
+	{
+		CallbackStream cbASTStream(config->ASTDumpStream);
+		cbASTStream << "AST after optimization:\n";
+		p.ast.Dump(cbASTStream);
+	}
+
+	switch (outputFmt)
+	{
+	case OSF_HLSL_SM3:
+		GenerateHLSL_SM3(p.ast, *codeStream);
+		break;
+	case OSF_HLSL_SM4:
+		GenerateHLSL_SM4(p.ast, *codeStream);
+		break;
+	case OSF_GLSL_140:
+		GenerateGLSL_140(p.ast, *codeStream);
+		break;
+	case OSF_GLSL_ES_100:
+		GenerateGLSL_ES_100(p.ast, *codeStream);
+		break;
+	}
+
+	if (auto* ifo = config->interfaceOutput)
+	{
+		size_t bufSizes[2] = { 0, 0 };
+
+		IFO_IterateVariables(config, p.ast, nullptr, nullptr, bufSizes);
+
+		if (bufSizes[0] > ifo->outVarBufSize)
+			ifo->didOverflowVar = true;
+		if (bufSizes[1] > ifo->outVarStrBufSize)
+			ifo->didOverflowStr = true;
+
+		if (ifo->overflowAlloc)
+		{
+			ifo->outVarBufSize = bufSizes[0];
+			if (ifo->didOverflowVar)
+				ifo->outVarBuf = new ShaderVariable[bufSizes[0]];
+			ifo->outVarStrBufSize = bufSizes[1];
+			if (ifo->didOverflowStr)
+				ifo->outVarStrBuf = new char[bufSizes[1]];
+		}
+		else
+		{
+			if (ifo->outVarBufSize > bufSizes[0])
+				ifo->outVarBufSize = bufSizes[0];
+			if (ifo->outVarStrBufSize > bufSizes[1])
+				ifo->outVarStrBufSize = bufSizes[1];
+		}
+
+		IFO_IterateVariables(config, p.ast, ifo->outVarBuf, ifo->outVarStrBuf, nullptr);
+	}
+
+	return true;
+}
+
+void HOC_FreeInterfaceOutputBuffers(HOC_InterfaceOutput* ifo)
+{
+	if (ifo && ifo->overflowAlloc)
+	{
+		if (ifo->didOverflowVar && ifo->outVarBuf && ifo->outVarBufSize)
+		{
+			delete [] ifo->outVarBuf;
+			ifo->outVarBuf = nullptr;
+		}
+		if (ifo->didOverflowStr && ifo->outVarStrBuf && ifo->outVarStrBufSize)
+		{
+			delete [] ifo->outVarStrBuf;
+			ifo->outVarStrBuf = nullptr;
+		}
 	}
 }
 

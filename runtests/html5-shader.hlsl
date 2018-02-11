@@ -5,8 +5,8 @@ cbuffer uniformData
 	float4x4 viewMatrix;
 }
 
-#if VS
-#if D3D11
+#if __VERTEX_SHADER__
+#if __HLSL_SM4__
 static const float4 verts[3] =
 {
 	-1, -1, 0.5f, 1,
@@ -23,12 +23,12 @@ void main(float4 pos : POSITION0, out float4 opos : POSITION0, out float2 otex :
 {
 	opos = pos;
 	otex = (pos.xy * 0.5 + 0.5) * iResolution;
-#if D3D9
+#if __HLSL_SM3__
 	opos.xy += float2(-1,1) / iResolution;
 #endif
 }
 #endif
-#elif PS
+#elif __PIXEL_SHADER__
 
 float csgUnion(float d1, float d2)
 {

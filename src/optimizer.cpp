@@ -3,6 +3,9 @@
 #include "compiler.hpp"
 
 
+using namespace HOC;
+
+
 void ConstantPropagation::PostVisit(ASTNode* node)
 {
 	if (auto* unop = dyn_cast<const UnaryOpExpr>(node))

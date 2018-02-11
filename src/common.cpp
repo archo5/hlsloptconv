@@ -11,6 +11,9 @@
 #endif
 
 
+using namespace HOC;
+
+
 OutStream& OutStream::operator << (short v)
 {
 	char bfr[32];
@@ -131,8 +134,14 @@ void FILEStream::Write(const char* str, size_t size)
 	fwrite(str, size, 1, file);
 }
 
+void CallbackStream::Write(const char* str, size_t size)
+{
+	if (textOut && textOut->func)
+		textOut->func(str, size, textOut->userData);
+}
 
-double GetTime()
+
+double HOC::GetTime()
 {
 #if __linux
 	struct timespec ts;
@@ -147,12 +156,10 @@ double GetTime()
 	QueryPerformanceFrequency(&freq);
 	QueryPerformanceCounter(&cnt);
 	return double(cnt.QuadPart) / double(freq.QuadPart);
-	//clock_t clk = clock();
-	//return (double)( clk ) / (double)( CLOCKS_PER_SEC );
 #endif
 }
 
-String GetFileContents(const char* filename, bool text)
+String HOC::GetFileContents(const char* filename, bool text)
 {
 	FILE* fp = fopen(filename, text ? "r" : "rb");
 	if (!fp)
@@ -182,7 +189,7 @@ String GetFileContents(const char* filename, bool text)
 	return contents;
 }
 
-void SetFileContents(const char* filename, const String& contents, bool text)
+void HOC::SetFileContents(const char* filename, const String& contents, bool text)
 {
 	FILE* fp = fopen(filename, text ? "w" : "wb");
 	if (!fp)
@@ -236,18 +243,7 @@ void Diagnostic::EmitError(const Twine& msg, const Location& loc)
 }
 
 
-uint8_t InvertVecSwizzleMask(uint8_t mask, int ncomp)
-{
-	uint8_t out = 0;
-	for (int i = 0; i < ncomp; ++i)
-	{
-		uint8_t comp = (mask >> (i * 2)) & 0x3;
-		out |= i << (comp * 2);
-	}
-	return out;
-}
-
-bool IsValidVecSwizzleWriteMask(uint8_t mask, int ncomp)
+static bool IsValidVecSwizzleWriteMask(uint8_t mask, int ncomp)
 {
 	uint16_t compsModified = 0;
 	for (int i = 0; i < ncomp; ++i)
@@ -260,7 +256,7 @@ bool IsValidVecSwizzleWriteMask(uint8_t mask, int ncomp)
 	return true;
 }
 
-bool IsValidMtxSwizzleWriteMask(uint16_t mask, int ncomp)
+static bool IsValidMtxSwizzleWriteMask(uint16_t mask, int ncomp)
 {
 	uint16_t compsModified = 0;
 	for (int i = 0; i < ncomp; ++i)
@@ -273,7 +269,7 @@ bool IsValidMtxSwizzleWriteMask(uint16_t mask, int ncomp)
 	return true;
 }
 
-bool IsValidSwizzleWriteMask(uint32_t mask, bool matrix, int ncomp)
+bool HOC::IsValidSwizzleWriteMask(uint32_t mask, bool matrix, int ncomp)
 {
 	return matrix ? IsValidMtxSwizzleWriteMask(mask, ncomp) : IsValidVecSwizzleWriteMask(mask, ncomp);
 }

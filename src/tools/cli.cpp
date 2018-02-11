@@ -1,6 +1,8 @@
 
 #include "../compiler.hpp"
 
+using namespace HOC;
+
 struct ArgParser
 {
 	bool FlagArg(int& i, const char* shortArg, const char* longArg)
@@ -131,11 +133,9 @@ static void Stringify(String& out, const String& in, bool jsconcat)
 int main(int argc, char** argv)
 {
 	ArgParser ap = { argc, argv };
-	Compiler compiler;
-	FILEStream outStream(stdout);
-	FILEStream errStream(stderr);
+	HOC_Config cfg;
 	std::vector<ShaderMacro> macros;
-	StringStream codeStream;
+	String genCode;
 	const char* inputFileName = nullptr;
 	const char* outputFileName = nullptr;
 	const char* xform = "none";
@@ -143,8 +143,9 @@ int main(int argc, char** argv)
 	bool hasStage = false;
 	bool codeToStdout = false;
 
-	compiler.errorOutputStream = &errStream;
-	compiler.codeOutputStream = &codeStream;
+	HOC_TextOutput toStdout = { &HOC_WriteStr_FILE, stdout };
+	HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
+	cfg.codeOutputStream = &toCode;
 
 	for (int i = 0; i < argc; ++i)
 	{
@@ -167,16 +168,16 @@ int main(int argc, char** argv)
 		}
 		else if (const char* ep = ap.ValueArg(i, "e", "entrypoint"))
 		{
-			compiler.entryPoint = ep;
+			cfg.entryPoint = ep;
 		}
 		else if (const char* fmt = ap.ValueArg(i, "f", "format"))
 		{
 			usedFmtString = fmt;
-			compiler.outputFmt = StringToOutputFmt(fmt);
+			cfg.outputFmt = StringToOutputFmt(fmt);
 		}
 		else if (const char* stage = ap.ValueArg(i, "s", "stage"))
 		{
-			compiler.stage = StringToShaderStage(stage);
+			cfg.stage = StringToShaderStage(stage);
 			hasStage = true;
 		}
 		else if (const char* xf = ap.ValueArg(i, "x", "transform"))
@@ -196,7 +197,7 @@ int main(int argc, char** argv)
 		}
 		else if (ap.FlagArg(i, "d", "dump"))
 		{
-			compiler.ASTDumpStream = &outStream;
+			cfg.ASTDumpStream = &toStdout;
 		}
 		else
 		{
@@ -226,11 +227,11 @@ int main(int argc, char** argv)
 	if (!macros.empty())
 	{
 		macros.push_back({ nullptr, nullptr });
-		compiler.defines = macros.data();
+		cfg.defines = macros.data();
 	}
 
 	String inCode = GetFileContents(inputFileName, true);
-	if (!compiler.CompileFile(inputFileName, inCode.c_str()))
+	if (!HOC_CompileShader(inputFileName, inCode.c_str(), &cfg))
 	{
 		fprintf(stderr, "compilation failed, no output generated\n");
 		return 1;
@@ -239,15 +240,15 @@ int main(int argc, char** argv)
 	String outCode;
 	if (strcmp(xform, "cstr") == 0)
 	{
-		Stringify(outCode, codeStream.str(), false);
+		Stringify(outCode, genCode, false);
 	}
 	else if (strcmp(xform, "jsstr") == 0)
 	{
-		Stringify(outCode, codeStream.str(), true);
+		Stringify(outCode, genCode, true);
 	}
 	else
 	{
-		outCode = codeStream.str();
+		outCode = genCode;
 	}
 
 	if (codeToStdout)

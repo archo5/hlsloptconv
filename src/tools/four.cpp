@@ -1,4 +1,11 @@
 
+#include <math.h>
+#define WIN32_LEAN_AND_MEAN
+#define NOSERVICE
+#define NOMCX
+#define NOIME
+#define NOAPISET
+#define NONLS
 #include <windows.h>
 #include <d3d9.h>
 #if USE_D3DXCOMPILESHADER
@@ -9,7 +16,9 @@
 #include <d3dcompiler.h>
 #include <gl/gl.h>
 
-#include "../compiler.hpp"
+#include "../common.hpp"
+using namespace HOC;
+
 
 #define WINDOW_WIDTH (640+640)
 #define WINDOW_HEIGHT (16+360+16+360)
@@ -193,10 +202,6 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 
 LRESULT CALLBACK SubWindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
-	switch (msg)
-	{
-	}
-
 	return DefWindowProc(window, msg, wp, lp);
 }
 
@@ -235,17 +240,14 @@ namespace D3D9
 
 	void CompileShader(bool pixelShader)
 	{
-		Compiler compiler;
-		FILEStream errStream(stderr);
-		StringStream codeStream;
-		compiler.errorOutputStream = &errStream;
-		compiler.codeOutputStream = &codeStream;
-		compiler.outputFmt = OSF_HLSL_SM3;
-		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D9", "1" }, { nullptr, nullptr } };
-		compiler.defines = macros;
+		HOC_Config cfg;
+		String genCode;
+		HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
+		cfg.codeOutputStream = &toCode;
+		cfg.outputFmt = OSF_HLSL_SM3;
+		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		String inCode = GetFileContents(SHADER_NAME, true);
-		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
@@ -253,8 +255,8 @@ namespace D3D9
 #if USE_D3DXCOMPILESHADER
 		ID3DXBuffer* codeBuf = nullptr;
 		ID3DXBuffer* errBuf = nullptr;
-	//	puts(codeStream.str().c_str());
-		D3DXCompileShader(codeStream.str().c_str(), codeStream.str().size(), nullptr, nullptr,
+	//	puts(genCode.c_str());
+		D3DXCompileShader(genCode.c_str(), genCode.size(), nullptr, nullptr,
 	//	D3DXMACRO xmacros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D9", "1" }, { nullptr, nullptr } };
 	//	D3DXCompileShader(inCode.c_str(), inCode.size(), xmacros, nullptr,
 			"main", pixelShader ? "ps_3_0" : "vs_3_0",
@@ -262,7 +264,7 @@ namespace D3D9
 #else
 		ID3DBlob* codeBuf = nullptr;
 		ID3DBlob* errBuf = nullptr;
-		D3DCompile(codeStream.str().c_str(), codeStream.str().size(), SHADER_NAME, nullptr, nullptr,
+		D3DCompile(genCode.c_str(), genCode.size(), SHADER_NAME, nullptr, nullptr,
 			"main", pixelShader ? "ps_3_0" : "vs_3_0", 0, 0, &codeBuf, &errBuf);
 #endif
 		if (errBuf)
@@ -384,24 +386,21 @@ namespace D3D11
 
 	void CompileShader(bool pixelShader)
 	{
-		Compiler compiler;
-		FILEStream errStream(stderr);
-		StringStream codeStream;
-		compiler.errorOutputStream = &errStream;
-		compiler.codeOutputStream = &codeStream;
-		compiler.outputFmt = OSF_HLSL_SM4;
-		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "D3D11", "1" }, { nullptr, nullptr } };
-		compiler.defines = macros;
+		HOC_Config cfg;
+		String genCode;
+		HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
+		cfg.codeOutputStream = &toCode;
+		cfg.outputFmt = OSF_HLSL_SM4;
+		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		String inCode = GetFileContents(SHADER_NAME, true);
-		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
 		}
 		ID3DBlob* codeBuf = nullptr;
 		ID3DBlob* errBuf = nullptr;
-		D3DCompile(codeStream.str().c_str(), codeStream.str().size(), SHADER_NAME, nullptr, nullptr,
+		D3DCompile(genCode.c_str(), genCode.size(), SHADER_NAME, nullptr, nullptr,
 			"main", pixelShader ? "ps_4_0" : "vs_4_0", 0, 0, &codeBuf, &errBuf);
 		if (errBuf)
 		{
@@ -743,26 +742,23 @@ namespace GL20
 
 	void CompileShader(bool pixelShader)
 	{
-		Compiler compiler;
-		FILEStream errStream(stderr);
-		StringStream codeStream;
-		compiler.errorOutputStream = &errStream;
-		compiler.codeOutputStream = &codeStream;
-		compiler.outputFmt = OSF_GLSL_ES_100;
-		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "GL20", "1" }, { nullptr, nullptr } };
-		compiler.defines = macros;
+		HOC_Config cfg;
+		String genCode;
+		HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
+		cfg.codeOutputStream = &toCode;
+		cfg.outputFmt = OSF_GLSL_ES_100;
+		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		String inCode = GetFileContents(SHADER_NAME, true);
-		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
 		}
 	//	printf("%s ---------------\n%s\n----------------\n\n",
-	//		pixelShader ? "PIXEL" : "VERTEX", codeStream.str().c_str());
+	//		pixelShader ? "PIXEL" : "VERTEX", genCode.c_str());
 
 		GLuint shader = GLCHK(glCreateShader(pixelShader ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER));
-		const char* shaderSources[] = { codeStream.str().c_str() };
+		const char* shaderSources[] = { genCode.c_str() };
 		GLCHK(glShaderSource(shader, 1, shaderSources, nullptr));
 		GLCHK(glCompileShader(shader));
 		GLint compileSuccessful = GL_FALSE;
@@ -1024,26 +1020,23 @@ namespace GL31
 
 	void CompileShader(bool pixelShader)
 	{
-		Compiler compiler;
-		FILEStream errStream(stderr);
-		StringStream codeStream;
-		compiler.errorOutputStream = &errStream;
-		compiler.codeOutputStream = &codeStream;
-		compiler.outputFmt = OSF_GLSL_140;
-		compiler.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		ShaderMacro macros[] = { { pixelShader ? "PS" : "VS", "1" }, { "GL31", "1" }, { nullptr, nullptr } };
-		compiler.defines = macros;
+		HOC_Config cfg;
+		String genCode;
+		HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
+		cfg.codeOutputStream = &toCode;
+		cfg.outputFmt = OSF_GLSL_140;
+		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		String inCode = GetFileContents(SHADER_NAME, true);
-		if (!compiler.CompileFile(SHADER_NAME, inCode.c_str()))
+		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
 		}
 	//	printf("%s ---------------\n%s\n----------------\n\n",
-	//		pixelShader ? "PIXEL" : "VERTEX", codeStream.str().c_str());
+	//		pixelShader ? "PIXEL" : "VERTEX", genCode.c_str());
 
 		GLuint shader = GLCHK(glCreateShader(pixelShader ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER));
-		const char* shaderSources[] = { codeStream.str().c_str() };
+		const char* shaderSources[] = { genCode.c_str() };
 		GLCHK(glShaderSource(shader, 1, shaderSources, nullptr));
 		GLCHK(glCompileShader(shader));
 		GLint compileSuccessful = GL_FALSE;
@@ -1295,7 +1288,7 @@ int main()
 			break;
 
 		double newTime = GetTime();
-		float delta = newTime - curTime;
+		float delta = float(newTime - curTime);
 		curTime = newTime;
 		if (delta > 1.0f/30.0f)
 			delta = 1.0f/30.0f;

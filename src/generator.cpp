@@ -3,6 +3,9 @@
 #include "compiler.hpp"
 
 
+using namespace HOC;
+
+
 struct SLGenerator
 {
 	SLGenerator(const AST& a, OutStream& o, OutputShaderFormat osf) : ast(a), out(o), shaderFormat(osf) {}
@@ -1073,26 +1076,26 @@ void GLSLGenerator::Generate()
 }
 
 
-void GenerateHLSL_SM3(const AST& ast, OutStream& out)
+void HOC::GenerateHLSL_SM3(const AST& ast, OutStream& out)
 {
 	HLSLGenerator gen(ast, out);
 	gen.Generate();
 }
 
-void GenerateHLSL_SM4(const AST& ast, OutStream& out)
+void HOC::GenerateHLSL_SM4(const AST& ast, OutStream& out)
 {
 	HLSLGenerator gen(ast, out);
 	gen.shaderFormat = OSF_HLSL_SM4;
 	gen.Generate();
 }
 
-void GenerateGLSL_140(const AST& ast, OutStream& out)
+void HOC::GenerateGLSL_140(const AST& ast, OutStream& out)
 {
 	GLSLGenerator gen(ast, out);
 	gen.Generate();
 }
 
-void GenerateGLSL_ES_100(const AST& ast, OutStream& out)
+void HOC::GenerateGLSL_ES_100(const AST& ast, OutStream& out)
 {
 	GLSLGenerator gen(ast, out);
 	gen.shaderFormat = OSF_GLSL_ES_100;

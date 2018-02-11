@@ -4,6 +4,9 @@
 #include "common.hpp"
 
 
+namespace HOC {
+
+
 struct ASTStructType;
 struct ASTNode;
 struct ASTFunction;
@@ -997,49 +1000,6 @@ struct VariableAccessValidator
 	int endOfOutputElements = 0;
 };
 
-enum OutputShaderFormat
-{
-	OSF_HLSL_SM3,
-	OSF_HLSL_SM4,
-	OSF_GLSL_140,
-	OSF_GLSL_ES_100,
-};
-
-struct Compiler
-{
-	~Compiler();
-	bool CompileFile(const char* name, const char* code);
-	void _IterateVariables(
-		const AST& ast,
-		ShaderVariable* outVars,
-		char* outStrBuf,
-		size_t measureBufSizes[2]);
-
-	const char* entryPoint = "main";
-	ShaderStage stage = ShaderStage_Vertex;
-	OutputShaderFormat outputFmt = OSF_HLSL_SM3;
-
-	// preprocessor
-	ShaderMacro* defines = nullptr;
-	LoadIncludeFilePFN loadIncludeFilePFN = nullptr;
-	void* loadIncludeFileUD = nullptr;
-
-	// I/O
-	OutStream* errorOutputStream = nullptr; // set to &FILEStream(stderr) to write to output
-	OutStream* codeOutputStream  = nullptr; // set to &FILEStream(stdout) to write to output
-	OutStream* ASTDumpStream     = nullptr;
-
-	// interface output
-	ShaderVariable* outVarBuf = nullptr;
-	size_t outVarBufSize = 0;     // changed to output data size after compilation
-	char* outVarStrBuf = nullptr; // string buffer for names/semantics in ShaderVariable array
-	size_t outVarStrBufSize = 0;  // changed to output data size after compilation
-	bool outVarGenerate = false;
-	bool outVarOverflowAlloc = true;
-	bool outVarDidOverflowVar = false;
-	bool outVarDidOverflowStr = false;
-};
-
 
 // optimizer.cpp
 struct ConstantPropagation : ASTWalker<ConstantPropagation>
@@ -1071,4 +1031,7 @@ void GenerateHLSL_SM3(const AST& ast, OutStream& out);
 void GenerateHLSL_SM4(const AST& ast, OutStream& out);
 void GenerateGLSL_140(const AST& ast, OutStream& out);
 void GenerateGLSL_ES_100(const AST& ast, OutStream& out);
+
+
+} /* namespace HOC */
 

@@ -25,6 +25,9 @@
 #include <unordered_map>
 
 
+using namespace HOC;
+
+
 const char* outfile = "tests-output.log";
 const char* outfile_errors = "tests-errors.log";
 
@@ -353,28 +356,32 @@ static void exec_test(const char* fname, const char* nameonly)
 				size_t memLen = lastSource.size() + 1;
 				char* bc = new char[memLen];
 				memcpy(bc, lastSource.c_str(), memLen);
-				StringStream ssErrors, ssCode, ssByprod;
+				String strErrors, strCode, strByprod;
 				double tm1 = GetTime();
-				Compiler C;
-				C.loadIncludeFilePFN = LoadIncludeFileTest;
-				C.loadIncludeFileUD = &includes;
-				C.errorOutputStream = &ssErrors;
-				C.codeOutputStream = &ssCode;
-				C.ASTDumpStream = &ssByprod;
-				C.outputFmt = outputFmt;
-				C.stage = stage;
+				HOC_InterfaceOutput ifo;
+				HOC_Config cfg;
+				HOC_TextOutput toErrors = { &HOC_WriteStr_String<String>, &strErrors };
+				HOC_TextOutput toCode   = { &HOC_WriteStr_String<String>, &strCode   };
+				HOC_TextOutput toByprod = { &HOC_WriteStr_String<String>, &strByprod };
+				cfg.loadIncludeFileFunc     = LoadIncludeFileTest;
+				cfg.loadIncludeFileUserData = &includes;
+				cfg.errorOutputStream = &toErrors;
+				cfg.codeOutputStream  = &toCode;
+				cfg.ASTDumpStream     = &toByprod;
+				cfg.outputFmt = outputFmt;
+				cfg.stage     = stage;
 				if (nextBuildVarRequest)
 				{
-					C.outVarGenerate = nextBuildVarRequest;
-					C.outVarBuf = shaderVarBuf;
-					C.outVarBufSize = nextBuildVarBufSize;
-					C.outVarStrBuf = shaderVarStrBuf;
-					C.outVarStrBufSize = nextBuildVarStrBufSize;
+					ifo.outVarBuf        = shaderVarBuf;
+					ifo.outVarBufSize    = nextBuildVarBufSize;
+					ifo.outVarStrBuf     = shaderVarStrBuf;
+					ifo.outVarStrBufSize = nextBuildVarStrBufSize;
+					cfg.interfaceOutput  = &ifo;
 				}
-				lastExec = C.CompileFile("<memory>", bc);
-				lastShader = ssCode.str();
-				lastErrors = ssErrors.str();
-				lastByprod = ssByprod.str();
+				lastExec = HOC_CompileShader("<memory>", bc, &cfg);
+				lastShader = strCode;
+				lastErrors = strErrors;
+				lastByprod = strByprod;
 				if (nextBuildVarRequest)
 				{
 					nextBuildVarRequest = false;
@@ -382,9 +389,9 @@ static void exec_test(const char* fname, const char* nameonly)
 					lastVarDump.strbuf = "\n";
 					if (lastExec)
 					{
-						for (size_t i = 0; i < C.outVarBufSize; ++i)
+						for (size_t i = 0; i < ifo.outVarBufSize; ++i)
 						{
-							const ShaderVariable& sv = C.outVarBuf[i];
+							const ShaderVariable& sv = ifo.outVarBuf[i];
 							lastVarDump << ShaderVarTypeToString((ShaderVarType)sv.svType);
 							lastVarDump << " ";
 							lastVarDump << ShaderDataTypeToString((ShaderDataType)sv.dataType);
@@ -400,10 +407,10 @@ static void exec_test(const char* fname, const char* nameonly)
 							{
 								lastVarDump << "[" << sv.arraySize << "]";
 							}
-							lastVarDump << " " << &C.outVarStrBuf[sv.name];
+							lastVarDump << " " << &ifo.outVarStrBuf[sv.name];
 							if (sv.svType == SVT_VSInput)
 							{
-								lastVarDump << " :" << &C.outVarStrBuf[sv.semantic];
+								lastVarDump << " :" << &ifo.outVarStrBuf[sv.semantic];
 							}
 							else if (sv.svType == SVT_Uniform)
 							{
@@ -419,6 +426,7 @@ static void exec_test(const char* fname, const char* nameonly)
 							lastVarDump << "\n";
 						}
 					}
+					HOC_FreeInterfaceOutputBuffers(&ifo);
 				}
 				double tm2 = GetTime();
 				fprintf(fp, "\ncompile time: %f seconds | %s\n",

@@ -1,5 +1,6 @@
 
 BASEOBJNAMES := hlslparser compiler optimizer common generator
+HEADERS := src/hlslparser.hpp src/common.hpp src/compiler.hpp src/hlsloptconv.h
 OBJS := $(patsubst %,obj/%.obj,$(BASEOBJNAMES))
 
 .PHONY: tools test html5test
@@ -29,10 +30,10 @@ four.exe: $(OBJS) obj/four.obj
 hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
 
-obj/%.obj: src/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
+obj/%.obj: src/%.cpp $(HEADERS) | obj
 	cl /nologo /W3 /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
 
-obj/%.obj: src/tools/%.cpp src/hlslparser.hpp src/common.hpp src/compiler.hpp | obj
+obj/%.obj: src/tools/%.cpp $(HEADERS) | obj
 	cl /nologo /W3 /Fo$@ /MDd /EHsc /D_DEBUG /Zi /c $<
 
 obj:

@@ -6,6 +6,9 @@
 #include <unordered_map>
 
 
+namespace HOC {
+
+
 struct PreprocMacro
 {
 	std::vector<String> args;
@@ -35,11 +38,12 @@ struct Parser
 			reinterpret_cast<char*>(i01),
 			reinterpret_cast<char*>(i01 + 2));
 	}
-	bool ParseCode(const char* text);
+	bool ParseCode(const char* text, const char** featureDefs);
 	bool ParseTokens(const char* text, uint32_t source);
 	bool PreprocessTokens(uint32_t source);
 
 	SLToken RequestIntBoolToken(bool v);
+	PreprocMacro RequestIntBoolMacro(bool v);
 	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
 
 	ASTType* ParseType(bool isFuncRet = false);
@@ -187,4 +191,6 @@ struct Parser
 	AST ast;
 };
 
+
+} /* namespace HOC */
 

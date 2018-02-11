@@ -4,6 +4,21 @@
 #include <assert.h>
 #include <vector>
 
+#define HOC_INTERNAL
+#include "hlsloptconv.h"
+
+
+namespace HOC {
+
+
+using ShaderStage = HOC_ShaderStage;
+using OutputShaderFormat = HOC_OutputShaderFormat;
+using ShaderVarType = HOC_ShaderVarType;
+using ShaderDataType = HOC_ShaderDataType;
+using ShaderVariable = HOC_ShaderVariable;
+using ShaderMacro = HOC_ShaderMacro;
+using LoadIncludeFilePFN = HOC_LoadIncludeFilePFN;
+
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996)
@@ -243,10 +258,13 @@ inline String StdToString(size_t val)
 	sprintf(bfr, "%zu", val);
 	return bfr;
 }
+
+
+} /* namespace HOC */
 template<>
-struct std::hash<String>
+struct std::hash<HOC::String>
 {
-	FINLINE size_t operator () (const String& s) const
+	FINLINE size_t operator () (const HOC::String& s) const
 	{
 		uint32_t hash = 2166136261U;
 		for (size_t i = 0; i < s.size(); ++i)
@@ -257,6 +275,7 @@ struct std::hash<String>
 		return hash;
 	}
 };
+namespace HOC {
 
 
 struct Twine
@@ -359,7 +378,16 @@ struct FILEStream : OutStream
 	void Write(const char* str, size_t size) override;
 	void Flush() override { fflush(file); }
 
-	FILE* file = nullptr;
+	FILE* file;
+};
+
+struct CallbackStream : OutStream
+{
+	CallbackStream(HOC_TextOutput* to) : textOut(to){}
+	void Write(const char* str, size_t size) override;
+	void Flush() override {}
+
+	HOC_TextOutput* textOut;
 };
 
 
@@ -423,74 +451,8 @@ struct Diagnostic
 // retrieve = (value >> n*4) & 0xf
 #define MATRIX_SWIZZLE(x, y, z, w) (((x)&0xf) | (((y)&0xf)<<4) | (((z)&0xf)<<8) | (((w)&0xf)<<12))
 
-uint8_t InvertVecSwizzleMask(uint8_t mask, int ncomp);
-bool IsValidVecSwizzleWriteMask(uint8_t mask, int ncomp);
-bool IsValidMtxSwizzleWriteMask(uint16_t mask, int ncomp);
 bool IsValidSwizzleWriteMask(uint32_t mask, bool matrix, int ncomp);
 
 
-enum ShaderStage
-{
-	ShaderStage_Vertex,
-	ShaderStage_Pixel,
-};
-
-struct ShaderMacro
-{
-	const char* name;
-	const char* value;
-};
-
-enum ShaderVarType
-{
-	SVT_StructBegin       = 1, /* nested structs are possible */
-	SVT_StructEnd         = 2,
-	SVT_Uniform           = 3, /* only numeric SDT_* types, if inside block - register quad=/4, comp=%4 */
-	SVT_UniformBlockBegin = 4, /* there cannot be any nesting */
-	SVT_UniformBlockEnd   = 5,
-	SVT_VSInput           = 6, /* only numeric SDT_* types */
-	SVT_Sampler           = 7, /* only SDT_Sampler* types */
-	SVT_PSOutputDepth     = 8, /* only scalar types */
-	SVT_PSOutputColor     = 9, /* only vector types */
-};
-
-enum ShaderDataType
-{
-	SDT_None    = 0,
-	SDT_Bool    = 1,
-	SDT_Int32   = 2,
-	SDT_UInt32  = 3,
-	SDT_Float16 = 4,
-	SDT_Float32 = 5,
-
-	SDT_Sampler1D       = 20,
-	SDT_Sampler2D       = 21,
-	SDT_Sampler3D       = 22,
-	SDT_SamplerCube     = 23,
-	SDT_Sampler1DComp   = 24,
-	SDT_Sampler2DComp   = 25,
-	SDT_SamplerCubeComp = 26,
-};
-
-struct ShaderVariable   /* 20 bytes */
-{
-	uint32_t name;      /* offset from beginning of string buffer */
-	uint32_t semantic;  /* offset from beginning of string buffer; only for VS input */
-	/*       ^ for uniforms @ HLSL3/D3D9 - the assigned shader slot or 0xffffffff if none is assigned */
-	int32_t  regSemIdx; /* register number/semantic index, -1 when not determined by the shader */
-	uint32_t arraySize; /* 0 if no array */
-	uint8_t  svType;    /* ShaderVarType */
-	uint8_t  dataType;  /* ShaderDataType */
-	uint8_t  sizeX;     /* 0 if scalar, 1-4 for vector/matrix */
-	uint8_t  sizeY;     /* 0 if scalar/vector, 1-4 for matrix */
-};
-
-
-// API
-// loads include file
-// - file is the exact string in #include
-//   requester is the exact string used to load file that contains #include
-// - called with file=NULL to free memory pointed to by *outbuf
-// - return nonzero for success, zero for failure
-typedef int(*LoadIncludeFilePFN)(const char* file, const char* requester, char** outbuf, void* userdata);
+} /* namespace HOC */
 
