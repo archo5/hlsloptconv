@@ -237,6 +237,7 @@ char shaderVarStrBuf[1024];
 size_t nextBuildVarBufSize = 0;
 size_t nextBuildVarStrBufSize = 0;
 bool nextBuildVarRequest = false;
+bool nextSlotAssignRequest = false;
 
 static void exec_test(const char* fname, const char* nameonly)
 {
@@ -377,6 +378,11 @@ static void exec_test(const char* fname, const char* nameonly)
 					ifo.outVarStrBuf     = shaderVarStrBuf;
 					ifo.outVarStrBufSize = nextBuildVarStrBufSize;
 					cfg.interfaceOutput  = &ifo;
+				}
+				if (nextSlotAssignRequest)
+				{
+					cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
+					nextSlotAssignRequest = false;
 				}
 				lastExec = HOC_CompileShader("<memory>", bc, &cfg);
 				lastShader = strCode;
@@ -684,6 +690,10 @@ static void exec_test(const char* fname, const char* nameonly)
 					vsbs = 1024;
 				nextBuildVarBufSize = vbs;
 				nextBuildVarStrBufSize = vsbs;
+			}
+			else if (ident == "request_lock_uniform_pos")
+			{
+				nextSlotAssignRequest = true;
 			}
 			else if (ident == "verify_vars")
 			{

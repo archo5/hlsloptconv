@@ -149,6 +149,7 @@ struct HOC_InterfaceOutput
 
 #define HOC_OF_GLSL_RENAME_PSOUT 0x0001 /* rename PS outputs to PSCOLOR# for easier binding */
 #define HOC_OF_GLSL_RENAME_CBUFS 0x0002 /* rename constant buffers to CBUF# for easier binding */
+#define HOC_OF_LOCK_UNIFORM_POS  0x0004 /* pick and export the registers of unassigned uniforms */
 
 struct HOC_Config
 {

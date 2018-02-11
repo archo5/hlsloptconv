@@ -247,6 +247,7 @@ namespace D3D9
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_HLSL_SM3;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -393,6 +394,7 @@ namespace D3D11
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_HLSL_SM4;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -749,6 +751,7 @@ namespace GL20
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_GLSL_ES_100;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		// cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS; -- no use without uniform buffers/layout(location)
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -1027,6 +1030,7 @@ namespace GL31
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_GLSL_140;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
+		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{

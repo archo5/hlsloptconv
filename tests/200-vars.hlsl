@@ -481,6 +481,39 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `multiple cbuffers with locked registers`
+source `
+cbuffer mybuf
+{
+	float4 outval;
+	float4 outval2;
+	float4 outval3;
+}
+cbuffer mybuf2
+{
+	float4 ou2val[2];
+	float4 ou2val2[3];
+	float4 ou2val3[5];
+}
+float4 main() : POSITION { return outval + outval2 + outval3
+	+ ou2val[0] + ou2val2[2] + ou2val3[1]; }`
+request_vars ``
+request_lock_uniform_pos ``
+compile_hlsl_before_after ``
+verify_vars `
+UniformBlockBegin None mybuf
+Uniform Float32x4 outval #0
+Uniform Float32x4 outval2 #4
+Uniform Float32x4 outval3 #8
+UniformBlockEnd None mybuf
+UniformBlockBegin None mybuf2
+Uniform Float32x4[2] ou2val #0
+Uniform Float32x4[3] ou2val2 #8
+Uniform Float32x4[5] ou2val3 #20
+UniformBlockEnd None mybuf2
+`
+compile_hlsl4 ``
+
 // `cbuffer containing array of structs`
 source `
 struct STR

@@ -122,6 +122,9 @@ void ASTType::GetMangling(String& out) const
 	case Sampler2D:   out += "s2"; break;
 	case Sampler3D:   out += "s3"; break;
 	case SamplerCube: out += "sc"; break;
+	case Sampler1DCmp:   out += "sC1"; break;
+	case Sampler2DCmp:   out += "sC2"; break;
+	case SamplerCubeCmp: out += "sCc"; break;
 	default: out += "<ERROR>"; break;
 	}
 }
@@ -158,6 +161,9 @@ void ASTType::Dump(OutStream& out) const
 	case Sampler2D:   out << "sampler2D"; break;
 	case Sampler3D:   out << "sampler3D"; break;
 	case SamplerCube: out << "samplerCUBE"; break;
+	case Sampler1DCmp:   out << "sampler1Dcmp"; break;
+	case Sampler2DCmp:   out << "sampler2Dcmp"; break;
+	case SamplerCubeCmp: out << "samplerCUBEcmp"; break;
 	}
 }
 
@@ -180,6 +186,9 @@ String ASTType::GetName() const
 	case Sampler2D:   return "sampler2D";
 	case Sampler3D:   return "sampler3D";
 	case SamplerCube: return "samplerCUBE";
+	case Sampler1DCmp:   return "sampler1Dcmp";
+	case Sampler2DCmp:   return "sampler2Dcmp";
+	case SamplerCubeCmp: return "samplerCUBEcmp";
 	default: return "<ERROR>";
 	}
 }
@@ -2037,6 +2046,9 @@ void VariableAccessValidator::AddMissingOutputAccessPoints(
 	case ASTType::Sampler2D:
 	case ASTType::Sampler3D:
 	case ASTType::SamplerCube:
+	case ASTType::Sampler1DCmp:
+	case ASTType::Sampler2DCmp:
+	case ASTType::SamplerCubeCmp:
 		// ...
 	case ASTType::Bool:
 	case ASTType::Int32:
@@ -2932,6 +2944,9 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, unsigned accessPointNum)
 	case ASTType::Sampler2D:
 	case ASTType::Sampler3D:
 	case ASTType::SamplerCube:
+	case ASTType::Sampler1DCmp:
+	case ASTType::Sampler2DCmp:
+	case ASTType::SamplerCubeCmp:
 		return src;
 	case ASTType::Vector:
 		{
@@ -3765,6 +3780,120 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 };
 
 
+static unsigned GetNumSlots(ASTType* type)
+{
+	switch (type->kind)
+	{
+	case ASTType::Bool:
+	case ASTType::Int32:
+	case ASTType::UInt32:
+	case ASTType::Float16:
+	case ASTType::Float32:
+	case ASTType::Vector:
+		return 1;
+	case ASTType::Matrix:
+		return type->sizeY;
+	case ASTType::Structure:
+		{
+			unsigned numSlots = 0;
+			for (auto& mmb : type->ToStructType()->members)
+				numSlots += GetNumSlots(mmb.type);
+			return numSlots;
+		}
+	case ASTType::Array:
+		return type->elementCount * GetNumSlots(type->subType);
+	default:
+		return 0;
+	}
+}
+
+static void MarkSlots(Array<uint8_t>& slots, unsigned firstSlot, unsigned numSlots)
+{
+	if (slots.size() < firstSlot + numSlots)
+	{
+		slots._reserve_loose(firstSlot + numSlots);
+		slots.resize(firstSlot + numSlots, 0);
+	}
+	for (unsigned i = 0; i < numSlots; ++i)
+		slots[firstSlot + i] = true;
+}
+
+static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNode* uniformCont)
+{
+	// fill occupied slots
+	for (auto* gv = uniformCont->firstChild; gv; gv = gv->next)
+	{
+		if (auto* vd = gv->ToVarDecl())
+		{
+			if (vd->regID >= 0)
+			{
+				unsigned numSlots = GetNumSlots(vd->type);
+				if (!numSlots)
+					continue;
+				unsigned firstSlot = vd->regID;
+				if (cbuf)
+					firstSlot /= 4;
+				MarkSlots(slots, firstSlot, numSlots);
+			}
+		}
+	}
+
+	// look for places to insert unassigned uniforms
+	size_t searchStart = 0;
+	for (auto* gv = uniformCont->firstChild; gv; gv = gv->next)
+	{
+		if (auto* vd = gv->ToVarDecl())
+		{
+			if (vd->regID < 0)
+			{
+				unsigned numSlots = GetNumSlots(vd->type);
+				if (!numSlots)
+					continue;
+
+				// skip packed beginning
+				while (searchStart < slots.size() && slots[searchStart])
+					searchStart++;
+
+				unsigned numUnused = 0;
+				size_t at = searchStart;
+				for ( ; at < slots.size(); ++at)
+				{
+					if (slots[at])
+						numUnused = 0;
+					else
+					{
+						numUnused++;
+						if (numUnused == numSlots)
+						{
+							at += 1 - numSlots;
+							break;
+						}
+					}
+				}
+				if (at == slots.size())
+					at -= numUnused;
+				vd->regID = cbuf ? at * 4 : at;
+				MarkSlots(slots, at, numSlots);
+			}
+		}
+	}
+}
+
+static void SpecifyUniformRegisters(AST& ast)
+{
+	Array<uint8_t> slots;
+	SpecifyUniformBlockRegisters(slots, false, &ast.globalVars);
+	for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+	{
+		if (auto* cbuf = dyn_cast<CBufferDecl>(gv))
+		{
+			slots.clear();
+			SpecifyUniformBlockRegisters(slots, true, cbuf);
+		}
+	}
+}
+
+
 static ShaderDataType ASTTypeKindToShaderDataType(ASTType::Kind k)
 {
 	switch (k)
@@ -4060,6 +4189,16 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 	RemoveUnusedVariables().RunOnAST(p.ast);
 
 	AssignVarDeclNames().VisitAST(p.ast);
+	if (config->outputFlags & HOC_OF_LOCK_UNIFORM_POS)
+	{
+		switch (outputFmt)
+		{
+		case OSF_HLSL_SM3:
+		case OSF_HLSL_SM4:
+			SpecifyUniformRegisters(p.ast);
+			break;
+		}
+	}
 
 	if (config->ASTDumpStream)
 	{
