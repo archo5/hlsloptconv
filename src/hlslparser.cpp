@@ -320,7 +320,8 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 		{
 			const char* slStart = text++;
 			uint32_t dataOff = tokenData.size();
-			tokenData.insert(tokenData.end(), { 0, 0, 0, 0 });
+			int32_t zero = 0;
+			tokenData.append((char*)&zero, sizeof(zero));
 			while (*text)
 			{
 				if (*text == '\"')
@@ -421,10 +422,8 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 
 			tokens.push_back({ STT_Ident, TLOC(idStart), uint32_t(tokenData.size()) });
 			uint32_t length(text - idStart);
-			tokenData.insert(tokenData.end(),
-				reinterpret_cast<char*>(&length),
-				reinterpret_cast<char*>(&length + 1));
-			tokenData.insert(tokenData.end(), idStart, text);
+			tokenData.append((char*)&length, sizeof(length));
+			tokenData.append(idStart, text);
 			tokenData.push_back(0);
 			continue;
 		}
@@ -446,16 +445,12 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 			case 1:
 				valInt32 = (int32_t) outi;
 				tokens.push_back({ STT_Int32Lit, TLOC(numStart), uint32_t(tokenData.size()) });
-				tokenData.insert(tokenData.end(),
-					reinterpret_cast<char*>(&valInt32),
-					reinterpret_cast<char*>(&valInt32 + 1));
+				tokenData.append((char*)&valInt32, sizeof(valInt32));
 				continue;
 			case 2:
 				valFloat64 = outf;
 				tokens.push_back({ STT_Float32Lit, TLOC(numStart), uint32_t(tokenData.size()) });
-				tokenData.insert(tokenData.end(),
-					reinterpret_cast<char*>(&valFloat64),
-					reinterpret_cast<char*>(&valFloat64 + 1));
+				tokenData.append((char*)&valFloat64, sizeof(valFloat64));
 				continue;
 			}
 		}
@@ -496,17 +491,17 @@ struct PPTokenRange
 
 bool Parser::PreprocessTokens(uint32_t source)
 {
-	std::vector<SLToken> ppTokens, replacedTokens, tokensToReplace;
+	Array<SLToken> ppTokens, replacedTokens, tokensToReplace;
 	ppTokens.reserve(tokens.size());
 	int32_t lineOffset = 0;
 
 #define PPOFLAG_ENABLED 0x1
 #define PPOFLAG_HASELSE 0x2
 #define PPOFLAG_HASSUCC 0x4
-	std::vector<uint8_t> ppOutputEnabled;
+	Array<uint8_t> ppOutputEnabled;
 	ppOutputEnabled.reserve(32);
 
-	auto FindTokenReplaceRange = [this](std::vector<SLToken>& arr, size_t& i) -> PPTokenRange
+	auto FindTokenReplaceRange = [this](Array<SLToken>& arr, size_t& i) -> PPTokenRange
 	{
 		if (arr[i].type == STT_Ident)
 		{
@@ -524,7 +519,7 @@ bool Parser::PreprocessTokens(uint32_t source)
 						goto notfound;
 
 					// skip braces
-					std::vector<SLTokenType> braceStack;
+					Array<SLTokenType> braceStack;
 					braceStack.push_back(STT_RParen);
 					while (i < arr.size() && braceStack.empty() == false)
 					{
@@ -571,7 +566,7 @@ bool Parser::PreprocessTokens(uint32_t source)
 notfound:
 		return { macros.end(), nullptr, nullptr };
 	};
-	auto ReplaceTokenRangeTo = [this](std::vector<SLToken>& out, PPTokenRange range) -> bool
+	auto ReplaceTokenRangeTo = [this](Array<SLToken>& out, PPTokenRange range) -> bool
 	{
 		PreprocMacro& M = range.it->second;
 		if (M.isFunc)
@@ -580,9 +575,9 @@ notfound:
 			out.reserve(M.tokens.size());
 
 			// extract argument sub-ranges from range
-			std::vector<PPTokenRange> argRanges;
+			Array<PPTokenRange> argRanges;
 
-			std::vector<SLTokenType> braceStack;
+			Array<SLTokenType> braceStack;
 			SLToken* argTokens = range.begin;
 			for (size_t i = 2; argTokens[i].type != STT_RParen; )
 			{
@@ -633,7 +628,8 @@ notfound:
 					{
 						if (TokenStringDataEquals(M.tokens[tid], M.args[aid].c_str(), M.args[aid].size()))
 						{
-							out.insert(out.end(), argRanges[aid].begin, argRanges[aid].end);
+							auto& range = argRanges[aid];
+							out.append(range.begin, range.end);
 							isArg = true;
 							break;
 						}
@@ -655,7 +651,7 @@ notfound:
 		}
 		else
 		{
-			out.insert(out.end(), M.tokens.begin(), M.tokens.end());
+			out.append(M.tokens.begin(), M.tokens.end());
 		}
 
 		// mark identifiers named same as macro unreplaceable
@@ -958,7 +954,7 @@ notfound:
 					else if (loadIncludeFilePFN(file.c_str(), diag.sourceFiles[source].c_str(), &buf, loadIncludeFileUD) && buf)
 					{
 						// parse, preprocess sub-file
-						std::vector<SLToken> tmpTokens;
+						Array<SLToken> tmpTokens;
 						size_t tmpCurToken = 0;
 
 						std::swap(tmpTokens, tokens);
@@ -974,7 +970,7 @@ notfound:
 						std::swap(tmpCurToken, curToken);
 
 						// integrate generated tokens
-						ppTokens.insert(ppTokens.end(), tmpTokens.begin(), tmpTokens.end());
+						ppTokens.append(tmpTokens.begin(), tmpTokens.end());
 
 						// free name
 						loadIncludeFilePFN(NULL, NULL, &buf, loadIncludeFileUD);
@@ -1030,7 +1026,7 @@ notfound:
 							t.type = STT_Ident;
 					}
 					// commit replacement
-					ppTokens.insert(ppTokens.end(), tokensToReplace.begin(), tokensToReplace.end());
+					ppTokens.append(tokensToReplace.begin(), tokensToReplace.end());
 
 					curToken = endPos - 1;
 				}
@@ -1070,7 +1066,7 @@ PreprocMacro Parser::RequestIntBoolMacro(bool v)
 	return out;
 }
 
-int Parser::EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos)
+int Parser::EvaluateConstantIntExpr(const Array<SLToken>& tokenArr, size_t startPos, size_t endPos)
 {
 	size_t bestSplit;
 	int bestScore;
@@ -2120,7 +2116,7 @@ void Parser::FindFunction(OpExpr* fcall, const String& name, const Location& loc
 		else
 		{
 			ASTType* voidTy = ast.GetVoidType();
-			std::vector<ASTType*> equalArgs;
+			Array<ASTType*> equalArgs;
 			equalArgs.resize(fcall->GetArgCount(), voidTy);
 
 			for (ASTFunction* fn : it->second)
@@ -2186,12 +2182,12 @@ void Parser::FindFunction(OpExpr* fcall, const String& name, const Location& loc
 	}
 }
 
-bool Parser::FindBestSplit(const std::vector<SLToken>& tokenArr, bool preProcSplit,
+bool Parser::FindBestSplit(const Array<SLToken>& tokenArr, bool preProcSplit,
 	size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore)
 {
 	bestSplit = SIZE_MAX;
 	bestScore = 0;
-	std::vector<SLTokenType> braceStack;
+	Array<SLTokenType> braceStack;
 
 	size_t startPos = curPos;
 	while (curPos < endPos
@@ -3436,7 +3432,7 @@ bool Parser::ParseDecl()
 			return false;
 
 		uint32_t totalAPCount = 0;
-		std::vector<AccessPointDecl> members;
+		Array<AccessPointDecl> members;
 		while (TT() != STT_RBrace)
 		{
 			AccessPointDecl member;
@@ -3768,7 +3764,7 @@ static bool TokenIsExprPreceding(SLTokenType tt)
 	}
 }
 
-int Parser::GetSplitScore(const std::vector<SLToken>& tokenArr,
+int Parser::GetSplitScore(const Array<SLToken>& tokenArr,
 	size_t pos, size_t start, bool preProcSplit)
 {
 	// http://en.cppreference.com/w/c/language/operator_precedence

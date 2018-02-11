@@ -134,7 +134,7 @@ int main(int argc, char** argv)
 {
 	ArgParser ap = { argc, argv };
 	HOC_Config cfg;
-	std::vector<ShaderMacro> macros;
+	Array<ShaderMacro> macros;
 	String genCode;
 	const char* inputFileName = nullptr;
 	const char* outputFileName = nullptr;

@@ -3,7 +3,8 @@
 #pragma once
 #define _HAS_EXCEPTIONS 0
 #include <assert.h>
-#include <vector>
+#include <string.h>
+#include <new>
 
 #define HOC_INTERNAL
 #include "hlsloptconv.h"
@@ -99,7 +100,7 @@ struct String
 	}
 	void reserve(size_t nsz)
 	{
-		if (nsz < SMALL_STRING_BUFSZ || nsz < _cap)
+		if (nsz < SMALL_STRING_BUFSZ || nsz <= _cap)
 			return;
 		char* nstr = new char[nsz + 1];
 		memcpy(nstr, _str, _size + 1);
@@ -335,6 +336,108 @@ FINLINE Twine operator + (const Twine& a, const Twine& b)
 }
 
 
+template<class T> struct Array
+{
+	T* _data = nullptr;
+	size_t _size = 0;
+	size_t _cap = 0;
+
+	FINLINE Array(){}
+	FINLINE Array(const Array& o) { append(o.begin(), o.end()); }
+	Array(Array&& o) : _data(o._data), _size(o._size), _cap(o._cap)
+	{
+		o._data = nullptr;
+		o._size = 0;
+		o._cap = 0;
+	}
+	~Array()
+	{
+		clear();
+		if (_data)
+			free(_data);
+	}
+	Array& operator = (const Array& o)
+	{
+		clear();
+		append(o._data, o._data + o._size);
+		return *this;
+	}
+	FINLINE Array& operator = (Array&& o)
+	{
+		clear();
+		_data = o._data;
+		_size = o._size;
+		_cap = o._cap;
+		o._data = nullptr;
+		o._size = 0;
+		o._cap = 0;
+		return *this;
+	}
+
+	FINLINE const T& operator [] (size_t i) const { assert(i < _size); return _data[i]; }
+	FINLINE T& operator [] (size_t i)      { assert(i < _size); return _data[i]; }
+	FINLINE T back() const                 { assert(_size); return _data[_size - 1]; }
+	FINLINE T& back()                      { assert(_size); return _data[_size - 1]; }
+	FINLINE T* data()                      { return _data; }
+	FINLINE const T* data() const          { return _data; }
+	FINLINE size_t size() const            { return _size; }
+	FINLINE bool empty() const             { return !_size; }
+	FINLINE T* begin()                     { return _data; }
+	FINLINE const T* begin() const         { return _data; }
+	FINLINE T* end()                       { return _data + _size; }
+	FINLINE const T* end() const           { return _data + _size; }
+
+	void clear()
+	{
+		for (size_t i = 0; i < _size; ++i)
+			_data[i].~T();
+		_size = 0;
+	}
+	void reserve(size_t nsz)
+	{
+		if (nsz <= _cap)
+			return;
+		T* ndata = (T*) malloc(nsz * sizeof(T));
+		for (size_t i = 0; i < _size; ++i)
+			new (&ndata[i]) T(std::move(_data[i]));
+		_cap = nsz;
+		free(_data);
+		_data = ndata;
+	}
+	FINLINE void _reserve_loose(size_t nsz)
+	{
+		if (nsz > _cap)
+			reserve(_size + nsz);
+	}
+	void resize(size_t nsz, const T& val = T())
+	{
+		while (nsz < _size)
+			_data[--_size].~T();
+		reserve(nsz);
+		while (_size < nsz)
+			new (&_data[_size++]) T(val);
+	}
+	FINLINE void pop_back()
+	{
+		assert(_size);
+		_data[--_size].~T();
+	}
+
+	FINLINE void append(const T* arr, size_t num) { append(arr, arr + num); }
+	void append(const T* arr, const T* arrend)
+	{
+		_reserve_loose(_size + (arrend - arr));
+		while (arr != arrend)
+			new (&_data[_size++]) T(*arr++);
+	}
+	FINLINE void push_back(const T& val)
+	{
+		_reserve_loose(_size + 1);
+		new (&_data[_size++]) T(val);
+	}
+};
+
+
 struct OutStream
 {
 	virtual void Write(const char* str, size_t size) = 0;
@@ -437,7 +540,7 @@ struct Diagnostic
 	void PrintWarning(const Twine& msg, const Location& loc) { PrintMessage("warning", msg, loc); }
 
 	OutStream* errorOutputStream;
-	std::vector<String> sourceFiles;
+	Array<String> sourceFiles;
 	bool hasErrors = false;
 	bool hasFatalErrors = false;
 };

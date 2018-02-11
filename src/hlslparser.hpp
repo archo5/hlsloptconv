@@ -11,8 +11,8 @@ namespace HOC {
 
 struct PreprocMacro
 {
-	std::vector<String> args;
-	std::vector<SLToken> tokens;
+	Array<String> args;
+	Array<SLToken> tokens;
 	bool isFunc = false;
 };
 typedef std::unordered_map<String, PreprocMacro> PreprocMacroMap;
@@ -34,9 +34,7 @@ struct Parser
 		ast.stage = s;
 		// for int bool token
 		int32_t i01[2] = { 0, 1 };
-		tokenData.insert(tokenData.end(),
-			reinterpret_cast<char*>(i01),
-			reinterpret_cast<char*>(i01 + 2));
+		tokenData.append((char*)i01, sizeof(i01));
 	}
 	bool ParseCode(const char* text, const char** featureDefs);
 	bool ParseTokens(const char* text, uint32_t source);
@@ -44,7 +42,7 @@ struct Parser
 
 	SLToken RequestIntBoolToken(bool v);
 	PreprocMacro RequestIntBoolMacro(bool v);
-	int EvaluateConstantIntExpr(const std::vector<SLToken>& tokenArr, size_t startPos, size_t endPos);
+	int EvaluateConstantIntExpr(const Array<SLToken>& tokenArr, size_t startPos, size_t endPos);
 
 	ASTType* ParseType(bool isFuncRet = false);
 	ASTType* FindMemberType(ASTType* t, const String& name, uint32_t& memberID, int& swizzleComp);
@@ -53,7 +51,7 @@ struct Parser
 	bool ParseArgList(ASTNode* out);
 	int32_t CalcOverloadMatchFactor(ASTFunction* func, OpExpr* fcall, ASTType** equalArgs, bool err);
 	void FindFunction(OpExpr* fcall, const String& name, const Location& loc);
-	bool FindBestSplit(const std::vector<SLToken>& tokenArr, bool allowFunctions,
+	bool FindBestSplit(const Array<SLToken>& tokenArr, bool allowFunctions,
 		size_t& curPos, size_t endPos, SLTokenType endTokenType, size_t& bestSplit, int& bestScore);
 	Expr* ParseExpr(SLTokenType endTokenType = STT_Semicolon, size_t endPos = SIZE_MAX);
 	ASTType* Promote(ASTType* a, ASTType* b);
@@ -71,7 +69,7 @@ struct Parser
 	const SLToken& T() const { return tokens[curToken]; }
 	SLTokenType TT() const { return tokens[curToken].type; }
 
-	bool FWD(std::vector<SLToken>& arr, size_t& i)
+	bool FWD(Array<SLToken>& arr, size_t& i)
 	{
 		if (++i >= arr.size())
 		{
@@ -83,7 +81,7 @@ struct Parser
 	}
 	bool FWD() { return FWD(tokens, curToken); }
 
-	bool PPFWD(std::vector<SLToken>& arr, size_t& i)
+	bool PPFWD(Array<SLToken>& arr, size_t& i)
 	{
 		FWD(arr, i);
 		if (arr[i - 1].logicalLine != arr[i].logicalLine)
@@ -135,7 +133,7 @@ struct Parser
 	}
 
 #define SPLITSCORE_RTLASSOC 0x80
-	int GetSplitScore(const std::vector<SLToken>& tokenArr,
+	int GetSplitScore(const Array<SLToken>& tokenArr,
 		size_t pos, size_t start, bool allowFunctions);
 
 	bool TokenStringDataEquals(const SLToken& t, const char* comp, size_t compsz) const;
@@ -175,15 +173,15 @@ struct Parser
 	void* loadIncludeFileUD;
 
 
-	std::vector<String> filenames;
-	std::vector<char> tokenData;
-	std::vector<SLToken> tokens;
+	Array<String> filenames;
+	Array<char> tokenData;
+	Array<SLToken> tokens;
 	PreprocMacroMap macros;
 	size_t curToken = 0;
 	bool isWriteCtx = false; // if current expression is part of a write
 
 	CurFunctionInfo funcInfo;
-	typedef std::vector<ASTFunction*> ASTFuncList;
+	typedef Array<ASTFunction*> ASTFuncList;
 	std::unordered_map<String, ASTFuncList> functions;
 	String entryPointName;
 	int entryPointCount = 0;

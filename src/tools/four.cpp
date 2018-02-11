@@ -1,4 +1,5 @@
 
+#define _HAS_EXCEPTIONS 0
 #include <math.h>
 #define WIN32_LEAN_AND_MEAN
 #define NOSERVICE

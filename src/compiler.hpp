@@ -218,7 +218,7 @@ struct ASTStructType : ASTType
 	void Dump(OutStream& out) const;
 
 	String name;
-	std::vector<AccessPointDecl> members;
+	HOC::Array<AccessPointDecl> members;
 	uint32_t totalAccessPointCount = 0;
 	ASTStructType* prevStructType = nullptr;
 	ASTStructType* nextStructType = nullptr;
@@ -775,7 +775,7 @@ struct ASTFunction : ASTNode
 	String mangledName;
 	ReturnStmt* firstRetStmt = nullptr;
 	ReturnStmt* lastRetStmt = nullptr;
-	std::vector<VarDecl*> tmpVars;
+	Array<VarDecl*> tmpVars;
 	bool used = false;
 };
 
@@ -996,7 +996,7 @@ struct VariableAccessValidator
 
 	Diagnostic& diag;
 	const ASTFunction* curASTFunction = nullptr;
-	std::vector<uint8_t> elementsWritten;
+	Array<uint8_t> elementsWritten;
 	int endOfOutputElements = 0;
 };
 

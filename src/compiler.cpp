@@ -1441,7 +1441,7 @@ struct UsedFuncMarker : ASTVisitor<UsedFuncMarker>
 	}
 
 	ASTFunction* func;
-	std::vector<ASTFunction*> functionsToProcess;
+	Array<ASTFunction*> functionsToProcess;
 };
 
 void AST::MarkUsed(Diagnostic& diag)
@@ -1644,7 +1644,8 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 	}
 	else if (auto* sve = dyn_cast<const SubValExpr>(node))
 	{
-		std::vector<const SubValExpr*> revTrail { sve };
+		Array<const SubValExpr*> revTrail;
+		revTrail.push_back(sve);
 		Expr* exprIt = sve->GetSource();
 		while (auto* ssve = dyn_cast<const SubValExpr>(exprIt))
 		{
@@ -1759,7 +1760,8 @@ void VariableAccessValidator::ProcessWriteExpr(const Expr* node)
 {
 	if (auto* sve = dyn_cast<const SubValExpr>(node))
 	{
-		std::vector<const SubValExpr*> revTrail { sve };
+		Array<const SubValExpr*> revTrail;
+		revTrail.push_back(sve);
 		Expr* exprIt = sve->GetSource();
 		while (auto* ssve = dyn_cast<const SubValExpr>(exprIt))
 		{
@@ -2231,7 +2233,7 @@ struct StructLevel
 static void GLSLAppendShaderIOVar(AST& ast, ASTFunction* F, const Info& info,
 	ASTNode* outILE, ASTNode* inSRC, ASTStructType* topStc)
 {
-	std::vector<StructLevel> mmbIndices;
+	Array<StructLevel> mmbIndices;
 	mmbIndices.push_back({ topStc, 0, outILE });
 	while (mmbIndices.empty() == false)
 	{
