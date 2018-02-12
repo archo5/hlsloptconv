@@ -147,10 +147,11 @@ struct HOC_InterfaceOutput
 	HOC_BoolU8 didOverflowStr;
 };
 
-#define HOC_OF_SPECIFY_REGISTERS 0x0001 /* pick and export the registers of unassigned I/O vars */
-#define HOC_OF_GLSL_RENAME_PSOUT 0x0010 /* rename PS outputs to PSCOLOR# for easier binding */
-#define HOC_OF_GLSL_RENAME_SMPLR 0x0020 /* rename texture samplers to SAMPLER# for easier binding */
-#define HOC_OF_GLSL_RENAME_CBUFS 0x0040 /* rename constant buffers to CBUF# for easier binding */
+#define HOC_OF_SPECIFY_REGISTERS    0x0001 /* pick and export the registers of unassigned I/O vars */
+#define HOC_OF_HLSL3_BUFFER_SLOTS   0x0008 /* interpret buffer registers as slot offsets, apply them */
+#define HOC_OF_GLSL_RENAME_PSOUTPUT 0x0010 /* rename PS outputs to PSCOLOR# for easier binding */
+#define HOC_OF_GLSL_RENAME_SAMPLERS 0x0020 /* rename texture samplers to SAMPLER# for easier binding */
+#define HOC_OF_GLSL_RENAME_CBUFFERS 0x0040 /* rename constant buffers to CBUF# for easier binding */
 
 struct HOC_Config
 {
@@ -161,9 +162,9 @@ struct HOC_Config
 		stage = HOC_(ShaderStage_Vertex);
 		outputFmt = HOC_(OSF_HLSL_SM3);
 		outputFlags =
-			HOC_OF_GLSL_RENAME_PSOUT |
-			HOC_OF_GLSL_RENAME_SMPLR |
-			HOC_OF_GLSL_RENAME_CBUFS;
+			HOC_OF_GLSL_RENAME_PSOUTPUT |
+			HOC_OF_GLSL_RENAME_SAMPLERS |
+			HOC_OF_GLSL_RENAME_CBUFFERS;
 		loadIncludeFileFunc = NULL;
 		loadIncludeFileUserData = NULL;
 		defines = NULL;

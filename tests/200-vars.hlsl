@@ -560,6 +560,37 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `SM3 cbuffer registers as slots`
+source `
+struct STR
+{
+	float4 a;
+	float4 b[2];
+};
+cbuffer mybuf : register(b12)
+{
+	STR base;
+}
+cbuffer mybuf2 : register(b1)
+{
+	STR extra[3];
+}
+float4 main() : POSITION { return base.a + base.b[1] + extra[2].a + extra[1].b[0]; }`
+request_vars ``
+request_specify_registers ``
+request_hlsl_sm3_buffer_slots ``
+compile_hlsl ``
+verify_vars `
+StructBegin None base #12
+  Uniform Float32x4 a #12
+  Uniform Float32x4[2] b #13
+StructEnd None base #12
+StructBegin None[3] extra #1
+  Uniform Float32x4 a #1
+  Uniform Float32x4[2] b #2
+StructEnd None[3] extra #1
+`
+
 // `samplers`
 source `
 sampler1D s1;

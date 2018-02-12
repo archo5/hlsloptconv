@@ -200,6 +200,7 @@ size_t nextBuildVarBufSize = 0;
 size_t nextBuildVarStrBufSize = 0;
 bool nextBuildVarRequest = false;
 bool nextSlotAssignRequest = false;
+bool nextHLSLSM3BufferRegsAreSlots = false;
 
 static void exec_test(const char* fname, const char* nameonly)
 {
@@ -345,6 +346,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				{
 					cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
 					nextSlotAssignRequest = false;
+				}
+				if (nextHLSLSM3BufferRegsAreSlots)
+				{
+					cfg.outputFlags |= HOC_OF_HLSL3_BUFFER_SLOTS;
+					nextHLSLSM3BufferRegsAreSlots = false;
 				}
 				lastExec = HOC_CompileShader("<memory>", bc, &cfg);
 				lastShader = strCode;
@@ -622,6 +628,10 @@ static void exec_test(const char* fname, const char* nameonly)
 			else if (ident == "request_specify_registers")
 			{
 				nextSlotAssignRequest = true;
+			}
+			else if (ident == "request_hlsl_sm3_buffer_slots")
+			{
+				nextHLSLSM3BufferRegsAreSlots = true;
 			}
 			else if (ident == "verify_vars")
 			{

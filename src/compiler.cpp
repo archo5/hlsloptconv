@@ -2204,7 +2204,7 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, const Info& info)
 						}
 						return;
 					}
-					else if (info.outputFlags & HOC_OF_GLSL_RENAME_PSOUT)
+					else if (info.outputFlags & HOC_OF_GLSL_RENAME_PSOUTPUT)
 					{
 						char bfr[32];
 						sprintf(bfr, "PSCOLOR%d", vd->GetSemanticIndex());
@@ -3442,13 +3442,13 @@ static void GLSLConvert(AST& ast, const Info& info)
 
 static void GLSLPostConvert(AST& ast, const Info& info)
 {
-	if (info.outputFlags & (HOC_OF_GLSL_RENAME_SMPLR|HOC_OF_GLSL_RENAME_CBUFS))
+	if (info.outputFlags & (HOC_OF_GLSL_RENAME_SAMPLERS|HOC_OF_GLSL_RENAME_CBUFFERS))
 	{
 		for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 		{
 			if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 			{
-				if (cbuf->bufRegID >= 0 && (info.outputFlags & HOC_OF_GLSL_RENAME_CBUFS))
+				if (cbuf->bufRegID >= 0 && (info.outputFlags & HOC_OF_GLSL_RENAME_CBUFFERS))
 				{
 					char bfr[32];
 					sprintf(bfr, "CBUF%d", int(cbuf->bufRegID));
@@ -3457,7 +3457,7 @@ static void GLSLPostConvert(AST& ast, const Info& info)
 			}
 			else if (auto* vd = g->ToVarDecl())
 			{
-				if ((info.outputFlags & HOC_OF_GLSL_RENAME_SMPLR) &&
+				if ((info.outputFlags & HOC_OF_GLSL_RENAME_SAMPLERS) &&
 					vd->regID >= 0 &&
 					vd->type->IsSampler())
 				{
@@ -3894,7 +3894,7 @@ static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNo
 	}
 }
 
-static void SpecifyGlobalRegisters(AST& ast)
+static void SpecifyGlobalRegisters(AST& ast, const Info& info)
 {
 	Array<uint8_t> slots;
 	SpecifyUniformBlockRegisters(slots, false, &ast.globalVars);
@@ -3908,7 +3908,10 @@ static void SpecifyGlobalRegisters(AST& ast)
 	}
 
 	// uniform blocks
+	if (info.outputFmt != OSF_HLSL_SM3 || !(info.outputFlags & HOC_OF_HLSL3_BUFFER_SLOTS))
 	{
+		// only generate such indices if not in D3D9 buffer slot mode, ..
+		// .. in which case these indices would be invalid
 		// - fill used slots
 		slots.clear();
 		for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
@@ -3966,6 +3969,30 @@ static void SpecifyGlobalRegisters(AST& ast)
 					MarkSlots(slots, vd->regID, 1);
 				}
 			}
+		}
+	}
+}
+
+static void HLSL_SM3_ApplyBufferSlots(AST& ast)
+{
+	for (auto* gv = ast.globalVars.firstChild; gv; )
+	{
+		auto* cbuf = dyn_cast<CBufferDecl>(gv);
+		gv = gv->next;
+		if (cbuf && cbuf->bufRegID >= 0)
+		{
+			for (auto* cbv = cbuf->firstChild; cbv; )
+			{
+				auto* vd = cbv->ToVarDecl();
+				cbv = cbv->next;
+				if (vd->regID >= 0)
+				{
+					vd->regID /= 4;
+					vd->regID += cbuf->bufRegID;
+				}
+				ast.globalVars.AppendChild(vd);
+			}
+			delete cbuf;
 		}
 	}
 }
@@ -4302,7 +4329,14 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 	AssignVarDeclNames().VisitAST(p.ast);
 	if (config->outputFlags & HOC_OF_SPECIFY_REGISTERS)
 	{
-		SpecifyGlobalRegisters(p.ast);
+		SpecifyGlobalRegisters(p.ast, info);
+	}
+	if (config->outputFmt == OSF_HLSL_SM3 && (config->outputFlags & HOC_OF_HLSL3_BUFFER_SLOTS))
+	{
+		// if registers are not guaranteed to be specified, ...
+		// ... some may be undefined and cbuffers cannot be broken up ...
+		// ... however fxc ignores registers inside buffers and reallocates those uniforms
+		HLSL_SM3_ApplyBufferSlots(p.ast);
 	}
 	switch (outputFmt)
 	{

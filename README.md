@@ -31,6 +31,7 @@ The main test suite checks most converted code with `glslangValidator` as well a
 * Array emulation for GLSL ES 1.0
 * Geometry shader support
 * Validation of certain syntax constructs such as register notation
+* Incomplete cbuffer packoffset support
 
 #### Other differences from HLSL 3.0:
 
@@ -57,6 +58,5 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 #### Other planned improvements:
 
-* possibility to predetermine location of uniform/sampler data (~95% done)
 * removal of STL to improve compile times (~80% done)
 * improved optimization capabilities

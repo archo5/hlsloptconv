@@ -86,6 +86,21 @@ static ShaderStage StringToShaderStage(const char* str)
 	exit(1);
 }
 
+static uint32_t FindOutputFlagByName(const char* str)
+{
+	if (!strcmp(str, "specify-registers"))
+		return HOC_OF_SPECIFY_REGISTERS;
+	if (!strcmp(str, "hlsl3-buffer-slots"))
+		return HOC_OF_HLSL3_BUFFER_SLOTS;
+	if (!strcmp(str, "glsl-rename-psoutput"))
+		return HOC_OF_GLSL_RENAME_PSOUTPUT;
+	if (!strcmp(str, "glsl-rename-samplers"))
+		return HOC_OF_GLSL_RENAME_SAMPLERS;
+	if (!strcmp(str, "glsl-rename-cbuffers"))
+		return HOC_OF_GLSL_RENAME_CBUFFERS;
+	return 0;
+}
+
 static void PrintHelp()
 {
 	fprintf(stderr, "-- HLSL Optimizing Converter v0.7 --\n");
@@ -101,6 +116,8 @@ static void PrintHelp()
 	fprintf(stderr, "    -s, --stage       - shader stage (required, see options below)\n");
 	fprintf(stderr, "    -x, --transform   - apply code transformation (see options below)\n");
 	fprintf(stderr, "    -d, --dump        - dump AST before/after modifications\n");
+	fprintf(stderr, "    -f<name>          - enable a build flag\n");
+	fprintf(stderr, "    -fno-<name>       - disable a build flag\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "  supported shader stages: vertex, pixel\n");
 	fprintf(stderr, "\n");
@@ -113,6 +130,17 @@ static void PrintHelp()
 	fprintf(stderr, "  available code transformations:\n");
 	fprintf(stderr, "    - cstr            - convert to a C string\n");
 	fprintf(stderr, "    - jsstr           - convert to a JavaScript string\n");
+	fprintf(stderr, "  available build flags:\n");
+	fprintf(stderr, "    - specify-registers (default: off)\n");
+	fprintf(stderr, "     pick and export the registers of unassigned I/O variables\n");
+	fprintf(stderr, "    - hlsl3-buffer-slots (default: off)\n");
+	fprintf(stderr, "     interpret buffer registers as slot offsets and apply them\n");
+	fprintf(stderr, "    - glsl-rename-psoutput (default: on)\n");
+	fprintf(stderr, "     rename pixel shader outputs to PSCOLOR# for easier binding\n");
+	fprintf(stderr, "    - glsl-rename-samplers (default: on)\n");
+	fprintf(stderr, "     rename texture samplers to SAMPLER# for easier binding\n");
+	fprintf(stderr, "    - glsl-rename-cbuffers (default: on)\n");
+	fprintf(stderr, "     rename constant buffers to CBUF# for easier binding\n");
 }
 
 static void Stringify(String& out, const String& in, bool jsconcat)
@@ -198,6 +226,23 @@ int main(int argc, char** argv)
 		else if (ap.FlagArg(i, "d", "dump"))
 		{
 			cfg.ASTDumpStream = &toStdout;
+		}
+		else if (strncmp(argv[i], STRLIT_SIZE("-f")) == 0)
+		{
+			bool off = strncmp(argv[i], STRLIT_SIZE("-fno-")) == 0;
+			const char* rest = argv[i] + 2;
+			if (off)
+				rest += 3;
+			uint32_t flag = FindOutputFlagByName(rest);
+			if (!flag)
+			{
+				fprintf(stderr, "error: build flag not recognized - '%s'\n", rest);
+				return 1;
+			}
+			if (off)
+				cfg.outputFlags &= ~flag;
+			else
+				cfg.outputFlags |= flag;
 		}
 		else
 		{

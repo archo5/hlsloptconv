@@ -230,6 +230,13 @@ void _WinCheck_Succeeded(BOOL result, const char* code, int line)
 #define WINCHK(x) _WinCheck_Succeeded(x, #x, __LINE__)
 
 
+struct CBufData
+{
+	float resX, resY, pad[2];
+	float viewMtx[16];
+};
+
+
 namespace D3D9
 {
 	HWND                    apiWin = nullptr;
@@ -248,7 +255,7 @@ namespace D3D9
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_HLSL_SM3;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
+		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS | HOC_OF_HLSL3_BUFFER_SLOTS;
 		cfg.interfaceOutput = &ifo;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
@@ -356,13 +363,15 @@ namespace D3D9
 		dev->BeginScene();
 		dev->SetVertexShader(vs);
 		dev->SetPixelShader(ps);
-		float reso[4] = { PART_WIDTH, PART_HEIGHT, 0, 0 };
+		CBufData bufData;
+		bufData.resX = PART_WIDTH;
+		bufData.resY = PART_HEIGHT;
+		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
 	//	float mtx[16] = {
 	//		-0.7991666718346001, 0.22324646365622025, -0.5581161591405507, -6.011094996993548, 0.6011094996993547, 0.2968030507723102, -0.7420076269307755, -7.991666718346001, 0, 0.9284766908852593, 0.3713906763541037, 4, 0, 0, 0, 1
 	//	};
-		dev->SetVertexShaderConstantF(0, reso, 1);
-		dev->SetPixelShaderConstantF(0, mtx, 4);
-		dev->SetPixelShaderConstantF(3, reso, 1);
+		dev->SetVertexShaderConstantF(0, (float*) &bufData, sizeof(bufData) / (sizeof(float) * 4));
+		dev->SetPixelShaderConstantF(0, (float*) &bufData, sizeof(bufData) / (sizeof(float) * 4));
 		dev->SetTexture(0, cmtex);
 		dev->SetFVF(D3DFVF_XYZ);
 		dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, FULLSCREEN_TRIANGLE_VERTICES, sizeof(float) * 3);
@@ -370,13 +379,6 @@ namespace D3D9
 		dev->Present(nullptr, nullptr, nullptr, nullptr);
 	}
 }
-
-
-struct CBufData
-{
-	float resX, resY, pad[2];
-	float viewMtx[16];
-};
 
 
 namespace D3D11

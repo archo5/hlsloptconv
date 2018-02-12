@@ -1,5 +1,5 @@
 
-cbuffer uniformData
+cbuffer uniformData : register(b0)
 {
 	float2 iResolution;
 	float4x4 viewMatrix;
