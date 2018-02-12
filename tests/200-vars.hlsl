@@ -413,28 +413,28 @@ request_vars ``
 compile_hlsl_before_after ``
 verify_vars `
 UniformBlockBegin None mybuf
-Uniform Float32x4 outval
+  Uniform Float32x4 outval
 UniformBlockEnd None mybuf
 `
 request_vars ``
 compile_hlsl4 ``
 verify_vars `
 UniformBlockBegin None mybuf
-Uniform Float32x4 outval
+  Uniform Float32x4 outval
 UniformBlockEnd None mybuf
 `
 request_vars ``
 compile_glsl ``
 verify_vars `
 UniformBlockBegin None mybuf
-Uniform Float32x4 outval
+  Uniform Float32x4 outval
 UniformBlockEnd None mybuf
 `
 request_vars ``
 compile_glsl_es100 ``
 verify_vars `
 UniformBlockBegin None mybuf
-Uniform Float32x4 outval
+  Uniform Float32x4 outval
 UniformBlockEnd None mybuf
 `
 
@@ -450,7 +450,7 @@ request_vars ``
 compile_hlsl4 ``
 verify_vars `
 UniformBlockBegin None mybuf #3
-Uniform Float32x2 outval #14
+  Uniform Float32x2 outval #14
 UniformBlockEnd None mybuf #3
 `
 compile_glsl ``
@@ -471,10 +471,10 @@ request_vars ``
 compile_hlsl_before_after ``
 verify_vars `
 UniformBlockBegin None mybuf
-Uniform Float32x4 outval
+  Uniform Float32x4 outval
 UniformBlockEnd None mybuf
 UniformBlockBegin None mybuf2
-Uniform Float32x4[1] ou2val
+  Uniform Float32x4[1] ou2val
 UniformBlockEnd None mybuf2
 `
 compile_hlsl4 ``
@@ -502,14 +502,14 @@ request_specify_registers ``
 compile_hlsl_before_after ``
 verify_vars `
 UniformBlockBegin None mybuf #0
-Uniform Float32x4 outval #0
-Uniform Float32x4 outval2 #4
-Uniform Float32x4 outval3 #8
+  Uniform Float32x4 outval #0
+  Uniform Float32x4 outval2 #4
+  Uniform Float32x4 outval3 #8
 UniformBlockEnd None mybuf #0
 UniformBlockBegin None mybuf2 #1
-Uniform Float32x4[2] ou2val #0
-Uniform Float32x4[3] ou2val2 #8
-Uniform Float32x4[5] ou2val3 #20
+  Uniform Float32x4[2] ou2val #0
+  Uniform Float32x4[3] ou2val2 #8
+  Uniform Float32x4[5] ou2val3 #20
 UniformBlockEnd None mybuf2 #1
 `
 compile_hlsl4 ``
@@ -531,8 +531,30 @@ request_vars ``
 compile_hlsl_before_after ``
 verify_vars `
 UniformBlockBegin None mybuf
-TODO
+  StructBegin None base
+    Uniform Float32x4 a
+    Uniform Float32x4[2] b
+  StructEnd None base
+  StructBegin None[3] extra
+    Uniform Float32x4 a
+    Uniform Float32x4[2] b
+  StructEnd None[3] extra
 UniformBlockEnd None mybuf
+`
+request_vars ``
+request_specify_registers ``
+compile_hlsl_before_after ``
+verify_vars `
+UniformBlockBegin None mybuf #0
+  StructBegin None base #0
+    Uniform Float32x4 a #0
+    Uniform Float32x4[2] b #4
+  StructEnd None base #0
+  StructBegin None[3] extra #12
+    Uniform Float32x4 a #12
+    Uniform Float32x4[2] b #16
+  StructEnd None[3] extra #12
+UniformBlockEnd None mybuf #0
 `
 compile_hlsl4 ``
 compile_glsl ``

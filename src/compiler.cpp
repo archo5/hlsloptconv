@@ -3998,70 +3998,74 @@ static ShaderDataType ASTTypeKindToShaderDataType(ASTType::Kind k)
 	return SDT_None;
 }
 
-static void IFO_IterateVariables(
-	HOC_Config* config,
-	const AST& ast,
-	ShaderVariable* outVars,
-	char* outStrBuf,
-	size_t measureBufSizes[2])
+struct InterfaceOutputGenerator
 {
-	auto stage = (ShaderStage) config->stage;
-	char* outsbp = outStrBuf;
+	HOC_Config* config;
+	const AST& ast;
+	ShaderVariable* outVars;
+	char* outStrBuf;
+	size_t* measureBufSizes; // 2 element array
 
-	auto AppendVarDecl = [&](const VarDecl* vd)
+	// state
+	char* outsbp;
+
+	void AppendAPDecl(const AccessPointDecl* apd, uint32_t flags, int regID, bool ub)
 	{
+		auto stage = (ShaderStage) config->stage;
 		ShaderVarType svt;
 		int32_t regSemIdx = -1;
-		if ((vd->flags & VarDecl::ATTR_In) && stage == ShaderStage_Vertex)
+		auto* vmTy = apd->type;
+		if (vmTy->kind == ASTType::Array)
+			vmTy = vmTy->subType;
+		if ((flags & VarDecl::ATTR_In) && stage == ShaderStage_Vertex)
 		{
 			svt = SVT_VSInput;
-			regSemIdx = vd->GetSemanticIndex();
+			regSemIdx = apd->GetSemanticIndex();
 		}
-		else if ((vd->flags & VarDecl::ATTR_Out) && stage == ShaderStage_Pixel)
+		else if ((flags & VarDecl::ATTR_Out) && stage == ShaderStage_Pixel)
 		{
-			if (vd->semanticName == "COLOR" || vd->semanticName == "SV_TARGET")
+			if (apd->semanticName == "COLOR" || apd->semanticName == "SV_TARGET")
 			{
 				svt = SVT_PSOutputColor;
-				regSemIdx = vd->GetSemanticIndex();
+				regSemIdx = apd->GetSemanticIndex();
 			}
-			else if (vd->semanticName == "DEPTH" || vd->semanticName == "SV_DEPTH")
+			else if (apd->semanticName == "DEPTH" || apd->semanticName == "SV_DEPTH")
 				svt = SVT_PSOutputDepth;
 			else
 				return;
 		}
-		else if (vd->flags & VarDecl::ATTR_Uniform)
+		else if (flags & VarDecl::ATTR_Uniform)
 		{
-			svt = vd->type->IsSampler() ? SVT_Sampler : SVT_Uniform;
-			regSemIdx = vd->regID;
+			svt = vmTy->kind == ASTType::Structure ? SVT_StructBegin
+				: vmTy->IsSampler() ? SVT_Sampler : SVT_Uniform;
+			regSemIdx = regID;
 		}
 		else
 			return;
 
+		ShaderVariable* curVar = outVars;
 		if (measureBufSizes)
 		{
 			measureBufSizes[0]++;
-			measureBufSizes[1] += vd->name.size() + 1;
+			measureBufSizes[1] += apd->name.size() + 1;
 			if (svt == SVT_VSInput)
-				measureBufSizes[1] += vd->semanticName.size() + 1;
+				measureBufSizes[1] += apd->semanticName.size() + 1;
 		}
 		else
 		{
-			auto* vmTy = vd->type;
-			if (vmTy->kind == ASTType::Array)
-				vmTy = vmTy->subType;
 			auto* valTy = vmTy;
 			if (valTy->kind == ASTType::Vector || valTy->kind == ASTType::Matrix)
 				valTy = valTy->subType;
 
 			outVars->name      = outsbp - outStrBuf;
-			memcpy(outsbp, vd->name.c_str(), vd->name.size() + 1);
-			outsbp += vd->name.size() + 1;
+			memcpy(outsbp, apd->name.c_str(), apd->name.size() + 1);
+			outsbp += apd->name.size() + 1;
 			outVars->semantic  = 0;
 			if (svt == SVT_VSInput)
 			{
 				outVars->semantic = outsbp - outStrBuf;
-				memcpy(outsbp, vd->semanticName.c_str(), vd->semanticName.size() + 1);
-				outsbp += vd->semanticName.size() + 1;
+				memcpy(outsbp, apd->semanticName.c_str(), apd->semanticName.size() + 1);
+				outsbp += apd->semanticName.size() + 1;
 			}
 			else if (svt == SVT_Uniform)
 			{
@@ -4069,76 +4073,105 @@ static void IFO_IterateVariables(
 				outVars->semantic = 0xffffffff;
 			}
 			outVars->regSemIdx = regSemIdx;
-			outVars->arraySize = vd->type->kind == ASTType::Array ? vd->type->elementCount : 0;
+			outVars->arraySize = apd->type->kind == ASTType::Array ? apd->type->elementCount : 0;
 			outVars->svType    = svt;
 			outVars->dataType  = ASTTypeKindToShaderDataType(valTy->kind);
 			outVars->sizeX     = vmTy != valTy ? vmTy->sizeX : 0;
 			outVars->sizeY     = vmTy != valTy && vmTy->kind == ASTType::Matrix ? vmTy->sizeY : 0;
 			outVars++;
 		}
-	};
 
-	for (const ASTNode* gv = ast.globalVars.firstChild; gv; gv = gv->next)
-	{
-		if (auto* cbuf = dyn_cast<const CBufferDecl>(gv))
+		if (svt == SVT_StructBegin)
 		{
-			// beginning of uniform block
-			uint32_t bufNameOff = outsbp - outStrBuf;
+			auto* strTy = vmTy->ToStructType();
+			for (auto& mmb : strTy->members)
+			{
+				AppendAPDecl(&mmb, flags, regID, ub);
+				if (regID >= 0)
+					regID += GetNumSlots(mmb.type) * (ub ? 4 : 1);
+			}
+
 			if (measureBufSizes)
 			{
 				measureBufSizes[0]++;
-				measureBufSizes[1] += cbuf->name.size() + 1;
 			}
 			else
 			{
-				outVars->name      = bufNameOff;
-				memcpy(outsbp, cbuf->name.c_str(), cbuf->name.size() + 1);
-				outsbp += cbuf->name.size() + 1;
-				outVars->semantic  = 0;
-				outVars->regSemIdx = cbuf->bufRegID;
-				outVars->arraySize = 0;
-				outVars->svType    = SVT_UniformBlockBegin;
-				outVars->dataType  = SDT_None;
-				outVars->sizeX     = 0;
-				outVars->sizeY     = 0;
+				*outVars = *curVar;
+				outVars->svType = SVT_StructEnd;
 				outVars++;
 			}
-
-			for (const ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
-			{
-				AppendVarDecl(dyn_cast<const VarDecl>(cbv));
-			}
-
-			// end of uniform block
-			if (measureBufSizes)
-			{
-				measureBufSizes[0]++;
-				// name reused from beginning
-			}
-			else
-			{
-				outVars->name      = bufNameOff;
-				outVars->semantic  = 0;
-				outVars->regSemIdx = cbuf->bufRegID;
-				outVars->arraySize = 0;
-				outVars->svType    = SVT_UniformBlockEnd;
-				outVars->dataType  = SDT_None;
-				outVars->sizeX     = 0;
-				outVars->sizeY     = 0;
-				outVars++;
-			}
-		}
-		else if (auto* vd = dyn_cast<const VarDecl>(gv))
-		{
-			AppendVarDecl(vd);
 		}
 	}
 
-	for (const ASTNode* arg = ast.entryPoint->GetFirstArg(); arg; arg = arg->next)
+	void IterateVariables()
 	{
-		AppendVarDecl(dyn_cast<const VarDecl>(arg));
+		outsbp = outStrBuf;
+
+		for (const ASTNode* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+		{
+			if (auto* cbuf = dyn_cast<const CBufferDecl>(gv))
+			{
+				// beginning of uniform block
+				uint32_t bufNameOff = outsbp - outStrBuf;
+				if (measureBufSizes)
+				{
+					measureBufSizes[0]++;
+					measureBufSizes[1] += cbuf->name.size() + 1;
+				}
+				else
+				{
+					outVars->name      = bufNameOff;
+					memcpy(outsbp, cbuf->name.c_str(), cbuf->name.size() + 1);
+					outsbp += cbuf->name.size() + 1;
+					outVars->semantic  = 0;
+					outVars->regSemIdx = cbuf->bufRegID;
+					outVars->arraySize = 0;
+					outVars->svType    = SVT_UniformBlockBegin;
+					outVars->dataType  = SDT_None;
+					outVars->sizeX     = 0;
+					outVars->sizeY     = 0;
+					outVars++;
+				}
+
+				for (const ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
+				{
+					if (auto* vd = dyn_cast<const VarDecl>(cbv))
+						AppendAPDecl(vd, vd->flags, vd->regID, true);
+				}
+
+				// end of uniform block
+				if (measureBufSizes)
+				{
+					measureBufSizes[0]++;
+					// name reused from beginning
+				}
+				else
+				{
+					outVars->name      = bufNameOff;
+					outVars->semantic  = 0;
+					outVars->regSemIdx = cbuf->bufRegID;
+					outVars->arraySize = 0;
+					outVars->svType    = SVT_UniformBlockEnd;
+					outVars->dataType  = SDT_None;
+					outVars->sizeX     = 0;
+					outVars->sizeY     = 0;
+					outVars++;
+				}
+			}
+			else if (auto* vd = dyn_cast<const VarDecl>(gv))
+			{
+				AppendAPDecl(vd, vd->flags, vd->regID, false);
+			}
+		}
+
+		for (const ASTNode* arg = ast.entryPoint->GetFirstArg(); arg; arg = arg->next)
+		{
+			if (auto* vd = dyn_cast<const VarDecl>(arg))
+				AppendAPDecl(vd, vd->flags, vd->regID, false);
+		}
 	}
-}
+};
 
 
 
@@ -4306,7 +4339,8 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 	{
 		size_t bufSizes[2] = { 0, 0 };
 
-		IFO_IterateVariables(config, p.ast, nullptr, nullptr, bufSizes);
+		InterfaceOutputGenerator ifog1 = { config, p.ast, nullptr, nullptr, bufSizes };
+		ifog1.IterateVariables();
 
 		if (bufSizes[0] > ifo->outVarBufSize)
 			ifo->didOverflowVar = true;
@@ -4330,7 +4364,8 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 				ifo->outVarStrBufSize = bufSizes[1];
 		}
 
-		IFO_IterateVariables(config, p.ast, ifo->outVarBuf, ifo->outVarStrBuf, nullptr);
+		InterfaceOutputGenerator ifog2 = { config, p.ast, ifo->outVarBuf, ifo->outVarStrBuf, nullptr };
+		ifog2.IterateVariables();
 	}
 
 	return true;
@@ -4394,9 +4429,18 @@ const char* HOC_ShaderDataTypeToString(int dataType)
 void HOC_DumpShaderInterfaceOutput(HOC_InterfaceOutput* ifo, HOC_TextOutput* to)
 {
 	CallbackStream out(to);
+	int level = 0;
 	for (size_t i = 0; i < ifo->outVarBufSize; ++i)
 	{
 		const ShaderVariable& sv = ifo->outVarBuf[i];
+
+		if (sv.svType == SVT_StructEnd || sv.svType == SVT_UniformBlockEnd)
+			level--;
+		for (int l = 0; l < level; ++l)
+			out << "  ";
+		if (sv.svType == SVT_StructBegin || sv.svType == SVT_UniformBlockBegin)
+			level++;
+
 		out << HOC_ShaderVarTypeToString(sv.svType);
 		out << " ";
 		out << HOC_ShaderDataTypeToString(sv.dataType);
