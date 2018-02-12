@@ -147,9 +147,10 @@ struct HOC_InterfaceOutput
 	HOC_BoolU8 didOverflowStr;
 };
 
-#define HOC_OF_GLSL_RENAME_PSOUT 0x0001 /* rename PS outputs to PSCOLOR# for easier binding */
-#define HOC_OF_GLSL_RENAME_CBUFS 0x0002 /* rename constant buffers to CBUF# for easier binding */
-#define HOC_OF_LOCK_UNIFORM_POS  0x0004 /* pick and export the registers of unassigned uniforms */
+#define HOC_OF_SPECIFY_REGISTERS 0x0001 /* pick and export the registers of unassigned I/O vars */
+#define HOC_OF_GLSL_RENAME_PSOUT 0x0010 /* rename PS outputs to PSCOLOR# for easier binding */
+#define HOC_OF_GLSL_RENAME_SMPLR 0x0020 /* rename texture samplers to SAMPLER# for easier binding */
+#define HOC_OF_GLSL_RENAME_CBUFS 0x0040 /* rename constant buffers to CBUF# for easier binding */
 
 struct HOC_Config
 {
@@ -161,6 +162,7 @@ struct HOC_Config
 		outputFmt = HOC_(OSF_HLSL_SM3);
 		outputFlags =
 			HOC_OF_GLSL_RENAME_PSOUT |
+			HOC_OF_GLSL_RENAME_SMPLR |
 			HOC_OF_GLSL_RENAME_CBUFS;
 		loadIncludeFileFunc = NULL;
 		loadIncludeFileUserData = NULL;
@@ -192,4 +194,8 @@ struct HOC_Config
 
 HOC_APIFUNC HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* config);
 HOC_APIFUNC void HOC_FreeInterfaceOutputBuffers(HOC_InterfaceOutput* ifo);
+
+HOC_APIFUNC const char* HOC_ShaderVarTypeToString(int svType);
+HOC_APIFUNC const char* HOC_ShaderDataTypeToString(int dataType);
+HOC_APIFUNC void HOC_DumpShaderInterfaceOutput(HOC_InterfaceOutput* ifo, HOC_TextOutput* to);
 

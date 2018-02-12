@@ -3437,22 +3437,37 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 
 static void GLSLConvert(AST& ast, const Info& info)
 {
-	if (info.outputFlags & HOC_OF_GLSL_RENAME_CBUFS)
+	GLSLConversionPass(ast, info.diag, info.outputFmt).VisitAST(ast);
+}
+
+static void GLSLPostConvert(AST& ast, const Info& info)
+{
+	if (info.outputFlags & (HOC_OF_GLSL_RENAME_SMPLR|HOC_OF_GLSL_RENAME_CBUFS))
 	{
 		for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
 		{
 			if (auto* cbuf = dyn_cast<CBufferDecl>(g))
 			{
-				if (cbuf->bufRegID >= 0)
+				if (cbuf->bufRegID >= 0 && (info.outputFlags & HOC_OF_GLSL_RENAME_CBUFS))
 				{
 					char bfr[32];
 					sprintf(bfr, "CBUF%d", int(cbuf->bufRegID));
 					cbuf->name = bfr;
 				}
 			}
+			else if (auto* vd = g->ToVarDecl())
+			{
+				if ((info.outputFlags & HOC_OF_GLSL_RENAME_SMPLR) &&
+					vd->regID >= 0 &&
+					vd->type->IsSampler())
+				{
+					char bfr[32];
+					sprintf(bfr, "SAMPLER%d", int(vd->regID));
+					vd->name = bfr;
+				}
+			}
 		}
 	}
-	GLSLConversionPass(ast, info.diag, info.outputFmt).VisitAST(ast);
 }
 
 
@@ -3825,7 +3840,7 @@ static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNo
 	{
 		if (auto* vd = gv->ToVarDecl())
 		{
-			if (vd->regID >= 0)
+			if (vd->regID >= 0 && (vd->flags & VarDecl::ATTR_Uniform))
 			{
 				unsigned numSlots = GetNumSlots(vd->type);
 				if (!numSlots)
@@ -3844,7 +3859,7 @@ static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNo
 	{
 		if (auto* vd = gv->ToVarDecl())
 		{
-			if (vd->regID < 0)
+			if (vd->regID < 0 && (vd->flags & VarDecl::ATTR_Uniform))
 			{
 				unsigned numSlots = GetNumSlots(vd->type);
 				if (!numSlots)
@@ -3879,7 +3894,7 @@ static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNo
 	}
 }
 
-static void SpecifyUniformRegisters(AST& ast)
+static void SpecifyGlobalRegisters(AST& ast)
 {
 	Array<uint8_t> slots;
 	SpecifyUniformBlockRegisters(slots, false, &ast.globalVars);
@@ -3889,6 +3904,68 @@ static void SpecifyUniformRegisters(AST& ast)
 		{
 			slots.clear();
 			SpecifyUniformBlockRegisters(slots, true, cbuf);
+		}
+	}
+
+	// uniform blocks
+	{
+		// - fill used slots
+		slots.clear();
+		for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+		{
+			if (auto* cbuf = dyn_cast<CBufferDecl>(gv))
+			{
+				if (cbuf->bufRegID >= 0)
+					MarkSlots(slots, cbuf->bufRegID, 1);
+			}
+		}
+		// - assign unused slots
+		size_t searchStart = 0;
+		for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+		{
+			if (auto* cbuf = dyn_cast<CBufferDecl>(gv))
+			{
+				if (cbuf->bufRegID < 0)
+				{
+					// skip packed beginning
+					while (searchStart < slots.size() && slots[searchStart])
+						searchStart++;
+					cbuf->bufRegID = searchStart++;
+					MarkSlots(slots, cbuf->bufRegID, 1);
+				}
+			}
+		}
+	}
+
+	// samplers
+	{
+		// - fill used slots
+		slots.clear();
+		for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+		{
+			if (auto* vd = gv->ToVarDecl())
+			{
+				if (vd->regID >= 0 && vd->type->IsSampler())
+				{
+					MarkSlots(slots, vd->regID, 1);
+				}
+			}
+		}
+		// - assign unused slots
+		size_t searchStart = 0;
+		for (auto* gv = ast.globalVars.firstChild; gv; gv = gv->next)
+		{
+			if (auto* vd = gv->ToVarDecl())
+			{
+				if (vd->regID < 0 && vd->type->IsSampler())
+				{
+					// skip packed beginning
+					while (searchStart < slots.size() && slots[searchStart])
+						searchStart++;
+					vd->regID = searchStart++;
+					MarkSlots(slots, vd->regID, 1);
+				}
+			}
 		}
 	}
 }
@@ -4188,16 +4265,18 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 	MarkUnusedVariables().RunOnAST(p.ast);
 	RemoveUnusedVariables().RunOnAST(p.ast);
 
+	// fixing up before codegen
 	AssignVarDeclNames().VisitAST(p.ast);
-	if (config->outputFlags & HOC_OF_LOCK_UNIFORM_POS)
+	if (config->outputFlags & HOC_OF_SPECIFY_REGISTERS)
 	{
-		switch (outputFmt)
-		{
-		case OSF_HLSL_SM3:
-		case OSF_HLSL_SM4:
-			SpecifyUniformRegisters(p.ast);
-			break;
-		}
+		SpecifyGlobalRegisters(p.ast);
+	}
+	switch (outputFmt)
+	{
+	case OSF_GLSL_ES_100:
+	case OSF_GLSL_140:
+		GLSLPostConvert(p.ast, info);
+		break;
 	}
 
 	if (config->ASTDumpStream)
@@ -4271,6 +4350,85 @@ void HOC_FreeInterfaceOutputBuffers(HOC_InterfaceOutput* ifo)
 			delete [] ifo->outVarStrBuf;
 			ifo->outVarStrBuf = nullptr;
 		}
+	}
+}
+
+const char* HOC_ShaderVarTypeToString(int svType)
+{
+	switch ((ShaderVarType) svType)
+	{
+	case SVT_StructBegin:       return "StructBegin";
+	case SVT_StructEnd:         return "StructEnd";
+	case SVT_Uniform:           return "Uniform";
+	case SVT_UniformBlockBegin: return "UniformBlockBegin";
+	case SVT_UniformBlockEnd:   return "UniformBlockEnd";
+	case SVT_VSInput:           return "VSInput";
+	case SVT_Sampler:           return "Sampler";
+	case SVT_PSOutputDepth:     return "PSOutputDepth";
+	case SVT_PSOutputColor:     return "PSOutputColor";
+	default:                    return "[UNKNOWN SHADER VAR TYPE]";
+	}
+}
+
+const char* HOC_ShaderDataTypeToString(int dataType)
+{
+	switch ((ShaderDataType) dataType)
+	{
+	case SDT_None:            return "None";
+	case SDT_Bool:            return "Bool";
+	case SDT_Int32:           return "Int32";
+	case SDT_UInt32:          return "UInt32";
+	case SDT_Float16:         return "Float16";
+	case SDT_Float32:         return "Float32";
+	case SDT_Sampler1D:       return "Sampler1D";
+	case SDT_Sampler2D:       return "Sampler2D";
+	case SDT_Sampler3D:       return "Sampler3D";
+	case SDT_SamplerCube:     return "SamplerCube";
+	case SDT_Sampler1DComp:   return "Sampler1DComp";
+	case SDT_Sampler2DComp:   return "Sampler2DComp";
+	case SDT_SamplerCubeComp: return "SamplerCubeComp";
+	default:                  return "[UNKNOWN SHADER DATA TYPE]";
+	}
+}
+
+void HOC_DumpShaderInterfaceOutput(HOC_InterfaceOutput* ifo, HOC_TextOutput* to)
+{
+	CallbackStream out(to);
+	for (size_t i = 0; i < ifo->outVarBufSize; ++i)
+	{
+		const ShaderVariable& sv = ifo->outVarBuf[i];
+		out << HOC_ShaderVarTypeToString(sv.svType);
+		out << " ";
+		out << HOC_ShaderDataTypeToString(sv.dataType);
+		if (sv.sizeX)
+		{
+			out << "x" << int(sv.sizeX);
+			if (sv.sizeY)
+			{
+				out << "x" << int(sv.sizeY);
+			}
+		}
+		if (sv.arraySize)
+		{
+			out << "[" << sv.arraySize << "]";
+		}
+		out << " " << &ifo->outVarStrBuf[sv.name];
+		if (sv.svType == SVT_VSInput)
+		{
+			out << " :" << &ifo->outVarStrBuf[sv.semantic];
+		}
+		else if (sv.svType == SVT_Uniform)
+		{
+			if (sv.semantic != 0xffffffff)
+			{
+				out << " @" << sv.semantic;
+			}
+		}
+		if (sv.regSemIdx >= 0)
+		{
+			out << " #" << sv.regSemIdx;
+		}
+		out << "\n";
 	}
 }
 

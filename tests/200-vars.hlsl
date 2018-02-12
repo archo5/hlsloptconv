@@ -498,19 +498,19 @@ cbuffer mybuf2
 float4 main() : POSITION { return outval + outval2 + outval3
 	+ ou2val[0] + ou2val2[2] + ou2val3[1]; }`
 request_vars ``
-request_lock_uniform_pos ``
+request_specify_registers ``
 compile_hlsl_before_after ``
 verify_vars `
-UniformBlockBegin None mybuf
+UniformBlockBegin None mybuf #0
 Uniform Float32x4 outval #0
 Uniform Float32x4 outval2 #4
 Uniform Float32x4 outval3 #8
-UniformBlockEnd None mybuf
-UniformBlockBegin None mybuf2
+UniformBlockEnd None mybuf #0
+UniformBlockBegin None mybuf2 #1
 Uniform Float32x4[2] ou2val #0
 Uniform Float32x4[3] ou2val2 #8
 Uniform Float32x4[5] ou2val3 #20
-UniformBlockEnd None mybuf2
+UniformBlockEnd None mybuf2 #1
 `
 compile_hlsl4 ``
 

@@ -241,19 +241,29 @@ namespace D3D9
 
 	void CompileShader(bool pixelShader)
 	{
+		HOC_InterfaceOutput ifo;
 		HOC_Config cfg;
 		String genCode;
 		HOC_TextOutput toCode = { &HOC_WriteStr_String<String>, &genCode };
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_HLSL_SM3;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
+		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
+		cfg.interfaceOutput = &ifo;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
 			exit(1);
 		}
+		HOC_TextOutput to = { &HOC_WriteStr_FILE, stdout };
+		HOC_DumpShaderInterfaceOutput(&ifo, &to);
+		char* buf = ifo.outVarStrBuf;
+		for (size_t i = 0; i < ifo.outVarBufSize; ++i)
+		{
+			HOC_ShaderVariable* v = &ifo.outVarBuf[i];
+		}
+		HOC_FreeInterfaceOutputBuffers(&ifo);
 #if USE_D3DXCOMPILESHADER
 		ID3DXBuffer* codeBuf = nullptr;
 		ID3DXBuffer* errBuf = nullptr;
@@ -394,7 +404,7 @@ namespace D3D11
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_HLSL_SM4;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
+		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -641,8 +651,11 @@ typedef void (APIENTRYP PFNGLLINKPROGRAMPROC) (GLuint program);
 typedef void (APIENTRYP PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
 typedef void (APIENTRYP PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC) (GLint location, GLfloat v0, GLfloat v1);
+typedef void (APIENTRYP PFNGLUNIFORM1IPROC) (GLint location, GLint v0);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLVALIDATEPROGRAMPROC) (GLuint program);
+
+typedef void (APIENTRYP PFNGLBINDFRAGDATALOCATIONPROC) (GLuint program, GLuint color, const GLchar *name);
 
 typedef void (APIENTRYP PFNGLBINDVERTEXARRAYPROC) (GLuint array);
 typedef void (APIENTRYP PFNGLDELETEVERTEXARRAYSPROC) (GLsizei n, const GLuint *arrays);
@@ -710,6 +723,7 @@ namespace GL20
 	PFNGLSHADERSOURCEPROC glShaderSource;
 	PFNGLUSEPROGRAMPROC glUseProgram;
 	PFNGLUNIFORM2FPROC glUniform2f;
+	PFNGLUNIFORM1IPROC glUniform1i;
 	PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 	PFNGLVALIDATEPROGRAMPROC glValidateProgram;
 
@@ -739,6 +753,7 @@ namespace GL20
 		*(void**)&glShaderSource = wglGetProcAddress("glShaderSource");
 		*(void**)&glUseProgram = wglGetProcAddress("glUseProgram");
 		*(void**)&glUniform2f = wglGetProcAddress("glUniform2f");
+		*(void**)&glUniform1i = wglGetProcAddress("glUniform1i");
 		*(void**)&glUniformMatrix4fv = wglGetProcAddress("glUniformMatrix4fv");
 		*(void**)&glValidateProgram = wglGetProcAddress("glValidateProgram");
 	}
@@ -751,7 +766,7 @@ namespace GL20
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_GLSL_ES_100;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		// cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS; -- no use without uniform buffers/layout(location)
+		// cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS; -- no use without uniform buffers/layout(location)
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -974,10 +989,14 @@ namespace GL31
 	PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
 	PFNGLGETSHADERIVPROC glGetShaderiv;
 	PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
+	PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
 	PFNGLLINKPROGRAMPROC glLinkProgram;
 	PFNGLSHADERSOURCEPROC glShaderSource;
 	PFNGLUSEPROGRAMPROC glUseProgram;
 	PFNGLVALIDATEPROGRAMPROC glValidateProgram;
+	PFNGLUNIFORM1IPROC glUniform1i;
+
+	PFNGLBINDFRAGDATALOCATIONPROC glBindFragDataLocation;
 
 	PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
 	PFNGLDELETEVERTEXARRAYSPROC glDeleteVertexArrays;
@@ -1008,10 +1027,14 @@ namespace GL31
 		*(void**)&glGetProgramInfoLog = wglGetProcAddress("glGetProgramInfoLog");
 		*(void**)&glGetShaderiv = wglGetProcAddress("glGetShaderiv");
 		*(void**)&glGetShaderInfoLog = wglGetProcAddress("glGetShaderInfoLog");
+		*(void**)&glGetUniformLocation = wglGetProcAddress("glGetUniformLocation");
 		*(void**)&glLinkProgram = wglGetProcAddress("glLinkProgram");
 		*(void**)&glShaderSource = wglGetProcAddress("glShaderSource");
 		*(void**)&glUseProgram = wglGetProcAddress("glUseProgram");
 		*(void**)&glValidateProgram = wglGetProcAddress("glValidateProgram");
+		*(void**)&glUniform1i = wglGetProcAddress("glUniform1i");
+
+		*(void**)&glBindFragDataLocation = wglGetProcAddress("glBindFragDataLocation");
 
 		*(void**)&glBindVertexArray = wglGetProcAddress("glBindVertexArray");
 		*(void**)&glDeleteVertexArrays = wglGetProcAddress("glDeleteVertexArrays");
@@ -1030,7 +1053,7 @@ namespace GL31
 		cfg.codeOutputStream = &toCode;
 		cfg.outputFmt = OSF_GLSL_140;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
-		cfg.outputFlags |= HOC_OF_LOCK_UNIFORM_POS;
+		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
 		String inCode = GetFileContents(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
@@ -1174,9 +1197,34 @@ namespace GL31
 			fprintf(stderr, "GLSL program validation failed:\n%s\n", log.c_str());
 			exit(1);
 		}
-		GLuint ubidx = GLCHK(glGetUniformBlockIndex(prog, "uniformData"));
-		assert(ubidx != GL_INVALID_INDEX);
-		GLCHK(glUniformBlockBinding(prog, ubidx, 0));
+		// auto renaming allows index assignments without data
+		for (int i = 0; i < 8; ++i)
+		{
+			char bfr[32];
+			sprintf(bfr, "CBUF%d", i);
+			GLuint ubidx = GLCHK(glGetUniformBlockIndex(prog, bfr));
+			if (ubidx != GL_INVALID_INDEX)
+			{
+				GLCHK(glUniformBlockBinding(prog, ubidx, i));
+			}
+		}
+		for (int i = 0; i < 8; ++i)
+		{
+			char bfr[32];
+			sprintf(bfr, "PSCOLOR%d", i);
+			GLCHK(glBindFragDataLocation(prog, i, bfr));
+		}
+		glUseProgram(prog);
+		for (int i = 0; i < 16; ++i)
+		{
+			char bfr[32];
+			sprintf(bfr, "SAMPLER%d", i);
+			GLuint sidx = GLCHK(glGetUniformLocation(prog, bfr));
+			if (sidx != GL_INVALID_INDEX)
+			{
+				GLCHK(glUniform1i(sidx, i));
+			}
+		}
 		GLCHK(glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo));
 		printf("[%f] GL3.1: init done\n", GetTime());
 	}
