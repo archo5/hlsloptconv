@@ -264,9 +264,10 @@ bool Parser::ParseCode(const char* text, const char** featureDefs)
 bool Parser::ParseTokens(const char* text, uint32_t source)
 {
 	uint32_t line = 1;
+	uint32_t logLine = 1;
 	const char* lineStart = text;
 #define LOC(tp) { 0, line, uint32_t((tp) - lineStart) + 1 }
-#define TLOC(tp) LOC(tp), line
+#define TLOC(tp) LOC(tp), logLine
 
 	while (*text)
 	{
@@ -277,16 +278,23 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 			continue;
 		}
 		// newline
+		bool isBackslash = *text == '\\';
+		if (isBackslash && text[1])
+			text++;
 		bool isCR = *text == '\r';
 		if (isCR || *text == '\n')
 		{
 			line++;
+			if (!isBackslash)
+				logLine = line;
 			text++;
 			if (isCR && *text == '\n')
 				text++;
 			lineStart = text;
 			continue;
 		}
+		if (isBackslash)
+			text--;
 
 		// comments
 		if (*text == '/' && text[1] == '/')

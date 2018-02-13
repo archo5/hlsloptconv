@@ -275,3 +275,13 @@ source `
 float4 MAIN_FUNC : POSITION { return 0.0; }
 `
 compile_hlsl ``
+
+// `newline escape`
+source `
+#define fun main \
+	() \
+	: \
+	POSITION
+float4 fun { return 0.0; }
+`
+compile_hlsl ``
