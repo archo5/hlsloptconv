@@ -134,6 +134,19 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `piecewise variable init 3 - inout`
+source `void iof(inout float4 wat){}
+float4 main() : POSITION
+{
+	float4 o = 1;
+	iof(o);
+	return o;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
 // `piecewise variable init fail`
 source `float4 main() : POSITION
 {

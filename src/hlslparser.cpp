@@ -304,7 +304,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 				*text++;
 			if (*text)
 			{
-				line++;
+				logLine = ++line;
 				isCR = *text++ == '\r';
 				if (isCR && *text == '\n')
 					text++;
@@ -1088,19 +1088,6 @@ int Parser::EvaluateConstantIntExpr(const Array<SLToken>& tokenArr, size_t start
 
 	if (bestSplit == SIZE_MAX)
 	{
-		if (endPos - startPos >= 2)
-		{
-			int sub = EvaluateConstantIntExpr(tokenArr, startPos + 1, endPos);
-			if (diag.hasFatalErrors)
-				return 0;
-			switch (tokenArr[startPos].type)
-			{
-			case STT_OP_Add: return sub;
-			case STT_OP_Sub: return -sub;
-			case STT_OP_Not: return !sub;
-			case STT_OP_Inv: return ~sub;
-			}
-		}
 		if (endPos - startPos == 1)
 		{
 			if (tokenArr[startPos].type == STT_Int32Lit)
@@ -1113,11 +1100,32 @@ int Parser::EvaluateConstantIntExpr(const Array<SLToken>& tokenArr, size_t start
 				return 0;
 			}
 		}
-		EmitError("unexpected token in #if expression: '" + TokenToString(tokenArr[startPos]) + "'");
+		StringStream tokenSStr;
+		for (size_t p = startPos; p < endPos; ++p)
+		{
+			if (p != startPos)
+				tokenSStr << " ";
+			tokenSStr << TokenToString(tokenArr[p]);
+		}
+		EmitError("unexpected tokens in #if expression: '" + tokenSStr.str() + "'");
 		return 0;
 	}
 	else
 	{
+		if (bestSplit == startPos && endPos - startPos >= 2)
+		{
+			int sub = EvaluateConstantIntExpr(tokenArr, startPos + 1, endPos);
+			if (diag.hasFatalErrors)
+				return 0;
+			switch (tokenArr[startPos].type)
+			{
+			case STT_OP_Add: return sub;
+			case STT_OP_Sub: return -sub;
+			case STT_OP_Not: return !sub;
+			case STT_OP_Inv: return ~sub;
+			}
+		}
+
 		int lft = EvaluateConstantIntExpr(tokenArr, startPos, bestSplit);
 		if (diag.hasFatalErrors)
 			return 0;

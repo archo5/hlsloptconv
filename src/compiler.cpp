@@ -1990,7 +1990,7 @@ void VariableAccessValidator::ValidateSetupFunc(const ASTFunction* fn)
 	for (ASTNode* arg = fn->GetFirstArg(); arg; arg = arg->next)
 	{
 		auto* argvd = arg->ToVarDecl();
-		if (argvd->flags & VarDecl::ATTR_Out)
+		if ((argvd->flags & VarDecl::ATTR_Out) && !(argvd->flags & VarDecl::ATTR_In))
 		{
 			int ap = argvd->GetType()->GetAccessPointCount();
 			argvd->APRangeFrom = numElements;
@@ -2151,6 +2151,7 @@ struct ContentValidator : ASTWalker<ContentValidator>
 
 static void InOutFixSemanticsAndNames(VarDecl* vd, const Info& info)
 {
+	bool in = !!(vd->flags & VarDecl::ATTR_In);
 	bool out = !!(vd->flags & VarDecl::ATTR_Out);
 	switch (info.outputFmt)
 	{
@@ -2167,7 +2168,9 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, const Info& info)
 			vd->semanticName = "SV_DEPTH";
 			return;
 		}
-		if (out && info.stage == ShaderStage_Vertex && vd->semanticName == "POSITION")
+		if (((out && info.stage == ShaderStage_Vertex) ||
+			(in && info.stage == ShaderStage_Pixel))
+			&& vd->semanticName == "POSITION")
 		{
 			vd->semanticName = "SV_POSITION";
 			return;

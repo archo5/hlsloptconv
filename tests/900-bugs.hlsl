@@ -15,9 +15,9 @@ source `
 #line 2 "sys_batchvtx"
 NEEDS_TEXTURE_2D(0);
 void main( float2 itex : TEXCOORD0, float4 icol : COLOR0
-        , out float4 RT0 : COLOR0  )
+	, out float4 RT0 : COLOR0  )
 {
-        RT0 = icol * TEXSAMPLE_2D( Tex0, itex );
+	RT0 = icol * TEXSAMPLE_2D( Tex0, itex );
 }
 `
 compile_hlsl4 `/T ps_4_0`
@@ -32,3 +32,23 @@ NEEDS_TEXTURE_2D(0);
 compile_fail `/T ps_3_0`
 check_err `__eq:1:32: error: unexpected token: #
 `
+
+// `bug 3 - unexpected token in if expression`
+source `
+#if !defined(SHADOW_PASS) || SHADOW_PASS_TO_RT
+#endif
+float4 main() : POSITION { return 0; }
+`
+compile_hlsl ``
+
+// `bug 4 - unexpected tokens in if expression - '0 diffuseCol'`
+source `
+float4 main() : POSITION
+{
+	float3 diffuseCol = 2;
+#if defined(MOD_NODIFFCOL) // -- ignore diffuse color
+	diffuseCol = float3(1,1,1);
+#endif
+	return diffuseCol.xyzz;
+}`
+compile_hlsl ``
