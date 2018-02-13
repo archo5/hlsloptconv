@@ -130,6 +130,8 @@ struct ASTType
 
 	struct SubTypeCount
 	{
+		SubTypeCount(){}
+		SubTypeCount(int num, int oth) : numeric(num), other(oth){}
 		bool IsNumeric() const { return numeric && !other; }
 		SubTypeCount& operator += (const SubTypeCount& o)
 		{

@@ -4,6 +4,7 @@
 #define _HAS_EXCEPTIONS 0
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 #include <new>
 
 #define HOC_INTERNAL
