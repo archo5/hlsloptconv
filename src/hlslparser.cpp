@@ -319,7 +319,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 		if (*text == '\"')
 		{
 			const char* slStart = text++;
-			uint32_t dataOff = tokenData.size();
+			uint32_t dataOff = uint32_t(tokenData.size());
 			int32_t zero = 0;
 			tokenData.append((char*)&zero, sizeof(zero));
 			while (*text)
@@ -344,7 +344,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 				text++;
 			}
 			tokenData.push_back(0);
-			uint32_t realSize = tokenData.size() - dataOff - 4 - 1;
+			uint32_t realSize = uint32_t(tokenData.size() - dataOff - 4 - 1);
 			memcpy(&tokenData[dataOff], &realSize, 4);
 			tokens.push_back({ STT_StrLit, TLOC(slStart), dataOff });
 			continue;
@@ -421,7 +421,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 			}
 
 			tokens.push_back({ STT_Ident, TLOC(idStart), uint32_t(tokenData.size()) });
-			uint32_t length(text - idStart);
+			uint32_t length = uint32_t(text - idStart);
 			tokenData.append((char*)&length, sizeof(length));
 			tokenData.append(idStart, text);
 			tokenData.push_back(0);
@@ -1225,7 +1225,7 @@ ASTType* Parser::FindMemberType(ASTType* t, const String& name, uint32_t& member
 				swizzleMask |= comp << (i * 2);
 			}
 			memberID = swizzleMask;
-			swizzleComp = name.size();
+			swizzleComp = int(name.size());
 			return ast.GetVectorType(vecType->subType, swizzleComp);
 		}
 		EmitError("unknown components in swizzle");
@@ -1283,7 +1283,7 @@ ASTType* Parser::FindMemberType(ASTType* t, const String& name, uint32_t& member
 		{
 			if (sty->members[i].name == name)
 			{
-				memberID = i;
+				memberID = uint32_t(i);
 				swizzleComp = 0;
 				return sty->members[i].type;
 			}

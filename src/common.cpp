@@ -175,7 +175,7 @@ String HOC::GetFileContents(const char* filename, bool text)
 	rewind(fp);
 	if (contents.empty() == false)
 	{
-		int read = fread(&contents[0], 1, contents.size(), fp);
+		size_t read = fread(&contents[0], 1, contents.size(), fp);
 		if (read > 0)
 			contents.resize(read);
 		else
@@ -219,9 +219,9 @@ uint32_t Diagnostic::GetSourceID(const String& src)
 {
 	for (size_t i = 0; i < sourceFiles.size(); ++i)
 		if (sourceFiles[i] == src)
-			return i;
+			return uint32_t(i);
 	sourceFiles.push_back(src);
-	return sourceFiles.size() - 1;
+	return uint32_t(sourceFiles.size() - 1);
 }
 
 void Diagnostic::PrintMessage(const char* type, const Twine& msg, const Location& loc)

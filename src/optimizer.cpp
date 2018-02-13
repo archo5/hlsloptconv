@@ -81,8 +81,8 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 				case STT_OP_Add: out = lv + rv; goto binop_replint;
 				case STT_OP_Sub: out = lv - rv; goto binop_replint;
 				case STT_OP_Mul: out = lv * rv; goto binop_replint;
-				case STT_OP_Div: out = lv / rv; goto binop_replint;
-				case STT_OP_Mod: out = fmodf(lv, rv); goto binop_replint;
+				case STT_OP_Div: out = rv ? lv / rv : 0; goto binop_replint;
+				case STT_OP_Mod: out = rv ? lv % rv : 0; goto binop_replint;
 				default: break;
 				binop_replint:
 					delete node->ReplaceWith(new Int32Expr(out, binop->GetReturnType()));
@@ -101,8 +101,8 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 				case STT_OP_Add: out = lv + rv; goto binop_replfloat;
 				case STT_OP_Sub: out = lv - rv; goto binop_replfloat;
 				case STT_OP_Mul: out = lv * rv; goto binop_replfloat;
-				case STT_OP_Div: out = lv / rv; goto binop_replfloat;
-				case STT_OP_Mod: out = fmodf(lv, rv); goto binop_replfloat;
+				case STT_OP_Div: out = rv ? lv / rv : 0; goto binop_replfloat;
+				case STT_OP_Mod: out = rv ? fmod(lv, rv) : 0; goto binop_replfloat;
 				default: break;
 				binop_replfloat:
 					delete node->ReplaceWith(new Float32Expr(out, binop->GetReturnType()));
@@ -151,7 +151,7 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 					goto cast_replint;
 				case ASTType::Float16:
 				case ASTType::Float32:
-					out = static_cast<const Float32Expr*>(src)->value;
+					out = int32_t(static_cast<const Float32Expr*>(src)->value);
 					goto cast_replint;
 				default: break;
 				cast_replint:

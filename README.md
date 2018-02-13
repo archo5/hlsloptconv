@@ -26,7 +26,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 
 * Parsing support for the following intrinsics: `frexp`, `lit`, `modf`, `noise`, `sincos`, `transpose`
 * Token pasting support in preprocessor
-* GLSL output support for some renamed intrinsics
 * Non-square matrix emulation for GLSL ES 1.0
 * Array emulation for GLSL ES 1.0
 * Geometry shader support

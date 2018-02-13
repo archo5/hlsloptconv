@@ -179,7 +179,7 @@ String ASTType::GetName() const
 	case Float32:     return "float";
 	case Vector:      return subType->GetName() + gVecNumbers[sizeX - 1];
 	case Matrix:      return subType->GetName() + gMtxNumbers[sizeX - 1 + (sizeY - 1) * 4];
-	case Array:       return subType->GetName() + "[" + StdToString(elementCount) + "]";
+	case Array:       return subType->GetName() + "[" + StdToString(size_t(elementCount)) + "]";
 	case Structure:   return "struct(" + static_cast<const ASTStructType*>(this)->name + ")";
 	case Function:    return "function";
 	case Sampler1D:   return "sampler1D";
@@ -2980,7 +2980,7 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, unsigned accessPointNum)
 					auto* mmbexpr = new MemberExpr;
 					mmbexpr->SetSource(src);
 					mmbexpr->SetReturnType(strTy->members[i].type);
-					mmbexpr->memberID = i;
+					mmbexpr->memberID = uint32_t(i);
 					return GetReferenceToElement(ast, mmbexpr, accessPointNum - offset);
 				}
 				offset += apc;
@@ -3822,14 +3822,14 @@ static unsigned GetNumSlots(ASTType* type)
 	}
 }
 
-static void MarkSlots(Array<uint8_t>& slots, unsigned firstSlot, unsigned numSlots)
+static void MarkSlots(Array<uint8_t>& slots, size_t firstSlot, size_t numSlots)
 {
 	if (slots.size() < firstSlot + numSlots)
 	{
 		slots._reserve_loose(firstSlot + numSlots);
 		slots.resize(firstSlot + numSlots, 0);
 	}
-	for (unsigned i = 0; i < numSlots; ++i)
+	for (size_t i = 0; i < numSlots; ++i)
 		slots[firstSlot + i] = true;
 }
 
@@ -3887,7 +3887,7 @@ static void SpecifyUniformBlockRegisters(Array<uint8_t>& slots, bool cbuf, ASTNo
 				}
 				if (at == slots.size())
 					at -= numUnused;
-				vd->regID = cbuf ? at * 4 : at;
+				vd->regID = int32_t(cbuf ? at * 4 : at);
 				MarkSlots(slots, at, numSlots);
 			}
 		}
@@ -3933,7 +3933,7 @@ static void SpecifyGlobalRegisters(AST& ast, const Info& info)
 					// skip packed beginning
 					while (searchStart < slots.size() && slots[searchStart])
 						searchStart++;
-					cbuf->bufRegID = searchStart++;
+					cbuf->bufRegID = int32_t(searchStart++);
 					MarkSlots(slots, cbuf->bufRegID, 1);
 				}
 			}
@@ -3965,7 +3965,7 @@ static void SpecifyGlobalRegisters(AST& ast, const Info& info)
 					// skip packed beginning
 					while (searchStart < slots.size() && slots[searchStart])
 						searchStart++;
-					vd->regID = searchStart++;
+					vd->regID = int32_t(searchStart++);
 					MarkSlots(slots, vd->regID, 1);
 				}
 			}
@@ -4084,13 +4084,13 @@ struct InterfaceOutputGenerator
 			if (valTy->kind == ASTType::Vector || valTy->kind == ASTType::Matrix)
 				valTy = valTy->subType;
 
-			outVars->name      = outsbp - outStrBuf;
+			outVars->name      = uint32_t(outsbp - outStrBuf);
 			memcpy(outsbp, apd->name.c_str(), apd->name.size() + 1);
 			outsbp += apd->name.size() + 1;
 			outVars->semantic  = 0;
 			if (svt == SVT_VSInput)
 			{
-				outVars->semantic = outsbp - outStrBuf;
+				outVars->semantic = uint32_t(outsbp - outStrBuf);
 				memcpy(outsbp, apd->semanticName.c_str(), apd->semanticName.size() + 1);
 				outsbp += apd->semanticName.size() + 1;
 			}
@@ -4140,7 +4140,7 @@ struct InterfaceOutputGenerator
 			if (auto* cbuf = dyn_cast<const CBufferDecl>(gv))
 			{
 				// beginning of uniform block
-				uint32_t bufNameOff = outsbp - outStrBuf;
+				uint32_t bufNameOff = uint32_t(outsbp - outStrBuf);
 				if (measureBufSizes)
 				{
 					measureBufSizes[0]++;

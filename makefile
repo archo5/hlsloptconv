@@ -38,3 +38,6 @@ obj/%.obj: src/tools/%.cpp $(HEADERS) | obj
 
 obj:
 	mkdir obj
+
+clean:
+	del /F/Q sltest.exe hlsloptconv.exe four.exe *.ilk *.pdb obj\*.obj
