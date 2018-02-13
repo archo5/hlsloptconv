@@ -791,9 +791,13 @@ notfound:
 				while (curToken < tokens.size() && T().logicalLine == logicalLine)
 				{
 					macro.tokens.push_back(T());
+					macro.tokens.back().loc.source = source;
+					macro.tokens.back().loc.line += lineOffset;
 					curToken++;
 				}
 
+				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
+					continue;
 				macros.insert({ name, macro });
 				continue;
 			}
@@ -801,6 +805,8 @@ notfound:
 			{
 				if (!PPFWD() || !EXPECT(STT_Ident))
 					return false;
+				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
+					continue;
 				String name = TokenStringData();
 
 				if (macros.erase(name) == 0)
@@ -1020,8 +1026,6 @@ notfound:
 					// clean up
 					for (auto& t : tokensToReplace)
 					{
-						t.loc.source = source;
-						t.loc.line += lineOffset;
 						if (t.type == STT_IdentPPNoReplace)
 							t.type = STT_Ident;
 					}
@@ -3540,6 +3544,10 @@ bool Parser::ParseDecl()
 			if (!EXPECT(STT_Semicolon) || !FWD())
 				return false;
 		}
+		curToken++;
+	}
+	else if (tt == STT_Semicolon)
+	{
 		curToken++;
 	}
 	else if (tt == STT_KW_Const
