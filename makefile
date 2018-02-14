@@ -9,6 +9,8 @@ test: sltest.exe
 	sltest
 test2: sltest.exe
 	sltest -t tests/200-vars.hlsl
+test3: sltest.exe
+	sltest -t tests/300-preproc.hlsl
 test4: sltest.exe
 	sltest -t tests/400-func.hlsl
 test5: sltest.exe

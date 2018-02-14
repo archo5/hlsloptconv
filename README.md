@@ -25,7 +25,6 @@ The main test suite checks most converted code with `glslangValidator` as well a
 #### What is missing (and may or may not appear later)?
 
 * Parsing support for the following intrinsics: `frexp`, `lit`, `modf`, `noise`, `sincos`, `transpose`
-* Token pasting support in preprocessor
 * Non-square matrix emulation for GLSL ES 1.0
 * Array emulation for GLSL ES 1.0
 * Geometry shader support

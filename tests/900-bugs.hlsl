@@ -30,7 +30,7 @@ source `
 NEEDS_TEXTURE_2D(0);
 `
 compile_fail `/T ps_3_0`
-check_err `__eq:1:32: error: unexpected token: #
+check_err `__eq:1:32: error: unexpected token: ##
 `
 
 // `bug 3 - unexpected token in if expression`
@@ -51,4 +51,53 @@ float4 main() : POSITION
 #endif
 	return diffuseCol.xyzz;
 }`
+compile_hlsl ``
+
+// `bug 5 - crash while parsing unknown declref inside intrinsic`
+source `
+float4 main() : POSITION
+{
+	float4 ret = 1;
+	RT0.rgb = lerp(RT0.rgb, 0.5, 0.5);
+	return ret;
+}`
+compile_fail ``
+
+// `bug 6 - wrong computed preprocessor expression (bad macro replacements)`
+source `
+#define SHADOW_PASS_TO_RT 0
+void main(
+#if !defined(SHADOW_PASS) || SHADOW_PASS_TO_RT
+	out float4 RT0 : COLOR0
+#endif
+)
+{
+	RT0 = 1;
+}`
+compile_hlsl `/T ps_3_0`
+
+// `bug 7 - source leaking from ifndef`
+source `
+#define SHADOW_PASS_TO_RT 0
+#define PARTICLE
+
+#if __VERTEX_SHADER__
+#ifdef PARTICLE
+float4 main() : POSITION { return 0; }
+#else // PARTICLE
+#endif // PARTICLE
+#elif __PIXEL_SHADER__
+void main
+(
+	VS2PS input	
+#if !defined(SHADOW_PASS) || SHADOW_PASS_TO_RT
+	,out float4 RT0 : COLOR0
+#endif
+#ifndef SHADOW_PASS
+	,out float4 RT1 : COLOR1
+	,out float4 RT2 : COLOR2
+#endif // SHADOW_PASS
+){}
+#endif
+`
 compile_hlsl ``

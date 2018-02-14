@@ -26,6 +26,7 @@ enum SLTokenType
 	STT_Semicolon, // ;
 	STT_Colon, // :
 	STT_Hash, // #
+	STT_DoubleHash, // ##
 	
 	STT_Ident,
 	STT_IdentPPNoReplace, // only used by preprocessor temporarily

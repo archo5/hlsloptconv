@@ -281,6 +281,7 @@ const char* HOC::TokenTypeToString(SLTokenType tt)
 	case STT_Semicolon:       str = ";"; break;
 	case STT_Colon:           str = ":"; break;
 	case STT_Hash:            str = "#"; break;
+	case STT_DoubleHash:      str = "##"; break;
 	case STT_Ident:           str = "identifier"; break;
 	case STT_StrLit:          str = "string literal"; break;
 	case STT_BoolLit:         str = "boolean literal"; break;

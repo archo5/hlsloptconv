@@ -285,3 +285,25 @@ source `
 float4 fun { return 0.0; }
 `
 compile_hlsl ``
+
+// `token pasting`
+source `
+#define paster(a,i) a##i
+paster(float,4) main() : paster(POSI,TION) { return 0.0; }`
+compile_hlsl ``
+in_shader `float4`
+in_shader `POSITION`
+
+// `token pasting 2`
+source `
+#define SGRX_SPOTLIGHT_DATA( id0, id1 ) \
+	float4 SLPPos0 : TEXCOORD##id0; \
+	float4 SLPPos1 : TEXCOORD##id1;
+
+struct VS2PS
+{
+	float4 col : COLOR0;
+	SGRX_SPOTLIGHT_DATA( 5, 6 )
+};
+float4 main() : POSITION { return 0.0; }`
+compile_hlsl ``

@@ -360,6 +360,7 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 
 		// special characters
 		SLTokenType specCharToken;
+		int specCharTokenLength = 1;
 		switch (*text)
 		{
 		case '(': specCharToken = STT_LParen;    goto addedSpecChar;
@@ -371,11 +372,17 @@ bool Parser::ParseTokens(const char* text, uint32_t source)
 		case ',': specCharToken = STT_Comma;     goto addedSpecChar;
 		case ';': specCharToken = STT_Semicolon; goto addedSpecChar;
 		case ':': specCharToken = STT_Colon;     goto addedSpecChar;
-		case '#': specCharToken = STT_Hash;      goto addedSpecChar;
+		case '#': if (text[1] == '#')
+			{
+				specCharToken = STT_DoubleHash;
+				specCharTokenLength = 2;
+			}
+			else specCharToken = STT_Hash;
+			goto addedSpecChar;
 		default: break;
 		addedSpecChar:
 			tokens.push_back({ specCharToken, TLOC(text), 0 });
-			text++;
+			text += specCharTokenLength;
 			continue;
 		}
 
@@ -571,11 +578,35 @@ bool Parser::PreprocessTokens(uint32_t source)
 				}
 			}
 		}
+		// last priority after macro replacements
+		if (i >= 2 && arr[i - 1].type == STT_DoubleHash)
+		{
+			if (arr[i - 2].type == STT_Ident &&
+				(arr[i].type == STT_Ident || arr[i].type == STT_Int32Lit))
+			{
+				return { macros.end(), &arr[i - 2], &arr[i] + 1 };
+			}
+		}
 notfound:
 		return { macros.end(), nullptr, nullptr };
 	};
 	auto ReplaceTokenRangeTo = [this](Array<SLToken>& out, PPTokenRange range) -> bool
 	{
+		if (range.end - range.begin == 3 && range.begin[1].type == STT_DoubleHash)
+		{
+			// [0] = ident
+			// [1] = ##
+			// [2] = ident/int32
+			String data = TokenToString(range.begin[0]) + TokenToString(range.begin[2]);
+			SLToken t = *range.begin;
+			t.dataOff = tokenData.size();
+			uint32_t len = uint32_t(data.size());
+			tokenData.append((char*)&len, sizeof(len));
+			tokenData.append(data.c_str(), data.size() + 1); // include NUL
+			out.push_back(t);
+			return true;
+		}
+
 		PreprocMacro& M = range.it->second;
 		if (M.isFunc)
 		{
@@ -724,8 +755,10 @@ notfound:
 			if (range.begin == range.end)
 				break;
 
+			replacedTokens.append(tokensToReplace.begin(), range.begin);
 			if (!ReplaceTokenRangeTo(replacedTokens, range))
 				return 0;
+			replacedTokens.append(range.end, tokensToReplace.end());
 
 			tokensToReplace.clear();
 			std::swap(tokensToReplace, replacedTokens);
@@ -883,7 +916,16 @@ notfound:
 					return false;
 				String name = TokenStringData();
 
-				ppOutputEnabled.push_back(macros.find(name) == macros.end() ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				if (ppOutputEnabled.empty() == false && !(ppOutputEnabled.back() & PPOFLAG_ENABLED))
+				{
+					// do not enable but prevent elif/else from being triggered
+					ppOutputEnabled.push_back(PPOFLAG_HASSUCC);
+				}
+				else
+				{
+					bool cond = macros.find(name) == macros.end();
+					ppOutputEnabled.push_back(cond ? (PPOFLAG_ENABLED | PPOFLAG_HASSUCC) : 0);
+				}
 			}
 			else if (cmd == "else")
 			{
@@ -1012,10 +1054,18 @@ notfound:
 				if (range.begin != range.end)
 				{
 					size_t endPos = range.end - tokens.data();
+					bool first = true;
 					while (range.begin != range.end)
 					{
+						// first range comes from token array
+						if (!first)
+							replacedTokens.append(tokensToReplace.begin(), range.begin);
 						if (!ReplaceTokenRangeTo(replacedTokens, range))
 							return false;
+						if (!first)
+							replacedTokens.append(range.end, tokensToReplace.end());
+						else
+							first = false;
 
 						tokensToReplace.clear();
 						std::swap(tokensToReplace, replacedTokens);
@@ -1491,8 +1541,10 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 	ASTType* rt0 = fcall->GetFirstArg()->ToExpr()->GetReturnType();
 	if (args >= 2)
 		rt0 = parser->Promote(rt0, arg->next->ToExpr()->GetReturnType());
-	if (args >= 3)
+	if (rt0 && args >= 3)
 		rt0 = parser->Promote(rt0, arg->next->next->ToExpr()->GetReturnType());
+	if (!rt0)
+		goto mismatch;
 	ASTType* reqty = rt0;
 	if (alsoInt)
 	{
@@ -1519,6 +1571,7 @@ static ASTType* ScalableSymmetricIntrin(Parser* parser, OpExpr* fcall,
 
 	if (notMatch)
 	{
+mismatch:
 		parser->EmitError("none of '" + name + "' overloads matched the argument list");
 		return nullptr;
 	}
@@ -2377,7 +2430,7 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 		err << " }\n";
 
 		EmitError("empty expression");
-		return CreateVoidExpr();
+		return nullptr;
 	}
 
 	auto ttSplit = tokens[bestSplit].type;
@@ -3232,8 +3285,17 @@ Stmt* Parser::ParseExprDeclStatement()
 		bs->loc = T().loc;
 		return bs;
 	}
-	else if (tt == STT_Ident && ast.IsTypeName(TokenStringC()))
+	else if (tt == STT_KW_Const ||
+		(tt == STT_Ident && ast.IsTypeName(TokenStringC())))
 	{
+		uint32_t flags = 0;
+		if (tt == STT_KW_Const)
+		{
+			flags |= VarDecl::ATTR_Const;
+			if (!FWD())
+				return false;
+		}
+
 		auto* varDecl = new VarDeclStmt;
 		ast.unassignedNodes.AppendChild(varDecl);
 		varDecl->loc = T().loc;
@@ -3247,6 +3309,7 @@ Stmt* Parser::ParseExprDeclStatement()
 			ASTType* curType = commonType;
 			VarDecl* vd = new VarDecl;
 			vd->loc = T().loc;
+			vd->flags = flags;
 			varDecl->AppendChild(vd);
 
 			if (!EXPECT(STT_Ident))
@@ -3290,6 +3353,10 @@ Stmt* Parser::ParseExprDeclStatement()
 						return nullptr;
 					TryCastExprTo(vd->GetInitExpr(), curType, "initialization expression");
 				}
+			}
+			else if (flags & VarDecl::ATTR_Const)
+			{
+				EmitError("expected initialization expression for 'const'");
 			}
 
 			vd->prevScopeDecl = funcInfo.scopeVars;

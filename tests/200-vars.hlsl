@@ -415,6 +415,38 @@ compile_hlsl4 ``
 compile_glsl ``
 compile_glsl_es100 ``
 
+// `in-function constant`
+source `
+float4 main() : POSITION
+{
+	const float f = 1;
+	return f;
+}`
+compile_hlsl_before_after ``
+compile_hlsl4 ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `in-function constant fail 1`
+source `
+float4 main() : POSITION
+{
+	const float f;
+	f = 1;
+	return f;
+}`
+compile_fail ``
+
+// `in-function constant fail 2`
+source `
+float4 main() : POSITION
+{
+	const float f = 2;
+	f = 1;
+	return f;
+}`
+compile_fail ``
+
 // `basic cbuffer`
 source `
 cbuffer mybuf
