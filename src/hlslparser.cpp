@@ -1002,12 +1002,14 @@ notfound:
 				if (ppOutputEnabled.empty() || (ppOutputEnabled.back() & PPOFLAG_ENABLED))
 				{
 					char* buf = NULL;
-					if (loadIncludeFilePFN == nullptr)
+					auto lifFunc = config->loadIncludeFileFunc;
+					auto lifData = config->loadIncludeFileUserData;
+					if (lifFunc == nullptr)
 					{
 						EmitError("#include not supported for this build", loc);
 						return false;
 					}
-					else if (loadIncludeFilePFN(file.c_str(), diag.sourceFiles[source].c_str(), &buf, loadIncludeFileUD) && buf)
+					else if (lifFunc(file.c_str(), diag.sourceFiles[source].c_str(), &buf, lifData) && buf)
 					{
 						// parse, preprocess sub-file
 						Array<SLToken> tmpTokens;
@@ -1029,7 +1031,7 @@ notfound:
 						ppTokens.append(tmpTokens.begin(), tmpTokens.end());
 
 						// free name
-						loadIncludeFilePFN(NULL, NULL, &buf, loadIncludeFileUD);
+						lifFunc(NULL, NULL, &buf, lifData);
 					}
 					else
 					{
@@ -2489,6 +2491,15 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 
 		return fcall;
 	}
+	else if (start == bestSplit && ttSplit == STT_LParen && tokens[curToken - 1].type == STT_RParen)
+	{
+		// extra parentheses
+		size_t bkCur = curToken;
+		curToken = bestSplit + 1;
+		auto* expr = ParseExpr(STT_RParen, bkCur - 1);
+		curToken = bkCur;
+		return expr;
+	}
 	else if (start < bestSplit && ttSplit == STT_LBracket)
 	{
 		size_t bkCur = curToken;
@@ -3387,7 +3398,7 @@ Stmt* Parser::ParseExprDeclStatement()
 		else
 			return nullptr;
 
-		if (!EXPECT(STT_Semicolon))
+		if (curToken >= tokens.size() || !EXPECT(STT_Semicolon))
 			return nullptr;
 
 		return out;
@@ -3575,7 +3586,8 @@ bool Parser::ParseDecl()
 				!EXPECT(STT_LParen) ||
 				!FWD())
 				return false;
-			cb->bufRegID = ParseRegister('b', false, 14);
+			cb->bufRegID = ParseRegister('b', false,
+				config->outputFlags & HOC_OF_HLSL3_BUFFER_SLOTS ? 224 : 14);
 			if (diag.hasFatalErrors)
 				return false;
 			if (!EXPECT(STT_RParen) || !FWD())

@@ -1691,15 +1691,18 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 					{
 						--i;
 						auto* sve = revTrail[i];
-						int32_t index = -1;
-						bool isMmbSwizzle = false;
 						if (auto* mmb = dyn_cast<const MemberExpr>(sve))
 						{
+							sizeExpr = sve;
 							if (mmb->swizzleComp == 0)
-								index = mmb->memberID;
-							else
 							{
-								isMmbSwizzle = true;
+								// structure member
+								auto* strTy = mmb->GetSource()->GetReturnType()->ToStructType();
+								for (uint32_t i = 0; i < mmb->memberID; ++i)
+									rf += strTy->members[i].type->GetAccessPointCount();
+							}
+							else // scalar/vector/matrix swizzle
+							{
 								swizzle = mmb->memberID;
 								swzSize = mmb->GetReturnType()->GetElementCount();
 								isMtxSwizzle = mmb->GetSource()->GetReturnType()->kind == ASTType::Matrix;
@@ -1707,18 +1710,18 @@ void VariableAccessValidator::ProcessReadExpr(const Expr* node)
 						}
 						else if (auto* idx = dyn_cast<const IndexExpr>(sve))
 						{
+							// array
 							if (auto* ci = dyn_cast<const Int32Expr>(idx->GetIndex()))
 							{
-								index = ci->value;
+								sizeExpr = sve;
+								rf += sve->GetReturnType()->GetAccessPointCount() * ci->value;
+							}
+							else
+							{
+								diag.EmitError("cannot read from local array with a computed index",
+									idx->loc);
 							}
 						}
-						if (index >= 0)
-						{
-							sizeExpr = sve;
-							rf += sve->GetReturnType()->GetAccessPointCount() * index;
-						}
-						else if (!isMmbSwizzle)
-							break;
 					}
 					rt = rf + sizeExpr->GetReturnType()->GetAccessPointCount();
 				}
@@ -4224,13 +4227,7 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 
 	Diagnostic diag(errorStream, name);
 	Info info(diag, stage, outputFmt, config->outputFlags);
-	Parser p(
-		diag,
-		stage,
-		config->entryPoint,
-		config->loadIncludeFileFunc,
-		config->loadIncludeFileUserData
-	);
+	Parser p(diag, config);
 
 	String codeWithDefines;
 	if (config->defines)

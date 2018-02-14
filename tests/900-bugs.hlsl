@@ -101,3 +101,33 @@ void main
 #endif
 `
 compile_hlsl ``
+
+// `bug 8 - not used before sufficient initialization`
+source `
+struct VS2PS
+{
+	float3 viewPos : TEXCOORD2;
+	float3 N : TEXCOORD3;
+	float4 T : TEXCOORD4;
+};
+void main(out VS2PS vsout, out float4 opos : POSITION0)
+{
+	vsout.T = 1;
+	vsout.N = 1;
+	vsout.T = vsout.T;
+	vsout.T.xyz = vsout.T.xyz;
+	opos = 1;
+	vsout.viewPos = 1;
+}`
+compile_hlsl ``
+
+// `bug 9 - extra parentheses`
+source `
+float4 main() : POSITION
+{
+	float3 a = 1;
+	a *= ( float3(1,1,1) + 1 );
+	a *= (((( float3(1,((1)),1) + 1 ))));
+	return a.xyzz;
+}`
+compile_hlsl ``

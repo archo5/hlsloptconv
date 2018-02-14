@@ -25,13 +25,12 @@ struct CurFunctionInfo
 
 struct Parser
 {
-	Parser(Diagnostic& d, ShaderStage s, const String& ep, LoadIncludeFilePFN lifpfn, void* lifud) :
+	Parser(Diagnostic& d, HOC_Config* cfg) :
 		diag(d),
-		entryPointName(ep),
-		loadIncludeFilePFN(lifpfn),
-		loadIncludeFileUD(lifud)
+		config(cfg),
+		entryPointName(cfg->entryPoint)
 	{
-		ast.stage = s;
+		ast.stage = (ShaderStage) cfg->stage;
 		// for int bool token
 		int32_t i01[2] = { 0, 1 };
 		tokenData.append((char*)i01, sizeof(i01));
@@ -169,8 +168,7 @@ struct Parser
 
 
 	Diagnostic& diag;
-	LoadIncludeFilePFN loadIncludeFilePFN;
-	void* loadIncludeFileUD;
+	HOC_Config* config;
 
 
 	Array<String> filenames;
