@@ -98,6 +98,10 @@ static uint32_t FindOutputFlagByName(const char* str)
 		return HOC_OF_GLSL_RENAME_SAMPLERS;
 	if (!strcmp(str, "glsl-rename-cbuffers"))
 		return HOC_OF_GLSL_RENAME_CBUFFERS;
+	if (!strcmp(str, "glsl-rename-vsinput"))
+		return HOC_OF_GLSL_RENAME_VSINPUT;
+	if (!strcmp(str, "glsl-rename-varyings"))
+		return HOC_OF_GLSL_RENAME_VARYINGS;
 	return 0;
 }
 

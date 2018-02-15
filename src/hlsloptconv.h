@@ -149,9 +149,11 @@ struct HOC_InterfaceOutput
 
 #define HOC_OF_SPECIFY_REGISTERS    0x0001 /* pick and export the registers of unassigned I/O vars */
 #define HOC_OF_HLSL3_BUFFER_SLOTS   0x0008 /* interpret buffer registers as slot offsets, apply them */
-#define HOC_OF_GLSL_RENAME_PSOUTPUT 0x0010 /* rename PS outputs to PSCOLOR# for easier binding */
-#define HOC_OF_GLSL_RENAME_SAMPLERS 0x0020 /* rename texture samplers to SAMPLER# for easier binding */
-#define HOC_OF_GLSL_RENAME_CBUFFERS 0x0040 /* rename constant buffers to CBUF# for easier binding */
+#define HOC_OF_GLSL_RENAME_PSOUTPUT 0x0010 /* rename PS color outputs to PSCOLOR# */
+#define HOC_OF_GLSL_RENAME_SAMPLERS 0x0020 /* rename texture samplers to SAMPLER# */
+#define HOC_OF_GLSL_RENAME_CBUFFERS 0x0040 /* rename constant buffers to CBUF# */
+#define HOC_OF_GLSL_RENAME_VSINPUT  0x0080 /* rename VS inputs (attributes) to ATTR_<semantic> */
+#define HOC_OF_GLSL_RENAME_VARYINGS 0x0100 /* rename VS outputs/PS inputs to V2P_<semantic> */
 
 struct HOC_Config
 {
@@ -164,7 +166,9 @@ struct HOC_Config
 		outputFlags =
 			HOC_OF_GLSL_RENAME_PSOUTPUT |
 			HOC_OF_GLSL_RENAME_SAMPLERS |
-			HOC_OF_GLSL_RENAME_CBUFFERS;
+			HOC_OF_GLSL_RENAME_CBUFFERS |
+			HOC_OF_GLSL_RENAME_VSINPUT |
+			HOC_OF_GLSL_RENAME_VARYINGS;
 		loadIncludeFileFunc = NULL;
 		loadIncludeFileUserData = NULL;
 		defines = NULL;

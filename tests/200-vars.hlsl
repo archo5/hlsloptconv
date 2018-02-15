@@ -291,13 +291,13 @@ request_vars ``
 compile_glsl ``
 in_shader `gl_Position`
 verify_vars `
-VSInput Float32x4 IN_Position :POSITION #0
+VSInput Float32x4 ATTR_POSITION0 :POSITION #0
 `
 request_vars ``
 compile_glsl_es100 ``
 in_shader `gl_Position`
 verify_vars `
-VSInput Float32x4 IN_Position :POSITION #0
+VSInput Float32x4 ATTR_POSITION0 :POSITION #0
 `
 
 // `struct I/O 3a`

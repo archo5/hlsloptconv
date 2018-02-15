@@ -2222,15 +2222,22 @@ static void InOutFixSemanticsAndNames(VarDecl* vd, const Info& info)
 			}
 		}
 
+		if ((info.outputFlags & HOC_OF_GLSL_RENAME_VSINPUT) && in && info.stage == ShaderStage_Vertex)
+		{
+			StringStream nmss(vd->semanticName.size() + 16);
+			nmss << "ATTR_" << vd->semanticName << vd->GetSemanticIndex();
+			vd->name = std::move(nmss.str());
+		}
+
 		// TODO geometry shaders?
-	//	if (info.outputFmt == OSF_GLSL_ES_100)
+		if (info.outputFlags & HOC_OF_GLSL_RENAME_VARYINGS)
 		{
 			// force rename varyings to semantics to automate linkage
-			if (((vd->flags & VarDecl::ATTR_Out) && info.stage == ShaderStage_Vertex) ||
-				((vd->flags & VarDecl::ATTR_In) && info.stage == ShaderStage_Pixel))
+			if ((out && info.stage == ShaderStage_Vertex) ||
+				(in && info.stage == ShaderStage_Pixel))
 			{
 				StringStream nmss(vd->semanticName.size() + 16);
-				nmss << "attr" << vd->semanticName << vd->GetSemanticIndex();
+				nmss << "V2P_" << vd->semanticName << vd->GetSemanticIndex();
 				vd->name = std::move(nmss.str());
 			}
 		}
