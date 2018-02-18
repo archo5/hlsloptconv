@@ -32,6 +32,47 @@ const char* outfile = "tests-output.log";
 const char* outfile_errors = "tests-errors.log";
 
 
+size_t g_memSize = 0;
+size_t g_numAllocBytes = 0;
+size_t g_numAllocs = 0;
+size_t g_numFrees = 0;
+size_t g_numBlocks = 0;
+extern "C" void* chkmalloc(size_t sz)
+{
+	g_numAllocs++;
+	g_numBlocks++;
+	void* p = malloc(sz + 16);
+	if (p)
+	{
+		memcpy(p, &sz, sizeof(sz));
+		p = ((char*)p) + 16;
+		g_memSize += sz;
+		g_numAllocBytes += sz;
+	}
+	return p;
+}
+extern "C" void chkfree(void* p)
+{
+	if (!p)
+		return;
+	p = ((char*)p) - 16;
+	g_memSize -= *(size_t*)p;
+	g_numFrees++;
+	g_numBlocks--;
+	free(p);
+}
+void chkempty(const char* where)
+{
+	if (g_memSize != 0 || g_numBlocks != 0)
+	{
+		fprintf(stderr, "\n\n[%s] memory %s [allocs=%zu frees=%zu blocks=%zu size=%zd]\n\n",
+			where,
+			g_memSize > 0 ? "LEAK" : "OVERFREE",
+			g_numAllocs, g_numFrees, g_numBlocks, g_memSize);
+		exit(1);
+	}
+}
+
 
 static int sgrx_snprintf(char* buf, size_t len, const char* fmt, ...)
 {
@@ -166,7 +207,7 @@ static int memstreq_nnl(const char* mem, const char* str)
 	return *mem == '\0' && *str == '\0';
 }
 
-typedef std::unordered_map<String, String> IncludeMap;
+typedef std::unordered_map<std::string, std::string> IncludeMap;
 
 static int LoadIncludeFileTest(const char* file, const char* requester, char** outbuf, void* userdata)
 {
@@ -187,9 +228,12 @@ static int LoadIncludeFileTest(const char* file, const char* requester, char** o
 	return 0;
 }
 
-String longestMyBuildShader = "<none?";
-String longestFXCBuildShader = "<none?>";
-String longestGLSLVBuildShader = "<none?>";
+bool g_runFXC = true;
+bool g_runGLSLV = true;
+
+std::string longestMyBuildShader = "<none?";
+std::string longestFXCBuildShader = "<none?>";
+std::string longestGLSLVBuildShader = "<none?>";
 double longestMyBuildTime = 0;
 double longestFXCBuildTime = 0;
 double longestGLSLVBuildTime = 0;
@@ -218,13 +262,13 @@ static void exec_test(const char* fname, const char* nameonly)
 	{
 		IncludeMap includes;
 		int lastExec = -1000;
-		String lastSource;
-		String lastByprod;
-		String lastShader;
-		String lastErrors;
-		String lastVarDump;
+		std::string lastSource;
+		std::string lastByprod;
+		std::string lastShader;
+		std::string lastErrors;
+		std::string lastVarDump;
 		char testName[64] = "<unknown>";
-		String testFile = GetFileContents(fname);
+		std::string testFile = GetFileContents<std::string>(fname);
 		/* parse contents
 			syntax: <ident [a-zA-Z0-9_]> <string `...`> ...
 			every item is a command, some commands are tests, failures will impact the return value
@@ -248,7 +292,7 @@ static void exec_test(const char* fname, const char* nameonly)
 				hasErrors = true;
 				break;
 			}
-			String ident(ident_start, ident_end - ident_start);
+			std::string ident(ident_start, ident_end - ident_start);
 
 			/* skip spaces */
 			while (*data == ' ' || *data == '\t' || *data == '\r' || *data == '\n') data++;
@@ -283,7 +327,7 @@ static void exec_test(const char* fname, const char* nameonly)
 			while (*data == ' ' || *data == '\t' || *data == '\r' || *data == '\n') data++;
 
 			/* DECODE VALUE */
-			String decoded_value;
+			std::string decoded_value;
 			decoded_value.resize(value_end - value_start);
 			if (decoded_value.size())
 			{
@@ -301,32 +345,34 @@ static void exec_test(const char* fname, const char* nameonly)
 				decoded_value.resize(op - decoded_value.data());
 			}
 
-			auto Source = [&](const String& src)
+			auto Source = [&](const std::string& src)
 			{
 				lastSource = src;
 			};
-			auto GetShaderStage = [](const String& cmdline)
+			auto GetShaderStage = [](const std::string& cmdline)
 			{
-				if (cmdline.find("-S frag") != String::npos ||
-					cmdline.find("/T ps_") != String::npos)
+				if (cmdline.find("-S frag") != std::string::npos ||
+					cmdline.find("/T ps_") != std::string::npos)
 					return ShaderStage_Pixel;
 				return ShaderStage_Vertex;
 			};
 			auto Compile = [&](ShaderStage stage, OutputShaderFormat outputFmt)
 			{
+				size_t allocsBefore = g_numAllocs;
+				size_t allocBytesBefore = g_numAllocBytes;
 				/* to detect buffer overruns in compilation ..
 				.. using memory checking tools, allocate a new buffer ..
 				.. with the exact size of the data */
 				size_t memLen = lastSource.size() + 1;
 				char* bc = new char[memLen];
 				memcpy(bc, lastSource.c_str(), memLen);
-				String strErrors, strCode, strByprod;
+				std::string strErrors, strCode, strByprod;
 				double tm1 = GetTime();
 				HOC_InterfaceOutput ifo;
 				HOC_Config cfg;
-				HOC_TextOutput toErrors = { &HOC_WriteStr_String<String>, &strErrors };
-				HOC_TextOutput toCode   = { &HOC_WriteStr_String<String>, &strCode   };
-				HOC_TextOutput toByprod = { &HOC_WriteStr_String<String>, &strByprod };
+				HOC_TextOutput toErrors = { &HOC_WriteStr_String<std::string>, &strErrors };
+				HOC_TextOutput toCode   = { &HOC_WriteStr_String<std::string>, &strCode   };
+				HOC_TextOutput toByprod = { &HOC_WriteStr_String<std::string>, &strByprod };
 				cfg.loadIncludeFileFunc     = LoadIncludeFileTest;
 				cfg.loadIncludeFileUserData = &includes;
 				cfg.errorOutputStream = &toErrors;
@@ -363,7 +409,7 @@ static void exec_test(const char* fname, const char* nameonly)
 					lastVarDump = "\n";
 					if (lastExec)
 					{
-						HOC_TextOutput to = { &HOC_WriteStr_String<String>, &lastVarDump };
+						HOC_TextOutput to = { &HOC_WriteStr_String<std::string>, &lastVarDump };
 						HOC_DumpShaderInterfaceOutput(&ifo, &to);
 					}
 					HOC_FreeInterfaceOutputBuffers(&ifo);
@@ -378,8 +424,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				}
 				fprintf(fp, "%s", lastByprod.c_str());
 				fprintf(fp, "%s", lastShader.c_str());
+				fprintf(fpe, "-- [%s] memory allocated: %zu blocks, %zu bytes\n",
+					testName, g_numAllocs - allocsBefore, g_numAllocBytes - allocBytesBefore);
 				fprintf(fpe, "-- compile (errors) --\n%s", lastErrors.c_str());
 				delete[] bc;
+				chkempty(testName);
 			};
 			auto Result = [&](const char* expected)
 			{
@@ -402,35 +451,38 @@ static void exec_test(const char* fname, const char* nameonly)
 				}
 				return strcmp(lastExecStr, "true") == 0;
 			};
-			auto HLSLShaderCmdLine = [](const String& args, const String& type)
+			auto HLSLShaderCmdLine = [](const std::string& args, const std::string& type)
 			{
-				String out = "fxc /nologo " + args + " ";
-				if (args.find("/E") == String::npos)
+				std::string out = "fxc /nologo " + args + " ";
+				if (args.find("/E") == std::string::npos)
 					out += "/E main ";
-				if (args.find("/T") == String::npos)
+				if (args.find("/T") == std::string::npos)
 					out += "/T vs_3_0 ";
 				out += ".tmp/shader." + type + ".hlsl";
 				out += " 1>.tmp/shader." + type + ".bc";
 				out += " 2>.tmp/shader." + type + ".err";
 				return out;
 			};
-			auto HasSyntaxErrors = [](const String& errstr)
+			auto HasSyntaxErrors = [](const std::string& errstr)
 			{
-				return errstr.find("error") != String::npos
-					|| errstr.find("ERROR") != String::npos
-					|| errstr.find("failed") != String::npos;
+				return errstr.find("error") != std::string::npos
+					|| errstr.find("ERROR") != std::string::npos
+					|| errstr.find("failed") != std::string::npos;
 			};
-			auto HasExecuteErrors = [](const String& errstr)
+			auto HasExecuteErrors = [](const std::string& errstr)
 			{
-				return errstr.find("/?") != String::npos
-					|| errstr.find("is not recognized") != String::npos;
+				return errstr.find("/?") != std::string::npos
+					|| errstr.find("is not recognized") != std::string::npos;
 			};
-			auto HasBuildErrors = [&](const String& errstr)
+			auto HasBuildErrors = [&](const std::string& errstr)
 			{
 				return HasSyntaxErrors(errstr) || HasExecuteErrors(errstr);
 			};
-			auto HLSL = [&](const String& args)
+			auto HLSL = [&](const std::string& args)
 			{
+				if (!g_runFXC)
+					return;
+
 				mkdir(".tmp");
 				SetFileContents(".tmp/shader.rcmp.hlsl", lastShader);
 
@@ -440,12 +492,12 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (tm2 - tm1 > longestFXCBuildTime)
 				{
 					longestFXCBuildTime = tm2 - tm1;
-					longestFXCBuildShader = testName + String("[rcmp]");
+					longestFXCBuildShader = testName + std::string("[rcmp]");
 				}
 				fprintf(fp, "-- hlsl --\ncompile time [rcmp]: %f seconds\n", tm2 - tm1);
 
-				String errRcmp = GetFileContents(".tmp/shader.rcmp.err", true);
-				String bcRcmp = GetFileContents(".tmp/shader.rcmp.bc", true);
+				auto errRcmp = GetFileContents<std::string>(".tmp/shader.rcmp.err", true);
+				auto bcRcmp = GetFileContents<std::string>(".tmp/shader.rcmp.bc", true);
 
 				fprintf(fpe, "-- hlsl --\nRECOMPILED:\n%s\n", errRcmp.c_str());
 				fprintf(fp, "-- hlsl --\nRECOMPILED:\n%s\n", bcRcmp.c_str());
@@ -457,8 +509,11 @@ static void exec_test(const char* fname, const char* nameonly)
 					hasErrors = true;
 				}
 			};
-			auto HLSLOrigFail = [&](const String& args)
+			auto HLSLOrigFail = [&](const std::string& args)
 			{
+				if (!g_runFXC)
+					return;
+
 				mkdir(".tmp");
 				SetFileContents(".tmp/shader.orig.hlsl", lastSource);
 
@@ -468,11 +523,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (tm2 - tm1 > longestFXCBuildTime)
 				{
 					longestFXCBuildTime = tm2 - tm1;
-					longestFXCBuildShader = testName + String("[orig]");
+					longestFXCBuildShader = testName + std::string("[orig]");
 				}
 				fprintf(fp, "-- hlsl --\ncompile time [orig]: %f seconds\n", tm2 - tm1);
 
-				String errOrig = GetFileContents(".tmp/shader.orig.err", true);
+				auto errOrig = GetFileContents<std::string>(".tmp/shader.orig.err", true);
 
 				fprintf(fpe, "-- hlsl --\nORIGINAL:\n%s\n", errOrig.c_str());
 
@@ -489,8 +544,11 @@ static void exec_test(const char* fname, const char* nameonly)
 					hasErrors = true;
 				}
 			};
-			auto HLSLBeforeAfter = [&](const String& args)
+			auto HLSLBeforeAfter = [&](const std::string& args)
 			{
+				if (!g_runFXC)
+					return;
+
 				mkdir(".tmp");
 				SetFileContents(".tmp/shader.orig.hlsl", lastSource);
 				SetFileContents(".tmp/shader.rcmp.hlsl", lastShader);
@@ -501,7 +559,7 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (tm2 - tm1 > longestFXCBuildTime)
 				{
 					longestFXCBuildTime = tm2 - tm1;
-					longestFXCBuildShader = testName + String("[orig]");
+					longestFXCBuildShader = testName + std::string("[orig]");
 				}
 				fprintf(fp, "-- hlsl --\ncompile time [orig]: %f seconds\n", tm2 - tm1);
 
@@ -511,14 +569,14 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (tm2 - tm1 > longestFXCBuildTime)
 				{
 					longestFXCBuildTime = tm2 - tm1;
-					longestFXCBuildShader = testName + String("[rcmp]");
+					longestFXCBuildShader = testName + std::string("[rcmp]");
 				}
 				fprintf(fp, "-- hlsl --\ncompile time [rcmp]: %f seconds\n", tm2 - tm1);
 
-				String errOrig = GetFileContents(".tmp/shader.orig.err", true);
-				String errRcmp = GetFileContents(".tmp/shader.rcmp.err", true);
-				String bcOrig = GetFileContents(".tmp/shader.orig.bc", true);
-				String bcRcmp = GetFileContents(".tmp/shader.rcmp.bc", true);
+				auto errOrig = GetFileContents<std::string>(".tmp/shader.orig.err", true);
+				auto errRcmp = GetFileContents<std::string>(".tmp/shader.rcmp.err", true);
+				auto bcOrig = GetFileContents<std::string>(".tmp/shader.orig.bc", true);
+				auto bcRcmp = GetFileContents<std::string>(".tmp/shader.rcmp.bc", true);
 
 				fprintf(fpe, "-- hlsl_before_after --\nORIGINAL:\n%s\nRECOMPILED:\n%s\n",
 					errOrig.c_str(), errRcmp.c_str());
@@ -544,19 +602,22 @@ static void exec_test(const char* fname, const char* nameonly)
 				}
 			};
 
-			auto GLSLShaderCmdLine = [](const String& args, const String& type)
+			auto GLSLShaderCmdLine = [](const std::string& args, const std::string& type)
 			{
-				String out = "glslangValidator -i " + args + " ";
-				if (args.find("-e") == String::npos)
+				std::string out = "glslangValidator -i " + args + " ";
+				if (args.find("-e") == std::string::npos)
 					out += "-e main ";
-				if (args.find("-S") == String::npos)
+				if (args.find("-S") == std::string::npos)
 					out += "-S vert ";
 				out += ".tmp/shader." + type + ".glsl";
 				out += " 1>.tmp/shader." + type + ".out";
 				return out;
 			};
-			auto GLSL = [&](const String& args)
+			auto GLSL = [&](const std::string& args)
 			{
+				if (!g_runGLSLV)
+					return;
+
 				mkdir(".tmp");
 				SetFileContents(".tmp/shader.rcmp.glsl", lastShader);
 
@@ -566,11 +627,11 @@ static void exec_test(const char* fname, const char* nameonly)
 				if (tm2 - tm1 > longestGLSLVBuildTime)
 				{
 					longestGLSLVBuildTime = tm2 - tm1;
-					longestGLSLVBuildShader = testName + String("[rcmp]");
+					longestGLSLVBuildShader = testName + std::string("[rcmp]");
 				}
 				fprintf(fp, "-- glsl --\ncompile time [rcmp]: %f seconds\n", tm2 - tm1);
 
-				String outRcmp = GetFileContents(".tmp/shader.rcmp.out", true);
+				auto outRcmp = GetFileContents<std::string>(".tmp/shader.rcmp.out", true);
 
 				fprintf(fpe, "-- glsl --\nRECOMPILED:\n%s\n", outRcmp.c_str());
 				fprintf(fp, "-- glsl --\nRECOMPILED:\n%s\n", outRcmp.c_str());
@@ -649,7 +710,7 @@ static void exec_test(const char* fname, const char* nameonly)
 			else if (ident == "source_replace")
 			{
 				auto splitpos = decoded_value.find("=>");
-				if (splitpos == String::npos)
+				if (splitpos == std::string::npos)
 				{
 					printf("[%s] ERROR in 'source_replace': "
 						"find/replace separator '=>' not found\n", testName);
@@ -657,14 +718,14 @@ static void exec_test(const char* fname, const char* nameonly)
 				}
 				else
 				{
-					String strToFind = decoded_value.substr(0, splitpos);
-					String strReplacement = decoded_value.substr(splitpos + 2);
+					std::string strToFind = decoded_value.substr(0, splitpos);
+					std::string strReplacement = decoded_value.substr(splitpos + 2);
 
 					size_t i = 0;
 					for (;;)
 					{
 						i = lastSource.find(strToFind, i);
-						if (i == String::npos)
+						if (i == std::string::npos)
 							break;
 						lastSource.replace(i, strToFind.size(), strReplacement);
 						i += strReplacement.size();
@@ -834,6 +895,10 @@ int main(int argc, char** argv)
 			dirname = argv[++i];
 		else if ((!strcmp(argv[i], "--test") || !strcmp(argv[i], "-t")) && i + 1 < argc)
 			testName = argv[++i];
+		else if (!strcmp(argv[i], "--no-fxc"))
+			g_runFXC = false;
+		else if (!strcmp(argv[i], "--no-glslv"))
+			g_runGLSLV = false;
 	}
 	printf("- test directory: %s\n", dirname);
 	if (testName)

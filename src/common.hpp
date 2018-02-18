@@ -11,6 +11,31 @@
 #include "hlsloptconv.h"
 
 
+#ifdef HOC_MALLOC_REPLACEMENT
+extern "C" void* HOC_MALLOC_REPLACEMENT(size_t);
+#  define HOC_MALLOC HOC_MALLOC_REPLACEMENT
+#else
+#  define HOC_MALLOC malloc
+#endif
+
+#ifdef HOC_FREE_REPLACEMENT
+extern "C" void HOC_FREE_REPLACEMENT(void*);
+#  define HOC_FREE HOC_FREE_REPLACEMENT
+#else
+#  define HOC_FREE free
+#endif
+
+void* HOC_MALLOC_EH(size_t sz);
+
+#define HOC_CLASS_USE_ALLOC() \
+	void* operator new (size_t, void* p)   { return p; }           \
+	void* operator new [] (size_t, void* p){ return p; }           \
+	void* operator new (size_t sz)   { return HOC_MALLOC_EH(sz); } \
+	void* operator new [] (size_t sz){ return HOC_MALLOC_EH(sz); } \
+	void operator delete (void* p)   { HOC_FREE(p); }              \
+	void operator delete [] (void* p){ HOC_FREE(p); }
+
+
 namespace HOC {
 
 
@@ -47,6 +72,8 @@ struct String
 	size_t _cap = 0;
 	char _buf[SMALL_STRING_BUFSZ];
 
+	HOC_CLASS_USE_ALLOC()
+
 	FINLINE String() : _str(_buf){ _buf[0] = 0; }
 	String(const char* s) : _str(_buf){ _buf[0] = 0; append(s); }
 	String(const char* s, size_t sz) : _str(_buf){ _buf[0] = 0; append(s, sz); }
@@ -60,7 +87,7 @@ struct String
 	~String()
 	{
 		if (_cap)
-			delete [] _str;
+			HOC_FREE(_str);
 	}
 
 	FINLINE String& operator = (const String& o)
@@ -72,7 +99,7 @@ struct String
 	String& operator = (String&& o)
 	{
 		if (_cap)
-			delete [] _str;
+			HOC_FREE(_str);
 		_str = o._str != o._buf ? o._str : _buf;
 		_size = o._size;
 		_cap = o._cap;
@@ -103,11 +130,11 @@ struct String
 	{
 		if (nsz < SMALL_STRING_BUFSZ || nsz <= _cap)
 			return;
-		char* nstr = new char[nsz + 1];
+		char* nstr = (char*) HOC_MALLOC_EH(nsz + 1);
 		memcpy(nstr, _str, _size + 1);
 		_cap = nsz;
 		if (_str != _buf)
-			delete [] _str;
+			HOC_FREE(_str);
 		_str = nstr;
 	}
 	void resize(size_t nsz)
@@ -343,6 +370,8 @@ template<class T> struct Array
 	size_t _size = 0;
 	size_t _cap = 0;
 
+	HOC_CLASS_USE_ALLOC()
+
 	FINLINE Array(){}
 	FINLINE Array(const Array& o) { append(o.begin(), o.end()); }
 	Array(Array&& o) : _data(o._data), _size(o._size), _cap(o._cap)
@@ -355,7 +384,7 @@ template<class T> struct Array
 	{
 		clear();
 		if (_data)
-			free(_data);
+			HOC_FREE(_data);
 	}
 	Array& operator = (const Array& o)
 	{
@@ -366,6 +395,8 @@ template<class T> struct Array
 	FINLINE Array& operator = (Array&& o)
 	{
 		clear();
+		if (_data)
+			HOC_FREE(_data);
 		_data = o._data;
 		_size = o._size;
 		_cap = o._cap;
@@ -398,11 +429,11 @@ template<class T> struct Array
 	{
 		if (nsz <= _cap)
 			return;
-		T* ndata = (T*) malloc(nsz * sizeof(T));
+		T* ndata = (T*) HOC_MALLOC_EH(nsz * sizeof(T));
 		for (size_t i = 0; i < _size; ++i)
 			new (&ndata[i]) T(std::move(_data[i]));
 		_cap = nsz;
-		free(_data);
+		HOC_FREE(_data);
 		_data = ndata;
 	}
 	FINLINE void _reserve_loose(size_t nsz)
@@ -497,19 +528,58 @@ struct CallbackStream : OutStream
 
 
 double GetTime();
-String GetFileContents(const char* filename, bool text = false);
-void SetFileContents(const char* filename, const String& contents, bool text = false);
 
 
-template<class T> struct Cleanup
+template<class StrClass>
+inline StrClass GetFileContents(const char* filename, bool text = false)
 {
-	T fn;
-	Cleanup(T&& infn) : fn(std::move(infn)) {}
-	~Cleanup()
+	FILE* fp = fopen(filename, text ? "r" : "rb");
+	if (!fp)
 	{
-		fn();
+		fprintf(stderr, "failed to open %s file for reading (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
 	}
-};
+
+	StrClass contents;
+	fseek(fp, 0, SEEK_END);
+	contents.resize(ftell(fp));
+	rewind(fp);
+	if (contents.empty() == false)
+	{
+		size_t read = fread(&contents[0], 1, contents.size(), fp);
+		if (read > 0)
+			contents.resize(read);
+		else
+		{
+			fprintf(stderr, "failed to read from %s file (%s): %s\n",
+				text ? "text" : "binary", filename, strerror(errno));
+			exit(1);
+		}
+	}
+	fclose(fp);
+	return contents;
+}
+
+template<class StrClass>
+inline void SetFileContents(const char* filename, const StrClass& contents, bool text = false)
+{
+	FILE* fp = fopen(filename, text ? "w" : "wb");
+	if (!fp)
+	{
+		fprintf(stderr, "failed to open %s file for writing (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
+	}
+
+	if (contents.empty() == false && fwrite(contents.data(), contents.size(), 1, fp) != 1)
+	{
+		fprintf(stderr, "failed to write to %s file (%s): %s\n",
+			text ? "text" : "binary", filename, strerror(errno));
+		exit(1);
+	}
+	fclose(fp);
+}
 
 
 struct Location

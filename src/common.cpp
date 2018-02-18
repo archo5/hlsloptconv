@@ -14,6 +14,15 @@
 using namespace HOC;
 
 
+void* HOC_MALLOC_EH(size_t sz)
+{
+	void* p = HOC_MALLOC(sz);
+	if (!p)
+		abort();
+	return p;
+}
+
+
 OutStream& OutStream::operator << (short v)
 {
 	char bfr[32];
@@ -157,55 +166,6 @@ double HOC::GetTime()
 	QueryPerformanceCounter(&cnt);
 	return double(cnt.QuadPart) / double(freq.QuadPart);
 #endif
-}
-
-String HOC::GetFileContents(const char* filename, bool text)
-{
-	FILE* fp = fopen(filename, text ? "r" : "rb");
-	if (!fp)
-	{
-		fprintf(stderr, "failed to open %s file for reading (%s): %s\n",
-			text ? "text" : "binary", filename, strerror(errno));
-		exit(1);
-	}
-
-	String contents;
-	fseek(fp, 0, SEEK_END);
-	contents.resize(ftell(fp));
-	rewind(fp);
-	if (contents.empty() == false)
-	{
-		size_t read = fread(&contents[0], 1, contents.size(), fp);
-		if (read > 0)
-			contents.resize(read);
-		else
-		{
-			fprintf(stderr, "failed to read from %s file (%s): %s\n",
-				text ? "text" : "binary", filename, strerror(errno));
-			exit(1);
-		}
-	}
-	fclose(fp);
-	return contents;
-}
-
-void HOC::SetFileContents(const char* filename, const String& contents, bool text)
-{
-	FILE* fp = fopen(filename, text ? "w" : "wb");
-	if (!fp)
-	{
-		fprintf(stderr, "failed to open %s file for writing (%s): %s\n",
-			text ? "text" : "binary", filename, strerror(errno));
-		exit(1);
-	}
-
-	if (contents.empty() == false && fwrite(contents.data(), contents.size(), 1, fp) != 1)
-	{
-		fprintf(stderr, "failed to write to %s file (%s): %s\n",
-			text ? "text" : "binary", filename, strerror(errno));
-		exit(1);
-	}
-	fclose(fp);
 }
 
 

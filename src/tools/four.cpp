@@ -21,6 +21,11 @@
 using namespace HOC;
 
 
+// only for compatibility with test.cpp, normally not needed
+extern "C" void* chkmalloc(size_t sz) { return malloc(sz); }
+extern "C" void chkfree(void* p) { free(p); }
+
+
 #define WINDOW_WIDTH (640+640)
 #define WINDOW_HEIGHT (16+360+16+360)
 #define PART_WIDTH 640
@@ -257,7 +262,7 @@ namespace D3D9
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS | HOC_OF_HLSL3_BUFFER_SLOTS;
 		cfg.interfaceOutput = &ifo;
-		String inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents<String>(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -407,7 +412,7 @@ namespace D3D11
 		cfg.outputFmt = OSF_HLSL_SM4;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
-		String inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents<String>(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -769,7 +774,7 @@ namespace GL20
 		cfg.outputFmt = OSF_GLSL_ES_100;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		// cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS; -- no use without uniform buffers/layout(location)
-		String inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents<String>(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");
@@ -1056,7 +1061,7 @@ namespace GL31
 		cfg.outputFmt = OSF_GLSL_140;
 		cfg.stage = pixelShader ? ShaderStage_Pixel : ShaderStage_Vertex;
 		cfg.outputFlags |= HOC_OF_SPECIFY_REGISTERS;
-		String inCode = GetFileContents(SHADER_NAME, true);
+		String inCode = GetFileContents<String>(SHADER_NAME, true);
 		if (!HOC_CompileShader(SHADER_NAME, inCode.c_str(), &cfg))
 		{
 			fprintf(stderr, "compilation failed, no output generated\n");

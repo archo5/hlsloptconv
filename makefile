@@ -2,6 +2,8 @@
 BASEOBJNAMES := hlslparser compiler optimizer common generator
 HEADERS := src/hlslparser.hpp src/common.hpp src/compiler.hpp src/hlsloptconv.h
 OBJS := $(patsubst %,obj/%.obj,$(BASEOBJNAMES))
+CXXFLAGS := /W3 /MDd /GR- /D_DEBUG /Zi /c \
+	/DHOC_MALLOC_REPLACEMENT=chkmalloc /DHOC_FREE_REPLACEMENT=chkfree
 
 .PHONY: tools test html5test
 tools: sltest.exe hlsloptconv.exe
@@ -35,10 +37,10 @@ hlsloptconv.exe: $(OBJS) obj/cli.obj
 	link /nologo /out:$@ $^ /DEBUG
 
 obj/%.obj: src/%.cpp $(HEADERS) | obj
-	cl /nologo /W3 /Fo$@ /MDd /GR- /D_DEBUG /Zi /c $<
+	cl /nologo /Fo$@ $(CXXFLAGS) $<
 
 obj/%.obj: src/tools/%.cpp $(HEADERS) | obj
-	cl /nologo /W3 /Fo$@ /MDd /GR- /D_DEBUG /Zi /c $<
+	cl /nologo /Fo$@ $(CXXFLAGS) $<
 
 obj:
 	mkdir obj

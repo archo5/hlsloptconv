@@ -189,12 +189,12 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 		{
 			if (cond->value)
 			{
-				node->ReplaceWith(ifelse->GetTrueBr());
+				delete node->ReplaceWith(ifelse->GetTrueBr());
 			}
 			else
 			{
 				// TODO clean up
-				node->ReplaceWith(ifelse->GetFalseBr() ? ifelse->GetFalseBr() : new BlockStmt);
+				delete node->ReplaceWith(ifelse->GetFalseBr() ? ifelse->GetFalseBr() : new BlockStmt);
 			}
 			return;
 		}

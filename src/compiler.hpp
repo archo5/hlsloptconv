@@ -145,10 +145,13 @@ struct ASTType
 		int other = 0;
 	};
 
+	HOC_CLASS_USE_ALLOC()
+
 	ASTType() {} // for array init
 	ASTType(Kind k) : kind(k) {}
 	ASTType(ASTType* sub, uint8_t x) : kind(Vector), subType(sub), sizeX(x) {}
 	ASTType(ASTType* sub, uint8_t x, uint8_t y) : kind(Matrix), subType(sub), sizeX(x), sizeY(y) {}
+	virtual ~ASTType() {}
 
 	unsigned GetElementCount() const;
 	unsigned GetAccessPointCount() const;
@@ -283,6 +286,8 @@ struct ASTNode
 
 		Kind__COUNT,
 	};
+
+	HOC_CLASS_USE_ALLOC()
 
 	FINLINE ASTNode() {}
 	FINLINE ASTNode(const ASTNode& node) : kind(node.kind) {}

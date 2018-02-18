@@ -3,6 +3,10 @@
 
 using namespace HOC;
 
+// only for compatibility with test.cpp, normally not needed
+extern "C" void* chkmalloc(size_t sz) { return malloc(sz); }
+extern "C" void chkfree(void* p) { free(p); }
+
 struct ArgParser
 {
 	bool FlagArg(int& i, const char* shortArg, const char* longArg)
@@ -279,7 +283,7 @@ int main(int argc, char** argv)
 		cfg.defines = macros.data();
 	}
 
-	String inCode = GetFileContents(inputFileName, true);
+	String inCode = GetFileContents<String>(inputFileName, true);
 	if (!HOC_CompileShader(inputFileName, inCode.c_str(), &cfg))
 	{
 		fprintf(stderr, "compilation failed, no output generated\n");
