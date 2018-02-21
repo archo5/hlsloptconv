@@ -131,3 +131,21 @@ float4 main() : POSITION
 	return a.xyzz;
 }`
 compile_hlsl ``
+
+// `bug 10 - extra parentheses in preprocessor expression`
+source `
+#define WAT 3
+#if (WAT == 0)
+#endif
+#if (((((WAT))) == (0)))
+#endif
+float4 main() : POSITION { return 1; }`
+compile_hlsl ``
+
+// `bug 11 - non-function macros with parentheses`
+source `
+#define WAT (1)
+#define WAT2 (notarg)
+#define notarg
+float4 main WAT2 : POSITION { return WAT; }`
+compile_hlsl ``

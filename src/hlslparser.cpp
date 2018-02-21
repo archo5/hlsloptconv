@@ -802,10 +802,15 @@ notfound:
 					return false;
 				String name = TokenStringData();
 				uint32_t logicalLine = T().logicalLine;
+				const SLToken& nmtoken = T();
 
 				PreprocMacro macro;
 				curToken++;
-				if (curToken < tokens.size() && TT() == STT_LParen)
+				// it is only a func macro if paren is placed exactly after ident
+				if (curToken < tokens.size() &&
+					TT() == STT_LParen &&
+					T().loc.line == nmtoken.loc.line &&
+					T().loc.off == nmtoken.loc.off + name.size())
 				{
 					// function-style macro, parse arguments
 					macro.isFunc = true;
@@ -1140,6 +1145,12 @@ int Parser::EvaluateConstantIntExpr(const Array<SLToken>& tokenArr, size_t start
 
 	if (bestSplit == SIZE_MAX)
 	{
+		if (endPos - startPos >= 3 &&
+			tokenArr[startPos].type == STT_LParen &&
+			tokenArr[endPos - 1].type == STT_RParen)
+		{
+			return EvaluateConstantIntExpr(tokenArr, startPos + 1, endPos - 1);
+		}
 		if (endPos - startPos == 1)
 		{
 			if (tokenArr[startPos].type == STT_Int32Lit)
