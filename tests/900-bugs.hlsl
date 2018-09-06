@@ -149,3 +149,25 @@ source `
 #define notarg
 float4 main WAT2 : POSITION { return WAT; }`
 compile_hlsl ``
+
+// `bug 12 - use of 'input' in GLSL is not allowed`
+source `
+float4 main() : POSITION {
+	float input = 1;
+	float output = 2;
+	return input + output; }`
+compile_hlsl ``
+compile_glsl ``
+compile_glsl_es100 ``
+
+// `bug 13 - lvalue casts from swizzles`
+source `
+float4 main() : POSITION {
+	float o = 0;
+	float4 s = 1.0;
+	o = s.r;
+	o += s.r;
+	return o; }`
+compile_hlsl ``
+compile_glsl ``
+compile_glsl_es100 ``

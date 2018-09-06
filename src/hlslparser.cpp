@@ -2809,7 +2809,8 @@ Expr* Parser::ParseExpr(SLTokenType endTokenType, size_t endPos)
 			}
 
 			binop->SetReturnType(TokenIsOpCompare(ttSplit) ? ast.CastToBool(commonType) : commonType);
-			CastExprTo(binop->GetLft(), commonType);
+			if (!TokenIsOpAssign(ttSplit))
+				CastExprTo(binop->GetLft(), commonType);
 			CastExprTo(binop->GetRgt(), commonType);
 
 			if (ttSplit == STT_OP_Mul || ttSplit == STT_OP_Mod)

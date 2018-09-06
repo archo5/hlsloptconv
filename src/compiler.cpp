@@ -3808,6 +3808,23 @@ struct AssignVarDeclNames : ASTWalker<AssignVarDeclNames>
 	int id = 0;
 };
 
+struct RenameGLSLKeywords : ASTWalker<RenameGLSLKeywords>
+{
+	void PreVisit(ASTNode* node)
+	{
+		if (auto* dre = dyn_cast<const DeclRefExpr>(node))
+		{
+			if (!dre->decl)
+				return;
+			if (dre->decl->name == "input" ||
+				dre->decl->name == "output")
+			{
+				dre->decl->name += "_vvv_";
+			}
+		}
+	}
+};
+
 
 static unsigned GetNumSlots(ASTType* type)
 {
@@ -4351,6 +4368,7 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 	case OSF_GLSL_ES_100:
 	case OSF_GLSL_140:
 		GLSLPostConvert(p.ast, info);
+		RenameGLSLKeywords().VisitAST(p.ast);
 		break;
 	}
 
