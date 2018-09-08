@@ -170,6 +170,9 @@
 		//	vm = transpose(vm);
 			gl.uniformMatrix4fv(loc, false, new Float32Array(vm));
 		}
+		loc = gl.getUniformLocation(PROG, "compareM2")
+		if (loc !== null)
+			gl.uniformMatrix2fv(loc, false, new Float32Array([0.25, 0.75, 0.5, 1]))
 
 		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 

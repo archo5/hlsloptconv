@@ -911,7 +911,10 @@ void MemberExpr::WriteName(OutStream& out) const
 	case ASTType::Matrix:
 		for (int i = 0; i < swizzleComp; ++i)
 		{
-			out << g_MtxSwizzle[(memberID >> (i * 4)) & 0xf];
+			unsigned off = (memberID >> (i * 4)) & 0xf;
+			unsigned offX = off % srcTy->sizeX;
+			unsigned offY = off / srcTy->sizeX;
+			out << g_MtxSwizzle[offX + offY * 4];
 		}
 		break;
 	case ASTType::Vector:
@@ -2755,9 +2758,9 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 				if (mmbexpr->swizzleComp == 1)
 				{
 					// just change to double array index lookup
-					int idx = mmbexpr->memberID & 0xf;
-					int row = idx / 4;
-					int col = idx % 4;
+					unsigned idx = mmbexpr->memberID & 0xf;
+					unsigned row = idx % mtxType->sizeY;
+					unsigned col = idx / mtxType->sizeY;
 
 					IndexExpr* cellExpr = new IndexExpr;
 					IndexExpr* colExpr = new IndexExpr;
@@ -2840,9 +2843,9 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 								Expr* myDst = i == 0 ? dst : dst->DeepClone()->ToExpr();
 								Expr* mySrc = i == 0 ? src : src->DeepClone()->ToExpr();
 
-								int idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
-								int row = idx / 4;
-								int col = idx % 4;
+								unsigned idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
+								unsigned row = idx % mtxType->sizeY;
+								unsigned col = idx / mtxType->sizeY;
 
 								auto* exprStmt = new ExprStmt;
 								auto* elBinOp = new BinaryOpExpr;
@@ -2896,9 +2899,9 @@ struct MatrixSwizzleUnpacker : ASTWalker<MatrixSwizzleUnpacker>
 						{
 							Expr* mySrc = i == 0 ? src : src->DeepClone()->ToExpr();
 
-							int idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
-							int row = idx / 4;
-							int col = idx % 4;
+							unsigned idx = (mmbexpr->memberID >> (4 * i)) & 0xf;
+							unsigned row = idx % mtxType->sizeY;
+							unsigned col = idx / mtxType->sizeY;
 
 							IndexExpr* cellExpr = new IndexExpr;
 							IndexExpr* colExpr = new IndexExpr;
@@ -2975,10 +2978,10 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, unsigned accessPointNum)
 			auto* idxexprA = new IndexExpr;
 			auto* idxexprB = new IndexExpr;
 			idxexprA->SetSource(src);
-			idxexprA->AppendChild(new Int32Expr(accessPointNum / 4, ast.GetInt32Type()));
+			idxexprA->AppendChild(new Int32Expr(accessPointNum / t->sizeX, ast.GetInt32Type()));
 			idxexprA->SetReturnType(ast.GetVectorType(t->subType, t->sizeX));
 			idxexprB->SetSource(idxexprA);
-			idxexprB->AppendChild(new Int32Expr(accessPointNum % 4, ast.GetInt32Type()));
+			idxexprB->AppendChild(new Int32Expr(accessPointNum % t->sizeX, ast.GetInt32Type()));
 			idxexprB->SetReturnType(t->subType);
 			return idxexprB;
 		}
@@ -3015,7 +3018,7 @@ static Expr* GetReferenceToElement(AST& ast, Expr* src, unsigned accessPointNum)
 	}
 }
 
-static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
+static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast, bool transpose = false)
 {
 	int numAPs = ile_or_cast->GetReturnType()->GetAccessPointCount();
 	int origInputs = ile_or_cast->childCount;
@@ -3039,6 +3042,16 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 	int sourceOffset = 0;
 	for (int i = 0; i < numAPs; ++i)
 	{
+		int dsti = i;
+		if (transpose)
+		{
+			auto* mt = ile_or_cast->GetReturnType();
+			assert(mt->kind == ASTType::Matrix);
+			unsigned x = dsti % mt->sizeX;
+			unsigned y = dsti / mt->sizeX;
+			dsti = y + x * mt->sizeY;
+		}
+
 		if (isSource1 == false)
 		{
 			for (;;)
@@ -3056,7 +3069,7 @@ static void GenerateComponentAssignments(AST& ast, Expr* ile_or_cast)
 		dstdre->decl = vd;
 		dstdre->SetReturnType(vd->GetType());
 		binop->opType = STT_OP_Assign;
-		binop->AppendChild(GetReferenceToElement(ast, dstdre, i));
+		binop->AppendChild(GetReferenceToElement(ast, dstdre, dsti));
 		binop->AppendChild(GetReferenceToElement(ast, sourceNode->DeepClone()->ToExpr(),
 			isSource1 ? 0 : i - sourceOffset));
 		CastExprTo(binop->GetRgt(), binop->GetLft()->GetReturnType());
@@ -3421,6 +3434,10 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 				ile->GetReturnType()->kind == ASTType::Array)
 			{
 				GenerateComponentAssignments(ast, ile);
+			}
+			else if (ile->GetReturnType()->kind == ASTType::Matrix)
+			{
+				GenerateComponentAssignments(ast, ile, true);
 			}
 			return;
 		}

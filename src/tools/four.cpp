@@ -239,6 +239,8 @@ struct CBufData
 {
 	float resX, resY, pad[2];
 	float viewMtx[16];
+	float compareM2_0[2], pad1[2];
+	float compareM2_1[2], pad2[2];
 };
 
 
@@ -372,6 +374,10 @@ namespace D3D9
 		bufData.resX = PART_WIDTH;
 		bufData.resY = PART_HEIGHT;
 		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
+		bufData.compareM2_0[0] = 0.25f;
+		bufData.compareM2_0[1] = 0.75f;
+		bufData.compareM2_1[0] = 0.5f;
+		bufData.compareM2_1[1] = 1.0f;
 	//	float mtx[16] = {
 	//		-0.7991666718346001, 0.22324646365622025, -0.5581161591405507, -6.011094996993548, 0.6011094996993547, 0.2968030507723102, -0.7420076269307755, -7.991666718346001, 0, 0.9284766908852593, 0.3713906763541037, 4, 0, 0, 0, 1
 	//	};
@@ -574,6 +580,10 @@ namespace D3D11
 		bufData.resX = PART_WIDTH;
 		bufData.resY = PART_HEIGHT;
 		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
+		bufData.compareM2_0[0] = 0.25f;
+		bufData.compareM2_0[1] = 0.75f;
+		bufData.compareM2_1[0] = 0.5f;
+		bufData.compareM2_1[1] = 1.0f;
 		memcpy(mapRsrc.pData, &bufData, sizeof(bufData));
 		ctx->Unmap(cbuf, 0);
 
@@ -659,6 +669,7 @@ typedef void (APIENTRYP PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, co
 typedef void (APIENTRYP PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC) (GLint location, GLfloat v0, GLfloat v1);
 typedef void (APIENTRYP PFNGLUNIFORM1IPROC) (GLint location, GLint v0);
+typedef void (APIENTRYP PFNGLUNIFORMMATRIX2FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRYP PFNGLVALIDATEPROGRAMPROC) (GLuint program);
 
@@ -731,6 +742,7 @@ namespace GL20
 	PFNGLUSEPROGRAMPROC glUseProgram;
 	PFNGLUNIFORM2FPROC glUniform2f;
 	PFNGLUNIFORM1IPROC glUniform1i;
+	PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
 	PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 	PFNGLVALIDATEPROGRAMPROC glValidateProgram;
 
@@ -761,6 +773,7 @@ namespace GL20
 		*(void**)&glUseProgram = wglGetProcAddress("glUseProgram");
 		*(void**)&glUniform2f = wglGetProcAddress("glUniform2f");
 		*(void**)&glUniform1i = wglGetProcAddress("glUniform1i");
+		*(void**)&glUniformMatrix2fv = wglGetProcAddress("glUniformMatrix2fv");
 		*(void**)&glUniformMatrix4fv = wglGetProcAddress("glUniformMatrix4fv");
 		*(void**)&glValidateProgram = wglGetProcAddress("glValidateProgram");
 	}
@@ -928,6 +941,12 @@ namespace GL20
 			GLint loc = GLCHK(glGetUniformLocation(prog, "viewMatrix"));
 			assert(loc >= 0);
 			GLCHK(glUniformMatrix4fv(loc, 1, GL_FALSE, mtx));
+		}
+		{
+			GLint loc = GLCHK(glGetUniformLocation(prog, "compareM2"));
+			assert(loc >= 0);
+			float cm[4] = { 0.25f, 0.75f, 0.5f, 1.0f };
+			GLCHK(glUniformMatrix2fv(loc, 1, GL_FALSE, cm));
 		}
 		GLCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
 
@@ -1269,6 +1288,10 @@ namespace GL31
 		bufData.resX = PART_WIDTH;
 		bufData.resY = PART_HEIGHT;
 		memcpy(bufData.viewMtx, mtx, sizeof(bufData.viewMtx));
+		bufData.compareM2_0[0] = 0.25f;
+		bufData.compareM2_0[1] = 0.75f;
+		bufData.compareM2_1[0] = 0.5f;
+		bufData.compareM2_1[1] = 1.0f;
 		GLCHK(glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(bufData), &bufData));
 		GLCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
 

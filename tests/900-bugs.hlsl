@@ -171,3 +171,10 @@ float4 main() : POSITION {
 compile_hlsl ``
 compile_glsl ``
 compile_glsl_es100 ``
+
+// `bug 14 - matrix used before sufficient initialization/crash`
+source `
+float4 main() : POSITION {
+	float2x2 m1 = float2x2(float2(0.25,0.5), float2(0.75, 1));
+	return float4(m1._m00, m1._m01, m1._m10, m1._m11); }`
+compile_hlsl ``

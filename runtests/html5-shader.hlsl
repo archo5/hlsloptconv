@@ -3,6 +3,7 @@ cbuffer uniformData : register(b0)
 {
 	float2 iResolution;
 	float4x4 viewMatrix;
+	float2x2 compareM2;
 }
 
 #if __VERTEX_SHADER__
@@ -181,6 +182,7 @@ float3 rayDir(float fov, float2 size, float2 coord)
 
 samplerCUBE CubeMap : register( s0 );
 
+static const float2x2 m4 = { 0.25, 0.5, 0.75, 1 };
 void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 {
 	float fov = 60;
@@ -189,6 +191,10 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 		float3 v1 = { -0.9, 0.3, 1.6 };
 		float y = (iResolution.y - coord.y) / 10;
 		float3 y3 = y;
+		float2x2 m1 = compareM2;
+		float2x2 m2 = float2x2(float2(0.25,0.5), float2(0.75, 1));
+		float2x2 m3 = { 0.25, 0.5, 0.75, 1 };
+		float2x2 mc = y > 0.75 ? m4 : y > 0.5 ? m3 : y > 0.25 ? m2 : m1;
 		if (coord.x < 10){ outCol = float4(frac(v1 + y), 1); return; }
 		/*else*/ if (coord.x < 20){ outCol = float4((v1 + y) % 2, 1); return; }
 		if (coord.x < 30){ outCol = float4(step(0, float3(0.5, 0, -0.5) - y), 1); return; }
@@ -199,6 +205,10 @@ void main(out float4 outCol : COLOR0, in float2 coord : TEXCOORD0)
 		if (coord.x < 80){ outCol = float4(log2(y3 * 3), 1); return; }
 		if (coord.x < 90){ outCol = float4(trunc(y3 + v1) * 0.25 + 0.5, 1); return; }
 		if (coord.x < 100){ outCol = float4(fmod(v1 + y, 2), 1); return; }
+		if (coord.x < 110){ outCol = float4(mul(float2(1,0), mc), mul(float2(0,1), mc)); return; }
+		if (coord.x < 120){ outCol = float4(mc[0], mc[1]); return; }
+		if (coord.x < 130){ outCol = float4(mc._m00, mc._m01, mc._m10, mc._m11); return; }
+		if (coord.x < 140){ outCol = mc._m00_m01_m10_m11; return; }
 	}
 	float3 dir = mul(float4(rayDir(fov, iResolution, coord),0), viewMatrix);
 	//float3 dir = rayDir(fov, iResolution, coord);

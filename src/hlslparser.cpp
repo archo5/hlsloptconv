@@ -1345,16 +1345,18 @@ ASTType* Parser::FindMemberType(ASTType* t, const String& name, uint32_t& member
 				n1 = name[++i];
 			}
 			char n2 = name[++i];
-			char cmin = onebased ? '1' : '0';
-			char cmax = onebased ? '4' : '3';
-			if (n1 < cmin || n1 > cmax || n2 < cmin || n2 > cmax)
+			char cminX = onebased ? '1' : '0';
+			char cmaxX = cminX + t->sizeX - 1;
+			char cminY = onebased ? '1' : '0';
+			char cmaxY = cminY + t->sizeY - 1;
+			if (n1 < cminX || n1 > cmaxX || n2 < cminY || n2 > cmaxY)
 			{
 				EmitError("bad matrix swizzle component coordinate");
 				return nullptr;
 			}
-			int rowi = n1 - cmin;
-			int coli = n2 - cmin;
-			swizzleMask |= (rowi + coli * 4) << (4 * comp++);
+			int rowi = n1 - cminX;
+			int coli = n2 - cminY;
+			swizzleMask |= (rowi + coli * t->sizeX) << (4 * comp++);
 		}
 		memberID = swizzleMask;
 		swizzleComp = comp;
