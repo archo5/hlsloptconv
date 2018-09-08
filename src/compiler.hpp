@@ -319,7 +319,7 @@ struct ASTNode
 	FINLINE void InsertBeforeMe(ASTNode* ch) { parent->InsertBefore(ch, this); }
 	FINLINE void InsertAfterMe(ASTNode* ch) { parent->InsertBefore(ch, next); }
 	FINLINE void PrependChild(ASTNode* ch) { InsertBefore(ch, firstChild); }
-	template< class T > FINLINE T* AppendChildT(T* ch) { AppendChild(ch); return ch; }
+	template<class T> FINLINE T* AppendChildT(T* ch) { AppendChild(ch); return ch; }
 
 	void _RegisterTypeUse(ASTType* type);
 	void _UnregisterTypeUse(ASTType* type);
@@ -467,6 +467,7 @@ struct InitListExpr : Expr
 {
 	IMPLEMENT_NODE(InitListExpr);
 	void Dump(OutStream& out, int level) const override;
+	bool isTargetCompatible = false;
 };
 
 struct IncDecOpExpr : Expr
@@ -887,10 +888,13 @@ struct AST : TypeSystem
 	bool usingGradTextureSampling = false;
 };
 
-template< class V > struct ASTVisitor
+template<class V> struct ASTVisitor
 {
 	void PreVisit(ASTNode* node) {}
 	void PostVisit(ASTNode* node) {}
+	void PreVisitCBuffer(CBufferDecl* cbd) {}
+	void PostVisitCBuffer(CBufferDecl* cbd) {}
+	void VisitGlobal(VarDecl* vd) {}
 	void VisitNode(ASTNode* node)
 	{
 		static_cast<V*>(this)->PreVisit(node);
@@ -910,6 +914,22 @@ template< class V > struct ASTVisitor
 	}
 	void VisitAST(AST& ast)
 	{
+		for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
+		{
+			if (auto* cbuf = dyn_cast<CBufferDecl>(g))
+			{
+				static_cast<V*>(this)->PreVisitCBuffer(cbuf);
+				for (ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
+				{
+					static_cast<V*>(this)->VisitGlobal(cbv->ToVarDecl());
+				}
+				static_cast<V*>(this)->PostVisitCBuffer(cbuf);
+			}
+			else
+			{
+				static_cast<V*>(this)->VisitGlobal(g->ToVarDecl());
+			}
+		}
 		for (ASTNode* ch = ast.functionList.firstChild; ch; ch = ch->next)
 		{
 			static_cast<V*>(this)->VisitFunction(dyn_cast<ASTFunction>(ch));
@@ -917,7 +937,7 @@ template< class V > struct ASTVisitor
 	}
 };
 
-template< class V > struct ASTWalker
+template<class V> struct ASTWalker
 {
 	// minimal-state tree walk
 	// a   - has child
@@ -928,9 +948,16 @@ template< class V > struct ASTWalker
 	//   f - no child, no next, backtrack to [a] (end)
 	void PreVisit(ASTNode* node) {}
 	void PostVisit(ASTNode* node) {}
+	void PreVisitCBuffer(CBufferDecl* cbd) {}
+	void PostVisitCBuffer(CBufferDecl* cbd) {}
+	void VisitGlobal(VarDecl* vd) {}
 	void VisitFunction(ASTFunction* fn)
 	{
-		curPos = endPos = fn->GetCode();
+		WalkNode(fn->GetCode());
+	}
+	void WalkNode(ASTNode* root)
+	{
+		curPos = endPos = root;
 		//FILEStream(stderr) << "PREVISIT:" << curPos->GetNodeTypeName() << "\n";
 		static_cast<V*>(this)->PreVisit(curPos);
 		do
@@ -975,6 +1002,22 @@ template< class V > struct ASTWalker
 	}
 	void VisitAST(AST& ast)
 	{
+		for (ASTNode* g = ast.globalVars.firstChild; g; g = g->next)
+		{
+			if (auto* cbuf = dyn_cast<CBufferDecl>(g))
+			{
+				static_cast<V*>(this)->PreVisitCBuffer(cbuf);
+				for (ASTNode* cbv = cbuf->firstChild; cbv; cbv = cbv->next)
+				{
+					static_cast<V*>(this)->VisitGlobal(cbv->ToVarDecl());
+				}
+				static_cast<V*>(this)->PostVisitCBuffer(cbuf);
+			}
+			else
+			{
+				static_cast<V*>(this)->VisitGlobal(g->ToVarDecl());
+			}
+		}
 		for (ASTNode* ch = ast.functionList.firstChild; ch; ch = ch->next)
 		{
 			static_cast<V*>(this)->VisitFunction(dyn_cast<ASTFunction>(ch));
@@ -1025,6 +1068,7 @@ struct Info
 struct ConstantPropagation : ASTWalker<ConstantPropagation>
 {
 	void PostVisit(ASTNode* node);
+	void VisitGlobal(VarDecl* vd);
 	void RunOnAST(AST& ast) { VisitAST(ast); }
 };
 

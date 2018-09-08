@@ -2496,12 +2496,8 @@ static void UnpackEntryPoint(AST& ast, const Info& info)
 			uint32_t flags = argvd->flags;
 			argvd->flags &= ~(VarDecl::ATTR_In | VarDecl::ATTR_Out);
 
-			auto* vds = dyn_cast<VarDeclStmt>(F->GetCode()->firstChild);
-			if (vds == nullptr)
-			{
-				vds = new VarDeclStmt;
-				F->GetCode()->PrependChild(vds);
-			}
+			auto* vds = new VarDeclStmt;
+			F->GetCode()->PrependChild(vds);
 
 			if (flags & VarDecl::ATTR_In)
 			{
@@ -3185,6 +3181,8 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 
 		int numCols = mtxTy->sizeX;
 		auto* ile = new InitListExpr;
+		// since this only splits up a symmetric op, ...
+		ile->isTargetCompatible = true; // ... transposition does not affect it
 		ile->SetReturnType(recombineMode == MURM_Matrix ? mtxTy : ast.GetVectorType(retTy, numCols));
 		fcintrin->ReplaceWith(ile);
 		ile->AppendChild(fcintrin);
@@ -3435,7 +3433,7 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			{
 				GenerateComponentAssignments(ast, ile);
 			}
-			else if (ile->GetReturnType()->kind == ASTType::Matrix)
+			else if (ile->GetReturnType()->kind == ASTType::Matrix && !ile->isTargetCompatible)
 			{
 				GenerateComponentAssignments(ast, ile, true);
 			}
@@ -3461,6 +3459,65 @@ struct GLSLConversionPass : ASTWalker<GLSLConversionPass>
 			return;
 		}
 	}
+
+	Expr* FindNumberCreateConst(Expr* src, unsigned accessPointNum)
+	{
+		ASTType* t = src->GetReturnType();
+		assert(accessPointNum >= 0 && accessPointNum < t->GetAccessPointCount());
+		if (auto* i32expr = dyn_cast<Int32Expr>(src))
+		{
+			return i32expr->Clone()->ToExpr();
+		}
+		if (auto* f32expr = dyn_cast<Float32Expr>(src))
+		{
+			return f32expr->Clone()->ToExpr();
+		}
+		if (auto* ile = dyn_cast<InitListExpr>(src))
+		{
+			unsigned sourceOffset = 0;
+			for (auto* ch = ile->firstChild; ch; ch = ch->next)
+			{
+				unsigned numAPs = ch->ToExpr()->GetReturnType()->GetAccessPointCount();
+				if (accessPointNum - sourceOffset < numAPs)
+					return FindNumberCreateConst(ch->ToExpr(), accessPointNum - sourceOffset);
+				sourceOffset += numAPs;
+			}
+			assert(!"inconsistent access point counts");
+		}
+		diag.EmitError("cannot compute constant (unimplemented feature)", src->loc);
+		return nullptr;
+	}
+	void VisitGlobal(VarDecl* vd)
+	{
+		if (vd->type->kind == ASTType::Matrix && vd->GetInitExpr())
+		{
+			if (auto* ile = dyn_cast<InitListExpr>(vd->GetInitExpr()))
+			{
+				// only transpose if there's more than one input access point
+				if (ile->GetReturnType()->GetAccessPointCount() != 1)
+				{
+					auto* mt = ile->GetReturnType();
+
+					auto* nile = new InitListExpr;
+					nile->SetReturnType(mt);
+
+					unsigned numAPs = ile->GetReturnType()->GetAccessPointCount();
+					for (unsigned i = 0; i < numAPs; ++i)
+					{
+						unsigned srci = i;
+						unsigned x = srci % mt->sizeX;
+						unsigned y = srci / mt->sizeX;
+						srci = y + x * mt->sizeY;
+
+						nile->AppendChild(FindNumberCreateConst(ile, srci));
+					}
+
+					delete ile->ReplaceWith(nile);
+				}
+			}
+		}
+	}
+
 	AST& ast;
 	Diagnostic& diag;
 	OutputShaderFormat outputFmt;
@@ -4355,6 +4412,8 @@ HOC_BoolU8 HOC_CompileShader(const char* name, const char* code, HOC_Config* con
 		UnpackMatrixSwizzle(p.ast);
 		RemoveVM1AndM1DTypes(p.ast);
 		RemoveArraysOfArrays(p.ast);
+		// needed for matrix init list transposition
+		ConstantPropagation().RunOnAST(p.ast);
 		GLSLConvert(p.ast, info);
 		break;
 	}

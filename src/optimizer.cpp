@@ -201,6 +201,13 @@ void ConstantPropagation::PostVisit(ASTNode* node)
 	}
 }
 
+void ConstantPropagation::VisitGlobal(VarDecl* vd)
+{
+	if (vd->GetInitExpr())
+		WalkNode(vd->GetInitExpr());
+}
+
+
 void RemoveUnusedFunctions::RunOnAST(AST& ast)
 {
 	for (ASTNode* ch = ast.functionList.firstChild; ch; )

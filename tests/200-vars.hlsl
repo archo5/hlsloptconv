@@ -379,10 +379,11 @@ Uniform Float32x4[4] outval
 
 // `explicit constant`
 source `
-static const float4 outval1 = {1,2,3,4};
-static const float4 outval2 = float4(5,7,9,11);
+static const float4 outval1 = {1,2,3,-4};
+static const float4 outval2 = float4(5,7,9,-11);
 static const float4 outval3 = outval1 + outval2;
-float4 main() : POSITION { return outval1 + outval2 * outval3; }`
+static const float2x2 outval4 = {1, 2+0, 3, -4};
+float4 main() : POSITION { return outval1 + outval2 * outval3 + outval4._11_12_21_22; }`
 compile_hlsl_before_after ``
 compile_hlsl4 ``
 compile_glsl ``
